@@ -9,7 +9,7 @@ function loadWarehouse(apiFetch) {
 
 test('inventory stock reads preserve server paging, search, counts and total', async () => {
   let url;
-  const response = { items: [{ id: 'row', containerCount: 7, levelNo: 5 }], total: 240 };
+  const response = { items: [{ id: 'row', containerCount: 7, levelNo: 5 }], total: 240, warehouseContainerCount: 10, unallocatedContainerCount: 3 };
   const api = loadWarehouse(async path => { url = path; return response; });
   const actual = await api.listInventory({ warehouseId: 'warehouse', search: 'SKU A', skip: 200, take: 200 });
   const parsed = new URL(url, 'https://example.test');
@@ -19,6 +19,26 @@ test('inventory stock reads preserve server paging, search, counts and total', a
   assert.equal(parsed.searchParams.get('skip'), '200');
   assert.equal(parsed.searchParams.get('take'), '200');
   assert.deepEqual(plain(actual), response);
+});
+
+test('summarizeWarehouseStock tracks total, on-shelf and awaiting-putaway stock across the inbound-putaway-outbound lifecycle', () => {
+  const { summarizeWarehouseStock } = createLoader()('src/features/inventory/inventoryData.ts');
+  assert.equal(summarizeWarehouseStock(undefined), null);
+  // Draft inbound (not confirmed)
+  assert.deepEqual(plain(summarizeWarehouseStock({ warehouseContainerCount: 0, unallocatedContainerCount: 0 })),
+    { totalContainers: 0, unallocatedContainers: 0, allocatedContainers: 0 });
+  // Confirmed inbound (3 containers unallocated before putaway)
+  assert.deepEqual(plain(summarizeWarehouseStock({ warehouseContainerCount: 3, unallocatedContainerCount: 3 })),
+    { totalContainers: 3, unallocatedContainers: 3, allocatedContainers: 0 });
+  // After putaway onto shelves (total unchanged, unallocated becomes 0)
+  assert.deepEqual(plain(summarizeWarehouseStock({ warehouseContainerCount: 3, unallocatedContainerCount: 0 })),
+    { totalContainers: 3, unallocatedContainers: 0, allocatedContainers: 3 });
+  // Staged at outbound gate (total still 3 until outbound voucher is confirmed)
+  assert.deepEqual(plain(summarizeWarehouseStock({ warehouseContainerCount: 3, unallocatedContainerCount: 0 })),
+    { totalContainers: 3, unallocatedContainers: 0, allocatedContainers: 3 });
+  // Confirmed outbound voucher deducts stock
+  assert.deepEqual(plain(summarizeWarehouseStock({ warehouseContainerCount: 0, unallocatedContainerCount: 0 })),
+    { totalContainers: 0, unallocatedContainers: 0, allocatedContainers: 0 });
 });
 
 test('inventory container browse can include reserved, transit and held statuses', async () => {

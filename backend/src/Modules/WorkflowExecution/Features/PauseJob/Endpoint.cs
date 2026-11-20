@@ -3,18 +3,23 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.Shared;
+using WaroTrans.WorkflowExecution.Services;
 
 namespace WaroTrans.WorkflowExecution.Features.PauseJob;
 
 public sealed record PauseJobRequest(string? Reason);
 
-public sealed class PauseJobHandler(JobExecutionEngine engine, JobQueries queries)
+public sealed class PauseJobHandler(
+    JobExecutionEngine engine, JobQueries queries, ICurrentUser user, StaffWarehouseScope warehouseScope)
 {
     public async Task<JobDetailDto> HandleAsync(Guid jobId, PauseJobRequest request, CancellationToken cancellationToken)
     {
-        await engine.PauseAsync(jobId, request.Reason, cancellationToken);
+        var actor = user.AccountId ?? throw new AppException("Sign in to pause a Job.", 401, "unauthenticated");
+        await warehouseScope.EnsureJobAccessAsync(jobId, user, cancellationToken);
+        await engine.PauseAsync(jobId, request.Reason, actor, cancellationToken);
         return await queries.GetDetailAsync(jobId, cancellationToken);
     }
 }
@@ -33,7 +38,7 @@ public static class PauseJobEndpoint
             .Audited("job.paused", "JOB", "id")
             .WithName("PauseJob")
             .WithSummary("Operator pause: stop the robot (STOP mode PAUSE) and hold the Job; resume sends a new move")
-            .WithDescription("The answer is the Job (PAUSED, failureCode operator_paused). Whether the robot really stopped is read from GET /api/fleet/robots/{robotId}/stop-state.")
+            .WithDescription("Requires a reason and records who paused the Job. Read the robot's actual stop result from GET /api/fleet/robots/{robotId}/stop-state.")
             .WithTags("Jobs");
 
         return group;

@@ -20,7 +20,15 @@ import { preparationDeviceStore } from './preparationDeviceStore';
 import { ContainerCountField } from './ContainerCountField';
 import { InboundBatchEditor } from './InboundBatchEditor';
 import { InboundBatchSummary } from './InboundBatchSummary';
-import { batchTotal, buildContainerBatchBody, createBatchRequestId, inboundBatchProblem, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
+import {
+  batchTotal,
+  beginPendingBatch,
+  clearPendingBatch,
+  inboundBatchProblem,
+  isDefinitiveBatchRejection,
+  newBatchGroup,
+  type InboundBatchGroup,
+} from './inboundBatch';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 
 export function CreateStockVoucherScreen() {
@@ -62,12 +70,12 @@ export function CreateStockVoucherScreen() {
     setError(null); preparation.update(previous => ({ ...previous, [field]: value }));
   };
   const editCount = (count: string) => {
-    if (!editable) return;
+    if (!editable || preparation.value.pendingBatch) return;
     setError(null);
-    preparation.update(previous => ({ ...previous, requestId: undefined, requestedCount: count, groups: previous.groups?.map((group, index, all) =>
+    preparation.update(previous => ({ ...previous, requestId: undefined, pendingBatch: undefined, requestedCount: count, groups: previous.groups?.map((group, index, all) =>
       all.length === 1 && index === 0 && (!group.containerCount || group.containerCount === previous.requestedCount) ? { ...group, containerCount: count } : group) }));
   };
-  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); preparation.update(previous => ({ ...previous, requestId: undefined, groups: next, requestedCount: batchTotal(next) })); } };
+  const editGroups = (next: InboundBatchGroup[]) => { if (editable && !preparation.value.pendingBatch) { setError(null); preparation.update(previous => ({ ...previous, requestId: undefined, pendingBatch: undefined, groups: next, requestedCount: batchTotal(next) })); } };
   const showError = (message: string) => { setError(message); requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: false })); };
   const validate = () => {
     const metadata = draftValidation(referenceNo, note);
@@ -101,8 +109,9 @@ export function CreateStockVoucherScreen() {
       if (!alive.current || controller.signal.aborted) return;
       client.setQueryData(['stock-voucher', session?.id, result.id], result);
       void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
-      const requestId = inbound ? (snapshot.requestId || createBatchRequestId()) : undefined;
-      const persistedSnapshot = requestId ? { ...snapshot, requestId } : snapshot;
+      const willAllocateInbound = inbound && mobileCapabilities.createContainer && canAllocateInboundBatch(session);
+      const batchPlan = willAllocateInbound ? beginPendingBatch(snapshot, warehouse.id, result.id) : null;
+      const persistedSnapshot = batchPlan ? batchPlan.nextPrep : snapshot;
       let preparationCopyFailed = false;
       try { await preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: result.id }, persistedSnapshot); }
       catch { preparationCopyFailed = true; }
@@ -132,12 +141,14 @@ export function CreateStockVoucherScreen() {
           return;
         }
       }
-      if (inbound && mobileCapabilities.createContainer && canAllocateInboundBatch(session) && !preparationCopyFailed) {
+      if (batchPlan && !preparationCopyFailed) {
         try {
-          const batch = await createContainerBatch(
-            buildContainerBatchBody(warehouse.id, requestId!, snapshot.requestedCount, snapshot.groups || [], result.id),
-            controller.signal,
-          );
+          const batch = await createContainerBatch(batchPlan.body, controller.signal);
+          if (!alive.current || controller.signal.aborted) return;
+          await preparationDeviceStore.write(
+            { accountId: session!.id, warehouseId: warehouse.id, documentKey: result.id },
+            clearPendingBatch(persistedSnapshot),
+          ).catch(() => {});
           if (!alive.current || controller.signal.aborted) return;
           client.setQueryData(['stock-voucher', session?.id, result.id], batch.stockVoucher || result);
           void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
@@ -146,6 +157,13 @@ export function CreateStockVoucherScreen() {
           return;
         } catch (batchFailure) {
           if (!alive.current || controller.signal.aborted) return;
+          if (isDefinitiveBatchRejection(batchFailure)) {
+            await preparationDeviceStore.write(
+              { accountId: session!.id, warehouseId: warehouse.id, documentKey: result.id },
+              clearPendingBatch(persistedSnapshot),
+            ).catch(() => {});
+            if (!alive.current || controller.signal.aborted) return;
+          }
           replace('stock_voucher_detail', {
             voucherId: result.id,
             warehouseId: warehouse.id,

@@ -79,6 +79,34 @@ export function listProducts(params: { search?: string; categoryId?: string; isA
 export function listProductCategories(signal?: AbortSignal) {
   return apiFetch<{ items: ProductCategoryItem[]; total: number }>('/api/warehouse/product-categories', { signal });
 }
+export interface CreateProductBody {
+  categoryId: string;
+  sku: string;
+  name: string;
+  supplierBarcode?: string | null;
+  description?: string | null;
+}
+export async function createProduct(body: CreateProductBody, signal?: AbortSignal): Promise<ProductItem> {
+  const result = await apiFetch<ProductItem>('/api/warehouse/products', {
+    method: 'POST',
+    signal,
+    body: JSON.stringify({
+      categoryId: body.categoryId.trim(),
+      sku: body.sku.trim(),
+      name: body.name.trim(),
+      supplierBarcode: body.supplierBarcode?.trim() || null,
+      description: body.description?.trim() || null,
+    }),
+  }, getAccessToken());
+  if (!result || typeof result.id !== 'string' || !result.id.trim()
+    || typeof result.categoryId !== 'string' || !result.categoryId.trim()
+    || typeof result.sku !== 'string' || !result.sku.trim()
+    || typeof result.name !== 'string' || !result.name.trim()
+    || result.isActive !== true) {
+    throw new ApiError(502, 'product_creation_unverified', 'Could not verify the created product. Refresh the catalog before trying again.');
+  }
+  return result;
+}
 export interface ResolveProductResponse { exactMatch: ProductItem | null; items: ProductItem[] }
 export function resolveProduct(params: { barcode?: string; search?: string }, signal?: AbortSignal) {
   requireMobileCapability('resolveProduct');

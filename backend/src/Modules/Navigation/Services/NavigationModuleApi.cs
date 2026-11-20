@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.Navigation.Contracts;
+using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Services;
@@ -12,6 +13,17 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
             .Where(m => m.Id == mapVersionId)
             .Select(m => new MapVersionSnapshot(m.Id, m.WarehouseId, m.VersionNo, m.Status, m.Code))
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<MapVersionSnapshot>> GetPublishedMapsAsync(CancellationToken cancellationToken = default) =>
+        await dbContext.MapVersions.AsNoTracking()
+            .Where(map => map.Status == MapStatus.PUBLISHED)
+            .OrderByDescending(map => map.PublishedAt.HasValue)
+            .ThenByDescending(map => map.PublishedAt)
+            .ThenByDescending(map => map.CreatedAt)
+            .ThenByDescending(map => map.VersionNo)
+            .ThenBy(map => map.Id)
+            .Select(map => new MapVersionSnapshot(map.Id, map.WarehouseId, map.VersionNo, map.Status, map.Code))
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(
         IReadOnlyCollection<Guid> endpointIds,

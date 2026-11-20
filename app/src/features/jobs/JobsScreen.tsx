@@ -15,8 +15,13 @@ import {
   TextField,
 } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { listJobs } from '../../shared/api';
+import { getUserErrorMessage, listHandoverStops, listJobs } from '../../shared/api';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
+import { t } from '../../shared/i18n';
+import type { HandoverStopResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
+import { HandoverStopCard } from './HandoverStopCard';
+import { handoverStopOwnerState, mergeMyJobIdsWithStops } from './handoverData';
 import { JobCard } from './JobCard';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
@@ -93,19 +98,43 @@ function matchesArea(job: AppJobItem, areaId: string | null, places: PlaceDirect
     .some(code => places.areasOf(code).some(area => area.id === areaId));
 }
 
+function matchesStopQuery(stop: HandoverStopResponse, rawQuery: string, places: PlaceDirectory): boolean {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+  const squash = (value: string) => value.toLowerCase().replace(/[-\s]/g, '');
+  const needle = squash(query);
+  const haystack = [
+    stop.jobId,
+    stop.jobNo,
+    stop.endpointId,
+    places.name(stop.endpointId),
+    ...stop.containers.flatMap(item => [item.barcode ?? '', item.containerId]),
+  ];
+  return haystack.some(value => {
+    if (!value) return false;
+    const lower = value.toLowerCase();
+    return lower.includes(query) || squash(value).includes(needle);
+  });
+}
+
+function matchesStopArea(stop: HandoverStopResponse, areaId: string | null, places: PlaceDirectory): boolean {
+  if (!areaId) return true;
+  return places.areasOf(stop.endpointId).some(area => area.id === areaId);
+}
+
 /** `mine` is my open work; `fleet` is everything not finished; `history` is the finished work. */
-function inScope(job: AppJobItem, scope: JobScope): boolean {
+function inScope(job: AppJobItem, scope: JobScope, myStopJobIds: Set<string>): boolean {
   const terminal = isTerminalJobStatus(job.status);
   if (scope === 'history') return terminal;
   if (terminal) return false;
-  return scope === 'fleet' ? true : job.isMine;
+  return scope === 'fleet' ? true : (job.isMine || myStopJobIds.has(job.id));
 }
 
 const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
   mine: {
-    title: 'Task Assignment Unavailable',
+    title: 'No Claimed Tasks',
     message:
-      'The current backend does not expose staff assignment. Open Fleet Queue to view and confirm waiting handovers.',
+      'Claim an open handover offer or waiting task from Fleet Queue to see it here.',
   },
   fleet: {
     title: 'The fleet queue is clear',
@@ -137,10 +166,17 @@ export function JobsScreen() {
   const [areaPickerOpen, setAreaPickerOpen] = useState(false);
   const places = usePlaceDirectory();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
   const jobsQuery = useQuery({
     queryKey: ['jobs-list', session?.id],
     queryFn: () => listJobs(),
     enabled: !!session?.id,
+    refetchInterval: 5_000,
+  });
+  const stopsQuery = useQuery({
+    queryKey: ['handover-stops', session?.id],
+    queryFn: ({ signal }) => listHandoverStops({ signal }),
+    enabled: !!session?.id && canOperate,
     refetchInterval: 5_000,
   });
   const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => {
@@ -150,12 +186,22 @@ export function JobsScreen() {
     return { ...job, route, routeText: route, target: places.name(job.destinationEndpointCode, job.target) };
   }), [jobsQuery.data, session?.id, places]);
   const { refetch } = jobsQuery;
-  useEffect(() => { if (lastJobUpdate) void refetch(); }, [lastJobUpdate, refetch]);
+  const { refetch: refetchStops } = stopsQuery;
+  useEffect(() => {
+    if (lastJobUpdate) {
+      void refetch();
+      if (canOperate) void refetchStops();
+    }
+  }, [lastJobUpdate, canOperate, refetch, refetchStops]);
 
   const onRefresh = async () => {
     triggerHaptic('tap');
     setIsRefreshing(true);
-    try { await refetch(); } finally { setIsRefreshing(false); }
+    try {
+      await Promise.all([refetch(), ...(canOperate ? [refetchStops()] : [])]);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -164,29 +210,51 @@ export function JobsScreen() {
 
   const bottomInset = dockReservedSpace(dockHeight);
   const area = places.areas.find(item => item.id === areaId) ?? null;
+  const myStopJobIds = useMemo(
+    () => mergeMyJobIdsWithStops(jobsList, stopsQuery.data ?? [], session?.id),
+    [jobsList, stopsQuery.data, session?.id],
+  );
 
   const counts = useMemo(() => {
     const filtered = jobsList.filter(
       (job) => matchesQuery(job, query) && matchesArea(job, areaId, places)
     );
     return {
-      mine: filtered.filter((job) => inScope(job, 'mine')).length,
-      fleet: filtered.filter((job) => inScope(job, 'fleet')).length,
-      history: filtered.filter((job) => inScope(job, 'history')).length,
+      mine: filtered.filter((job) => inScope(job, 'mine', myStopJobIds)).length,
+      fleet: filtered.filter((job) => inScope(job, 'fleet', myStopJobIds)).length,
+      history: filtered.filter((job) => inScope(job, 'history', myStopJobIds)).length,
     } as Record<JobScope, number>;
-  }, [jobsList, query, areaId, places]);
+  }, [jobsList, query, areaId, places, myStopJobIds]);
 
   useEffect(() => {
-    const myActive = jobsList.filter((j) => j.isMine && !isTerminalJobStatus(j.status)).length;
+    const myActive = jobsList.filter(
+      (j) => !isTerminalJobStatus(j.status) && (j.isMine || myStopJobIds.has(j.id)),
+    ).length;
     setActiveJobCount(myActive);
-  }, [jobsList, setActiveJobCount]);
+  }, [jobsList, myStopJobIds, setActiveJobCount]);
+
+  const visibleStops = useMemo(() => {
+    if (!canOperate || scope === 'history') return [];
+    const ownerRank = (stop: HandoverStopResponse) => {
+      const state = handoverStopOwnerState(stop, session?.id);
+      return state === 'free' ? 0 : state === 'mine' ? 1 : 2;
+    };
+    const matched = (stopsQuery.data ?? []).filter(
+      (stop) =>
+        matchesStopQuery(stop, query, places) &&
+        matchesStopArea(stop, areaId, places) &&
+        (scope === 'fleet' || handoverStopOwnerState(stop, session?.id) === 'mine'),
+    );
+    if (scope === 'mine') return matched;
+    return [...matched].sort((a, b) => ownerRank(a) - ownerRank(b));
+  }, [canOperate, scope, stopsQuery.data, query, areaId, places, session?.id]);
 
   const visible = useMemo(
     () =>
       jobsList.filter(
-        (job) => inScope(job, scope) && matchesQuery(job, query) && matchesArea(job, areaId, places)
+        (job) => inScope(job, scope, myStopJobIds) && matchesQuery(job, query) && matchesArea(job, areaId, places)
       ),
-    [jobsList, scope, query, areaId, places]
+    [jobsList, scope, myStopJobIds, query, areaId, places]
   );
 
   const options = useMemo(
@@ -278,13 +346,64 @@ export function JobsScreen() {
             tintColor={colors.primary}
           />
         }
-        ListHeaderComponent={jobsQuery.error && jobsQuery.data !== undefined ? <EmptyState compact tone="warning"
-          title="Could Not Refresh Jobs" message="Showing the last loaded jobs. Refresh before acting on an old status."
-          actionTitle="Retry" onAction={() => { void refetch(); }} /> : undefined}
+        ListHeaderComponent={
+          (jobsQuery.error && jobsQuery.data !== undefined) ||
+          (canOperate && scope !== 'history' && stopsQuery.isError) ||
+          visibleStops.length > 0 ? (
+            <View style={styles.listHeaderGroup}>
+              {jobsQuery.error && jobsQuery.data !== undefined ? (
+                <EmptyState
+                  compact
+                  tone="warning"
+                  title="Could Not Refresh Jobs"
+                  message="Showing the last loaded jobs. Refresh before acting on an old status."
+                  actionTitle="Retry"
+                  onAction={() => { void refetch(); }}
+                />
+              ) : null}
+              {canOperate && scope !== 'history' && stopsQuery.isError ? (
+                <EmptyState
+                  compact
+                  tone="warning"
+                  title="Could Not Load Handover Queue"
+                  message={getUserErrorMessage(stopsQuery.error, 'Could not load open handover offers. Try again.')}
+                  actionTitle="Retry"
+                  onAction={() => { void refetchStops(); }}
+                />
+              ) : null}
+              {visibleStops.length > 0 ? (
+                <View style={styles.stopsSection}>
+                  <Text variant="label" color="textSecondary" style={styles.stopsSectionTitle}>
+                    {scope === 'mine'
+                      ? t('My Claimed Handovers ({count})', { count: visibleStops.length })
+                      : t('Open Handover Offers ({count})', { count: visibleStops.length })}
+                  </Text>
+                  {visibleStops.map((stop) => (
+                    <HandoverStopCard
+                      key={`${stop.jobId}:${stop.id}:${stop.moveId}`}
+                      stop={stop}
+                      placeName={places.name(stop.endpointId, stop.endpointId)}
+                      accountId={session?.id}
+                      canOperate={canOperate}
+                      showJobLink
+                      onOpenJob={() => navigate('job_detail', { jobId: stop.jobId })}
+                      onUpdated={() => {
+                        void refetchStops();
+                        void refetch();
+                      }}
+                      onRefresh={refetchStops}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : undefined
+        }
         ListEmptyComponent={jobsQuery.data === undefined ? <EmptyState compact
           title={jobsQuery.error ? 'Jobs Unavailable' : jobsQuery.fetchStatus === 'paused' ? 'Waiting For Connection' : 'Loading Jobs…'}
           message={jobsQuery.error ? jobsQuery.error.message : 'The queue has not loaded yet.'}
           actionTitle={jobsQuery.error ? 'Retry' : undefined} onAction={() => { void refetch(); }} /> :
+          visibleStops.length > 0 ? undefined :
           <ListEmpty
             scope={scope}
             hasQuery={query.trim().length > 0}
@@ -441,6 +560,16 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
+  },
+  listHeaderGroup: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  stopsSection: {
+    gap: 10,
+  },
+  stopsSectionTitle: {
+    fontWeight: '700',
   },
   separator: {
     height: 12,

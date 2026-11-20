@@ -90,6 +90,17 @@ public static class IssueEndpoints
             .WithName("AddIssueEvidence")
             .WithDescription("Evidence is metadata (kind, URI, MIME type, note); the file itself is stored elsewhere.");
 
+        group.MapPost("/issues/{id:guid}/resolve-handover", async (
+                Guid id, ResolveOwnHandoverIssueRequest request,
+                IValidator<ResolveOwnHandoverIssueRequest> validator, IssueService issues, CancellationToken cancellationToken) =>
+            {
+                var validation = await validator.ValidateAsync(request, cancellationToken);
+                if (!validation.IsValid) return validation.ToValidationProblem();
+                return Results.Ok(await issues.ResolveOwnHandoverAsync(id, request, cancellationToken));
+            })
+            .RequirePermission(Permissions.IssueCreate)
+            .WithName("ResolveOwnHandoverIssue");
+
         return group;
     }
 }

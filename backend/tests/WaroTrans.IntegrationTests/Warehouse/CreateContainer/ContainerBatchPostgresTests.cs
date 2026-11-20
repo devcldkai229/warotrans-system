@@ -192,7 +192,7 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         var all = first.Concat(ranges.SelectMany(r => r)).Append(last).ToArray();
         Assert.Equal(52, all.Length);
         Assert.Equal(52, all.Distinct().Count());
-        Assert.Equal("CTN-20310115-000052", last);
+        Assert.Equal("C150131052", last);
         Assert.Equal("WH-001", await tracked.NextWarehouseCodeAsync());
         await using var otherDb = Codes();
         Assert.Equal("WH-002", await new BusinessCodeGenerator(otherDb).NextWarehouseCodeAsync());

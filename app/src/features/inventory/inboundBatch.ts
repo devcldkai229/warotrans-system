@@ -1,5 +1,6 @@
+import { ApiError } from '../../shared/api/client';
 import type { CreateContainerBatchBody, CreateContainerBatchGroupInput, ProductItem } from '../../shared/api/warehouseApi';
-import { contentsQuantity, preparationCount } from './voucherPreparation';
+import { contentProblem, contentsQuantity, preparationCount, type PendingBatchSubmission, type VoucherPreparation } from './voucherPreparation';
 
 /** Local planning groups; keys are never Container IDs or barcodes. */
 export interface InboundBatchGroup {
@@ -9,10 +10,7 @@ export interface InboundBatchGroup {
   quantity: string;
   unit: string;
 }
-/**
- * Staff do not manage the contents of a container (how many pieces, in what unit): a container is the unit they move.
- * The API still stores contents, so every container is recorded as holding one container's worth.
- */
+/** Explicit box contents defaults used by quick container creation without a contents form. */
 export const DEFAULT_QUANTITY = '1';
 export const DEFAULT_UNIT = 'container';
 
@@ -22,10 +20,10 @@ export function batchTotal(groups: InboundBatchGroup[]): string {
   return sum > 0 ? String(sum) : '';
 }
 export interface BatchProblem { message: string; groupKey?: string }
-export function newBatchGroup(groups: InboundBatchGroup[], count = ''): InboundBatchGroup {
+export function newBatchGroup(groups: InboundBatchGroup[], count = '', quantity = '', unit = ''): InboundBatchGroup {
   let index = 1;
   while (groups.some(group => group.key === `group-${index}`)) index++;
-  return { key: `group-${index}`, product: null, containerCount: count, quantity: DEFAULT_QUANTITY, unit: DEFAULT_UNIT };
+  return { key: `group-${index}`, product: null, containerCount: count, quantity, unit };
 }
 export function batchCounts(requested: string, groups: InboundBatchGroup[]) {
   const total = preparationCount(requested);
@@ -46,7 +44,9 @@ export function inboundBatchProblem(requested: string, groups: InboundBatchGroup
     keys.add(group.key);
     const count = preparationCount(group.containerCount);
     if (count === null || count > 9999) return { groupKey: group.key, message: 'Enter a positive whole number of containers for this product.' };
-    if (!group.product?.isActive) return { groupKey: group.key, message: 'Choose an active product.' };
+    const problem = contentProblem(group);
+    if (problem) return { groupKey: group.key, message: problem };
+    if (group.unit.trim().length > 32) return { groupKey: group.key, message: 'Unit must be 32 characters or fewer.' };
   }
   if (grouped !== total) return { message: 'Product group counts must equal the batch container count.' };
   return null;
@@ -91,8 +91,8 @@ export function buildContainerBatchBody(
       groupKey: group.key.trim(),
       productId: group.product!.id,
       containerCount: preparationCount(group.containerCount)!,
-      quantityPerContainer: contentsQuantity(group.quantity) ?? Number(DEFAULT_QUANTITY),
-      unit: group.unit?.trim() || DEFAULT_UNIT,
+      quantityPerContainer: contentsQuantity(group.quantity)!,
+      unit: group.unit.trim(),
       ...(supplierBarcode ? { supplierPackageBarcode: supplierBarcode } : {}),
     };
   });
@@ -104,4 +104,111 @@ export function buildContainerBatchBody(
     containerCount,
     groups: mappedGroups,
   };
+}
+
+export function isPendingBatchForVoucher(
+  pendingBatch: PendingBatchSubmission | undefined,
+  warehouseId: string,
+  voucherId: string,
+): boolean {
+  return Boolean(
+    pendingBatch
+    && pendingBatch.requestId.trim()
+    && pendingBatch.body.requestId === pendingBatch.requestId
+    && pendingBatch.body.warehouseId === warehouseId
+    && pendingBatch.body.stockVoucherId === voucherId,
+  );
+}
+
+/** Only 400 validation or 404 not-found proves no containers were persisted for this requestId. */
+export function isDefinitiveBatchRejection(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 400 || error.status === 404);
+}
+
+export function beginPendingBatch(
+  prep: VoucherPreparation,
+  warehouseId: string,
+  voucherId: string,
+): { nextPrep: VoucherPreparation; body: CreateContainerBatchBody } {
+  if (isPendingBatchForVoucher(prep.pendingBatch, warehouseId, voucherId)) {
+    return { nextPrep: prep, body: prep.pendingBatch!.body };
+  }
+  const requestId = prep.requestId || createBatchRequestId();
+  const body = buildContainerBatchBody(warehouseId, requestId, prep.requestedCount, prep.groups ?? [], voucherId);
+  return {
+    nextPrep: { ...prep, requestId, pendingBatch: { requestId, body } },
+    body,
+  };
+}
+
+export function applyDraftBatchGroupEdit(
+  prep: VoucherPreparation,
+  nextGroups: InboundBatchGroup[],
+  warehouseId: string,
+  voucherId: string,
+): VoucherPreparation {
+  if (isPendingBatchForVoucher(prep.pendingBatch, warehouseId, voucherId)) {
+    return prep;
+  }
+  return {
+    ...prep,
+    requestId: undefined,
+    pendingBatch: undefined,
+    groups: nextGroups,
+    requestedCount: batchTotal(nextGroups),
+  };
+}
+
+export function clearPendingBatch(prep: VoucherPreparation): VoucherPreparation {
+  return { ...prep, requestId: undefined, pendingBatch: undefined };
+}
+
+export function reconcilePendingBatchWithVoucher(
+  prep: VoucherPreparation,
+  voucher: { status: string; lines: ReadonlyArray<unknown> },
+): VoucherPreparation {
+  if (voucher.lines.length > 0 || voucher.status !== 'DRAFT') {
+    return clearPendingBatch(prep);
+  }
+  return prep;
+}
+
+export interface PersistentBatchAllocationOptions<TResult> {
+  prep: VoucherPreparation;
+  warehouseId: string;
+  voucherId: string;
+  onStage: (staged: VoucherPreparation) => void;
+  persist: (staged: VoucherPreparation) => Promise<void>;
+  submit: (body: CreateContainerBatchBody) => Promise<TResult>;
+  shouldStop?: () => boolean;
+}
+
+export type PersistentBatchAllocationOutcome<TResult> =
+  | { status: 'persist_failed'; nextPrep: VoucherPreparation; body: CreateContainerBatchBody; error: unknown }
+  | { status: 'aborted'; nextPrep: VoucherPreparation; body: CreateContainerBatchBody }
+  | { status: 'submitted'; nextPrep: VoucherPreparation; body: CreateContainerBatchBody; result: TResult };
+
+export async function runPersistentBatchAllocation<TResult>({
+  prep,
+  warehouseId,
+  voucherId,
+  onStage,
+  persist,
+  submit,
+  shouldStop,
+}: PersistentBatchAllocationOptions<TResult>): Promise<PersistentBatchAllocationOutcome<TResult>> {
+  const plan = beginPendingBatch(prep, warehouseId, voucherId);
+  if (plan.nextPrep !== prep) {
+    onStage(plan.nextPrep);
+  }
+  try {
+    await persist(plan.nextPrep);
+  } catch (error) {
+    return { status: 'persist_failed', nextPrep: plan.nextPrep, body: plan.body, error };
+  }
+  if (shouldStop?.()) {
+    return { status: 'aborted', nextPrep: plan.nextPrep, body: plan.body };
+  }
+  const result = await submit(plan.body);
+  return { status: 'submitted', nextPrep: plan.nextPrep, body: plan.body, result };
 }

@@ -77,6 +77,14 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(translateText('STAGED_OUTBOUND'), 'Chờ xuất tại cổng');
   assert.equal(translateText('By Product (FIFO)'), 'Theo sản phẩm (FIFO)');
   assert.equal(t('{count} FIFO Selected', { count: 4 }), 'Đã chọn 4 thùng FIFO');
+  assert.equal(t('Containers currently stored on a shelf.'), 'Container hiện đang lưu trên kệ.');
+  assert.equal(t('Total Stock'), 'Tổng tồn kho');
+  assert.equal(t('Awaiting Putaway'), 'Chờ đưa lên kệ');
+  assert.equal(t('Choose an outbound gate'), 'Hãy chọn cổng xuất kho');
+  assert.equal(t('Shelved / Staged'), 'Trên kệ / Chờ xuất');
+  assert.equal(t('{count} staged at Outbound gate', { count: 2 }), '2 container đang tập kết tại cổng xuất');
+  assert.equal(t('Allocated'), 'Đã phân bổ vị trí');
+  assert.equal(t('Unallocated'), 'Chưa phân bổ vị trí');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(

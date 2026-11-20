@@ -1,4 +1,7 @@
-import type { ContainerSlot, JobDetailResponse, JobStatus, JobStepResponse, JobStepSummary, JobSummary, JobTaskResponse, WorkflowCode } from '../../shared/types/contracts';
+import type {
+  ActionAvailability, ContainerSlot, JobDetailResponse, JobOperatorPause, JobStatus,
+  JobStepResponse, JobStepSummary, JobSummary, JobTaskResponse, WorkflowCode,
+} from '../../shared/types/contracts';
 import type { SemanticTone } from '../../shared/theme/colors';
 export interface JobStopStep { type: string; label: string; status: 'done' | 'waiting' | 'running' | 'future'; timeRemaining?: string }
 export interface JobStopItem { id: number; name: string; description: string; state: 'done' | 'active' | 'future'; current?: boolean; steps?: JobStopStep[] }
@@ -9,6 +12,10 @@ export interface JobContainerItem {
 export interface AppJobItem extends JobSummary {
   mapVersionId: string;
   tasks: AppJobTaskItem[];
+  availableActions?: ActionAvailability[];
+  operatorPause?: JobOperatorPause | null;
+  failureCode?: string | null;
+  failureMessage?: string | null;
   activeTaskId?: string; assignedStaffId?: string; activeStepId?: string; activeStepOperation?: string;
   hasWaitingHandover?: boolean; assignedRobotId?: string; target: string; route: string; robot: string; isMine: boolean;
   battery: string; speed: string; distanceRemaining?: string; progressPercent?: number; completedAt?: string;
@@ -107,9 +114,17 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
   });
   const completed = allSteps.filter(({ step }) => step.status === 'COMPLETED').length;
   const assignedStaffId = typeof context.assignedStaffId === 'string' ? context.assignedStaffId : undefined;
+  const claimedByMe = Boolean(
+    currentStaffId
+    && allSteps.some(({ step }) => step.status === 'WAITING' && step.stepType === 'HUMAN_INTERACTION' && step.claimedBy === currentStaffId),
+  );
   return {
     ...EMPTY_JOB, id: detail.id, mapVersionId: detail.mapVersionId, jobNo: detail.jobNo, workflowCode: String(context.workflowCode || '') as WorkflowCode,
     workflowName: String(context.workflowName || 'Workflow'), status: detail.status,
+    availableActions: detail.availableActions,
+    operatorPause: detail.operatorPause ?? null,
+    failureCode: detail.failureCode ?? null,
+    failureMessage: detail.failureMessage ?? null,
     activeTaskId: typeof context.activeTaskId === 'string' ? context.activeTaskId : undefined, assignedStaffId,
     activeStepId: typeof context.activeStepId === 'string' ? context.activeStepId : undefined,
     activeStepOperation: typeof context.activeStepOperation === 'string' ? context.activeStepOperation : undefined,
@@ -119,7 +134,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
     activeStepTitle: detail.failureMessage || allSteps.find(({ step }) => step.id === context.activeStepId)?.step.operationCode || 'Job Progress',
     containerCount: detail.containers.length, slots, steps, tasks, createdAtUtc: detail.createdAt,
     target: destination, route: `${source} ➔ ${destination}`, robot,
-    isMine: Boolean(currentStaffId && assignedStaffId === currentStaffId && !isTerminalJobStatus(detail.status)),
+    isMine: Boolean(!isTerminalJobStatus(detail.status) && (claimedByMe || (currentStaffId && assignedStaffId === currentStaffId))),
     battery: typeof context.batteryPercent === 'number' ? `${Math.round(context.batteryPercent)}%` : '—',
     speed: typeof context.linearVelocity === 'number' ? `${context.linearVelocity.toFixed(2)} m/s` : '—',
     progressPercent: allSteps.length ? Math.round(completed / allSteps.length * 100) : 0,
@@ -127,4 +142,70 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
     stopsCount: stopsList.length, routeText: `${source} ➔ ${destination}`,
     payloadSummary: `${detail.containers.length} Container(s)`, containers, stopsList,
   };
+}
+
+export function isUncertainCommandError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('status' in error)) return false;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' && (status === 0 || status >= 500);
+}
+
+export function isStopStateInFlight(state?: string | null): boolean {
+  return state === 'REQUESTED' || state === 'ACCEPTED';
+}
+
+export function stopStatePresentation(state?: string | null): { label: string; tone: SemanticTone } {
+  switch (state) {
+    case 'STOPPED_VERIFIED':
+      return { label: 'Robot Stopped (Verified)', tone: 'success' };
+    case 'REQUESTED':
+      return { label: 'Stop Requested', tone: 'warning' };
+    case 'ACCEPTED':
+      return { label: 'Stop Accepted · Stopping', tone: 'warning' };
+    case 'REJECTED':
+      return { label: 'Stop Rejected', tone: 'danger' };
+    case 'UNKNOWN':
+      return { label: 'Stop State Unknown', tone: 'danger' };
+    default:
+      return { label: 'No Stop Recorded', tone: 'neutral' };
+  }
+}
+
+export interface IssueReceipt {
+  id: string;
+  code: string;
+  status: string;
+}
+
+export interface IssueAndPauseOutcome {
+  issue: IssueReceipt;
+  pausedJob: JobDetailResponse | null;
+  pauseError: unknown;
+  pauseUncertain: boolean;
+}
+
+/**
+ * Keeps an already-created Issue ticket when Pause fails or times out so retrying
+ * only calls Pause and never creates a duplicate Issue.
+ */
+export async function submitIssueAndOptionalPause(options: {
+  existingIssue?: IssueReceipt | null;
+  createIssue: () => Promise<IssueReceipt>;
+  pauseJob?: () => Promise<JobDetailResponse>;
+}): Promise<IssueAndPauseOutcome> {
+  const issue = options.existingIssue ?? await options.createIssue();
+  if (!options.pauseJob) {
+    return { issue, pausedJob: null, pauseError: null, pauseUncertain: false };
+  }
+  try {
+    const pausedJob = await options.pauseJob();
+    return { issue, pausedJob, pauseError: null, pauseUncertain: false };
+  } catch (pauseError) {
+    return {
+      issue,
+      pausedJob: null,
+      pauseError,
+      pauseUncertain: isUncertainCommandError(pauseError),
+    };
+  }
 }

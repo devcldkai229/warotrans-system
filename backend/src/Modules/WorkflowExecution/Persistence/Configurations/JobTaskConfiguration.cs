@@ -14,6 +14,7 @@ public sealed class JobTaskConfiguration : IEntityTypeConfiguration<JobTask>
 
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.FailureCode).HasMaxLength(50);
+        builder.Property(x => x.HandoverVersion).IsConcurrencyToken();
 
         builder.Property(x => x.ContextValues)
             .HasColumnType("jsonb")

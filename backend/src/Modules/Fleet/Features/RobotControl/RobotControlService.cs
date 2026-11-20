@@ -101,9 +101,12 @@ public sealed class RobotControlService(
         return await GetStopStateAsync(robotId, cancellationToken);
     }
 
-    public async Task<StopStateResponse> ResumeAsync(Guid robotId, CancellationToken cancellationToken)
+    public async Task<StopStateResponse> ResumeAsync(
+        Guid robotId, CancellationToken cancellationToken, bool fromJobResume = false)
     {
         var robot = await LoadAsync(robotId, cancellationToken);
+        if (!fromJobResume)
+            await EnsureNoOperatorPausedJobAsync(robot.Id, cancellationToken);
         if (!robot.IsOnline)
         {
             throw new ConflictException($"Robot {robot.Code} is offline.", "robot_offline");
@@ -176,6 +179,7 @@ public sealed class RobotControlService(
         var now = clock.GetUtcNow();
         var robot = await LoadAsync(robotId, cancellationToken);
 
+        await EnsureNoOperatorPausedJobAsync(robot.Id, cancellationToken);
         if (!robot.IsEnabled) throw new ConflictException($"Robot {robot.Code} is disabled.", "robot_disabled");
         if (!robot.IsOnline) throw new ConflictException($"Robot {robot.Code} is offline.", "robot_offline");
 
@@ -234,6 +238,12 @@ public sealed class RobotControlService(
         }
 
         return new ManualLeaseResponse(robotId, true, me, name, until, true);
+    }
+
+    private async Task EnsureNoOperatorPausedJobAsync(Guid robotId, CancellationToken cancellationToken)
+    {
+        if (work is not null && await work.HasOperatorPausedJobAsync(robotId, cancellationToken))
+            throw new ConflictException("This robot has an operator-paused Job. Resume the Job to release the hold.", "job_paused_robot_held");
     }
 
     public async Task ReleaseLeaseAsync(Guid robotId, CancellationToken cancellationToken)

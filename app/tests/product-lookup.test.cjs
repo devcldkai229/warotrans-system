@@ -8,7 +8,7 @@ const product = (overrides = {}) => ({ id: 'product-1', categoryId: 'category', 
   name: 'Product One', description: null, isActive: true, ...overrides });
 const plain = value => JSON.parse(JSON.stringify(value));
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
-function load(apiFetch) { return createLoader({ 'src/shared/api/client.ts': { apiFetch, ApiError } }); }
+function load(apiFetch) { return createLoader({ 'src/shared/api/client.ts': { apiFetch, ApiError, getAccessToken: () => 'staff-token' } }); }
 function lookup(apiFetch) { return load(apiFetch)('src/features/inventory/productLookup.ts').lookupReceivingProduct; }
 
 test('resolve sends the verified GET wire names, trims input and passes cancellation to every read', async () => {
@@ -143,4 +143,63 @@ test('a repeated scan rechecks the backend and does not reuse a product that bec
   inactive = true;
   await assert.rejects(() => resolve('BAR-1', new AbortController().signal), error => error.code === 'product_not_found');
   assert.equal(reads, 3);
+});
+
+test('createProduct sends the POST contract with caller token, verifies active product and validates inputs', async () => {
+  let captured = null;
+  const controller = new AbortController();
+  const created = product({ id: 'prod-new', sku: 'SKU-NEW', supplierBarcode: null, description: null });
+  const loader = load(async (url, init, token) => {
+    captured = { url, init, token };
+    return created;
+  });
+  const warehouseApi = loader('src/shared/api/warehouseApi.ts');
+  const productLookup = loader('src/features/inventory/productLookup.ts');
+
+  const body = productLookup.buildCreateProductBody({
+    categoryId: ' cat-1 ',
+    sku: ' sku-new ',
+    name: ' Sensor Box ',
+    supplierBarcode: '   ',
+    description: '',
+  });
+  assert.deepEqual(plain(body), {
+    categoryId: 'cat-1',
+    sku: 'sku-new',
+    name: 'Sensor Box',
+    supplierBarcode: null,
+    description: null,
+  });
+
+  const result = await warehouseApi.createProduct(body, controller.signal);
+  assert.equal(captured.url, '/api/warehouse/products');
+  assert.equal(captured.init.method, 'POST');
+  assert.equal(captured.init.signal, controller.signal);
+  assert.equal(captured.token, 'staff-token');
+  assert.deepEqual(JSON.parse(captured.init.body), {
+    categoryId: 'cat-1',
+    sku: 'sku-new',
+    name: 'Sensor Box',
+    supplierBarcode: null,
+    description: null,
+  });
+  assert.equal(result.id, 'prod-new');
+
+  assert.equal(productLookup.validateNewProductInput({ categoryId: '', sku: 'S', name: 'N', supplierBarcode: '', description: '' }).field, 'categoryId');
+  assert.equal(productLookup.validateNewProductInput({ categoryId: 'c', sku: ' ', name: 'N', supplierBarcode: '', description: '' }).field, 'sku');
+  assert.equal(productLookup.validateNewProductInput({ categoryId: 'c', sku: 'S', name: ' ', supplierBarcode: '', description: '' }).field, 'name');
+  assert.equal(productLookup.validateNewProductInput({ categoryId: 'c', sku: 'S'.repeat(101), name: 'N', supplierBarcode: '', description: '' }).field, 'sku');
+  assert.equal(productLookup.validateNewProductInput({ categoryId: 'c', sku: 'S', name: 'N'.repeat(201), supplierBarcode: '', description: '' }).field, 'name');
+  assert.equal(productLookup.validateNewProductInput({ categoryId: 'c', sku: 'S', name: 'N', supplierBarcode: 'B'.repeat(129), description: '' }).field, 'supplierBarcode');
+  assert.equal(productLookup.validateNewProductInput({ categoryId: 'c', sku: 'S', name: 'N', supplierBarcode: '', description: 'D'.repeat(501) }).field, 'description');
+
+  assert.equal(productLookup.productCreationErrorField(new ApiError(409, 'product_sku_taken', 'Exists')), 'sku');
+  assert.equal(productLookup.productCreationErrorField(new ApiError(409, 'product_supplier_barcode_taken', 'Exists')), 'supplierBarcode');
+  assert.equal(productLookup.productCreationErrorField(new ApiError(404, 'product_category_not_found', 'Missing')), 'categoryId');
+  assert.equal(productLookup.productCreationErrorField(new ApiError(500, 'SERVER_ERROR', 'Err')), 'form');
+
+  for (const invalid of [null, { ...created, isActive: false }, { ...created, id: '' }, { ...created, sku: '' }]) {
+    const badApi = load(async () => invalid)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(() => badApi.createProduct(body), error => error.status === 502 && error.code === 'product_creation_unverified');
+  }
 });

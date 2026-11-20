@@ -1,4 +1,4 @@
-import type { HumanConfirmationOutputs, JobStatus, JobStepResponse } from '../../shared/types/contracts';
+import type { HandoverStopResponse, HumanConfirmationOutputs, JobStatus, JobStepResponse } from '../../shared/types/contracts';
 
 export function humanConfirmation(step?: JobStepResponse): HumanConfirmationOutputs | null {
   if (step?.stepType !== 'HUMAN_INTERACTION' || step.status !== 'COMPLETED') return null;
@@ -54,4 +54,51 @@ export function batchHandoverCandidates(tasks: StepTask[]): { type: 'PICKUP' | '
     type: current.operation === 'PICKUP_CONFIRM' ? 'PICKUP' : 'DROPOFF',
     items: open.filter(item => item.operation === current.operation && item.containerId),
   };
+}
+
+export function handoverStopOwnerState(
+  stop: Pick<HandoverStopResponse, 'claimedBy'> | null | undefined,
+  accountId?: string | null,
+): ClaimState {
+  if (!stop?.claimedBy) return 'free';
+  return accountId && stop.claimedBy === accountId ? 'mine' : 'other';
+}
+
+export type HandoverStopPhase =
+  | 'unclaimed_approaching'
+  | 'unclaimed_ready'
+  | 'claimed_approaching'
+  | 'claimed_ready'
+  | 'in_progress'
+  | 'claimed_by_other';
+
+export function handoverStopPhase(
+  stop: Pick<HandoverStopResponse, 'claimedBy' | 'robotReadyAt' | 'beganAt'>,
+  accountId?: string | null,
+): HandoverStopPhase {
+  const owner = handoverStopOwnerState(stop, accountId);
+  if (owner === 'other') return 'claimed_by_other';
+  if (owner === 'mine') {
+    if (stop.beganAt) return 'in_progress';
+    return stop.robotReadyAt ? 'claimed_ready' : 'claimed_approaching';
+  }
+  return stop.robotReadyAt ? 'unclaimed_ready' : 'unclaimed_approaching';
+}
+
+export function mergeMyJobIdsWithStops(
+  jobs: { id: string; isMine: boolean; status: JobStatus }[],
+  stops: Pick<HandoverStopResponse, 'jobId' | 'claimedBy'>[],
+  accountId?: string | null,
+): Set<string> {
+  const claimedStopJobIds = new Set(
+    accountId ? stops.filter(stop => stop.claimedBy === accountId).map(stop => stop.jobId) : [],
+  );
+  const mine = new Set<string>();
+  for (const job of jobs) {
+    if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(job.status)) continue;
+    if (job.isMine || claimedStopJobIds.has(job.id)) {
+      mine.add(job.id);
+    }
+  }
+  return mine;
 }

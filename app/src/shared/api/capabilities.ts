@@ -12,7 +12,7 @@ export const mobileCapabilities = {
   // WH-03 claim / release / takeover on job-steps (verified against HumanTasks endpoints, 18/11/2026).
   claimHumanTask: true,
   reportIssue: true,
-  pauseJob: false,
+  pauseJob: true,
   resumeJob: true,
   payloadRecovery: false,
 } as const;

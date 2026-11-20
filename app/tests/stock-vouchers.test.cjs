@@ -261,3 +261,32 @@ test('voucher contents editor never accepts missing or duplicate Container ident
   const api = modules(async () => detail({ containerCount: 1, lines: [line] }))('src/shared/api/warehouseApi.ts');
   assert.equal((await api.getStockVoucher('voucher-1')).lines[0].containerId, 'container-1');
 });
+
+test('voucherLineLocation resolves shelf code, staged outbound gate label, unlocated None, and omits location once issued', () => {
+  const { voucherLineLocation } = modules(async () => {})('src/features/inventory/stockVoucherData.ts');
+  const endpoints = new Map([['ep-out-1', 'Outbound Dock 1']]);
+  assert.equal(
+    voucherLineLocation({ currentStorageLocationCode: 'SHELF-A-1', currentEndpointId: 'ep-shelf', containerStatus: 'STORED' }, endpoints),
+    'SHELF-A-1',
+  );
+  assert.equal(
+    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-out-1', containerStatus: 'STAGED_OUTBOUND' }, endpoints),
+    'Outbound Dock 1',
+  );
+  assert.equal(
+    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-unknown', containerStatus: 'STAGED_OUTBOUND' }, endpoints),
+    'Outbound Gate',
+  );
+  assert.equal(
+    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-custom', containerStatus: 'PACKED' }, new Map()),
+    'At Station',
+  );
+  assert.equal(
+    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: null, containerStatus: 'CREATED' }, endpoints),
+    'None',
+  );
+  assert.equal(
+    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: null, containerStatus: 'ISSUED' }, endpoints),
+    null,
+  );
+});

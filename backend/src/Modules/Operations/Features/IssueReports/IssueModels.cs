@@ -17,12 +17,15 @@ public sealed record CreateIssueRequest(
     Guid? JobStepId = null,
     Guid? StorageLocationId = null,
     Guid? RobotId = null,
-    IReadOnlyList<EvidenceInput>? Evidence = null);
+    IReadOnlyList<EvidenceInput>? Evidence = null,
+    string? ProblemCode = null);
 
 /// <param name="ExpectedVersion">The version the caller looked at; a newer one answers 409 issue_version_conflict.</param>
 public sealed record AssignIssueRequest(Guid? AssigneeId, int ExpectedVersion);
 
-public sealed record TransitionIssueRequest(string Status, int ExpectedVersion, string? Resolution = null);
+public sealed record TransitionIssueRequest(string Status, int ExpectedVersion, string? Resolution = null, string? ScannedBarcode = null);
+
+public sealed record ResolveOwnHandoverIssueRequest(int ExpectedVersion, string ScannedBarcode, string Resolution);
 
 public sealed record AddEvidenceRequest(EvidenceInput Evidence, int ExpectedVersion);
 
@@ -50,9 +53,10 @@ public sealed record IssueDto(
     DateTimeOffset? ResolvedAt,
     Guid? ResolvedBy,
     string? Resolution,
-    IReadOnlyList<string> AllowedTransitions)
+    IReadOnlyList<string> AllowedTransitions,
+    string? ProblemCode)
 {
-    public static IssueDto From(IssueReport i) => new(
+    public static IssueDto From(IssueReport i, IReadOnlyList<string> transitions) => new(
         i.Id,
         i.Code,
         i.IssueType.ToString(),
@@ -74,7 +78,8 @@ public sealed record IssueDto(
         i.ResolvedAt,
         i.ResolvedBy,
         i.Resolution,
-        IssueLifecycle.NextOf(i.Status).Select(s => s.ToString()).ToList());
+        transitions,
+        i.ProblemCode);
 }
 
 public sealed record ListIssuesResponse(long Total, IReadOnlyList<IssueDto> Items);
@@ -99,6 +104,15 @@ public static class IssueLifecycle
 public static class EvidenceKinds
 {
     public static readonly string[] All = ["PHOTO", "VIDEO", "NOTE", "LINK", "FILE"];
+}
+
+internal static class HandoverProblemCodes
+{
+    public const string WrongContainer = "WRONG_CONTAINER";
+    public const string MissingContainer = "MISSING_CONTAINER";
+    public static readonly string[] Blocking = [WrongContainer, MissingContainer];
+    public static readonly string[] All =
+        [WrongContainer, MissingContainer, "BARCODE_UNREADABLE", "CONTAINER_DAMAGED", "QUANTITY_MISMATCH"];
 }
 
 internal sealed class EvidenceInputValidator : AbstractValidator<EvidenceInput>
@@ -129,6 +143,21 @@ internal sealed class CreateIssueValidator : AbstractValidator<CreateIssueReques
         RuleForEach(x => x.Evidence).SetValidator(new EvidenceInputValidator());
         RuleFor(x => x.RobotId).NotNull().When(x => x.IssueType == nameof(Enums.IssueType.ROBOT))
             .WithMessage("A ROBOT issue must name the robot.");
+        RuleFor(x => x.ProblemCode).Must(code => HandoverProblemCodes.All.Contains(code))
+            .When(x => x.ProblemCode is not null).WithMessage("Unknown handover problem code.");
+        RuleFor(x => x).Must(x => x.IssueType == nameof(Enums.IssueType.CONTAINER)
+                && x.JobId is not null && x.ContainerId is not null)
+            .When(x => x.ProblemCode is not null).WithMessage("A handover problem must name the Job and expected container.");
+    }
+}
+
+internal sealed class ResolveOwnHandoverIssueValidator : AbstractValidator<ResolveOwnHandoverIssueRequest>
+{
+    public ResolveOwnHandoverIssueValidator()
+    {
+        RuleFor(x => x.ExpectedVersion).GreaterThan(0);
+        RuleFor(x => x.ScannedBarcode).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Resolution).NotEmpty().MaximumLength(1000);
     }
 }
 
@@ -140,6 +169,7 @@ internal sealed class TransitionIssueValidator : AbstractValidator<TransitionIss
         RuleFor(x => x.Resolution).NotEmpty().MaximumLength(2000)
             .When(x => x.Status == nameof(IssueStatus.RESOLVED))
             .WithMessage("Resolving an issue needs a resolution.");
+        RuleFor(x => x.ScannedBarcode).MaximumLength(200);
     }
 }
 

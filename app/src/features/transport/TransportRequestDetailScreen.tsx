@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowDown, Box, ChevronRight, MapPin, Truck } from 'lucide-react-native';
@@ -11,24 +11,38 @@ import {
 import { useAuth } from '../auth/authContext';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { toast } from '../../shared/context/ToastContext';
+import { t } from '../../shared/i18n';
 import { startQueuedJobs } from './startQueuedJobs';
 import { useRealtime } from '../../shared/realtime';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { Button, Card, ProgressMeter, ReasonSheet, ScreenHeader, StatusPill, Text } from '../../shared/ui';
-import { transportDate, transportRequestProgress } from './transportRequestData';
+import {
+  detailWarehouseSyncEntries,
+  hasPendingWarehouseSync,
+  summarizeWarehouseSync,
+  transportDate,
+  transportRequestProgress,
+  warehouseSyncLabel,
+  warehouseSyncTone,
+} from './transportRequestData';
 
 export function TransportRequestDetailScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
   const { params, navigate, goBack } = useNavigation();
   const requestId = typeof params?.requestId === 'string' ? params.requestId : '';
   const insets = useSafeAreaInsets();
-  const { lastJobUpdate, lastTransportStatus } = useRealtime();
+  const { lastJobUpdate, lastTransportStatus, isConnected } = useRealtime();
   const queryClient = useQueryClient();
   const requestKey = ['transport-request', requestId];
   const jobsKey = ['transport-request-jobs', requestId];
-  const request = useQuery({ queryKey: requestKey, queryFn: () => getTransportRequest(requestId), enabled: !!requestId, refetchInterval: 5_000 });
+  const request = useQuery({
+    queryKey: requestKey,
+    queryFn: () => getTransportRequest(requestId),
+    enabled: !!requestId,
+    refetchInterval: q => hasPendingWarehouseSync(q.state.data?.details ?? []) ? 3_000 : 5_000,
+  });
   const jobs = useQuery({
     queryKey: jobsKey,
     queryFn: () => listJobSummaries({ transportRequestId: requestId, take: 200 }),
@@ -59,8 +73,41 @@ export function TransportRequestDetailScreen() {
     void queryClient.invalidateQueries({ queryKey: ['transport-request-jobs', requestId] });
   }, [lastTransportStatus, requestId, queryClient]);
 
-  const refresh = () => { void request.refetch(); void jobs.refetch(); };
   const data = request.data;
+  const syncSummary = useMemo(() => summarizeWarehouseSync(data?.details ?? []), [data?.details]);
+  const wasSyncPending = useRef(false);
+  const previousConnected = useRef(isConnected);
+
+  useEffect(() => {
+    wasSyncPending.current = false;
+  }, [requestId]);
+
+  useEffect(() => {
+    if (wasSyncPending.current && !syncSummary.needsRefresh) {
+      void queryClient.invalidateQueries({ queryKey: ['inventory-stock'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory-containers'] });
+      void queryClient.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
+    }
+    wasSyncPending.current = syncSummary.needsRefresh;
+  }, [syncSummary.needsRefresh, queryClient]);
+
+  useEffect(() => {
+    if (!requestId || !syncSummary.needsRefresh) return;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void request.refetch();
+    });
+    return () => subscription.remove();
+  }, [requestId, syncSummary.needsRefresh, request.refetch]);
+
+  useEffect(() => {
+    const justReconnected = !previousConnected.current && isConnected;
+    previousConnected.current = isConnected;
+    if (justReconnected && requestId && syncSummary.needsRefresh) {
+      void request.refetch();
+    }
+  }, [isConnected, requestId, syncSummary.needsRefresh, request.refetch]);
+
+  const refresh = () => { void request.refetch(); void jobs.refetch(); };
   const { session } = useAuth();
   const [sheet, setSheet] = useState<'cancel' | 'reject' | null>(null);
   const [busy, setBusy] = useState<'queue' | 'start' | null>(null);
@@ -139,31 +186,96 @@ export function TransportRequestDetailScreen() {
             {data.completedAt ? <Text variant="caption">Completed: {transportDate(data.completedAt)}</Text> : null}
             {data.note ? <View style={styles.note}><Text variant="label">Request Note</Text><Text variant="body">{data.note}</Text></View> : null}
             {data.failureCode || data.failureMessage ? <View style={styles.error}><Text variant="body" color={colors.dangerText}>{[data.failureCode, data.failureMessage].filter(Boolean).join(' · ')}</Text></View> : null}
+            {syncSummary.retrying > 0 ? (
+              <View style={styles.syncErrorBanner}>
+                <View style={styles.flex}>
+                  <Text variant="label" color="dangerText">Warehouse Sync Retrying</Text>
+                  <Text variant="caption" color="dangerText">
+                    {t('{count} handover posting(s) failed and the server is retrying. Job completion does not confirm inventory has updated.', { count: syncSummary.retrying })}
+                  </Text>
+                </View>
+                <Button title="Refresh" variant="outline" size="sm" loading={request.isRefetching} onPress={refresh} />
+              </View>
+            ) : syncSummary.pending > 0 ? (
+              <View style={styles.syncWarningBanner}>
+                <View style={styles.flex}>
+                  <Text variant="label" color="warningText">Warehouse Sync Pending</Text>
+                  <Text variant="caption" color="warningText">
+                    {t('{count} handover posting(s) recorded and waiting for Warehouse stock update. Job completion does not confirm inventory has updated.', { count: syncSummary.pending })}
+                  </Text>
+                </View>
+                <Button title="Refresh" variant="outline" size="sm" loading={request.isRefetching} onPress={refresh} />
+              </View>
+            ) : null}
           </Card>
 
           <View style={styles.sectionHeading}><Box size={18} color={colors.primaryText} /><Text variant="headline">Movement Details ({data.details.length})</Text></View>
           {!data.details.length ? <Card><Text variant="body">No movement details are available for this request.</Text></Card> : null}
-          {[...data.details].sort((a, b) => a.sequenceNo - b.sequenceNo).map(detail => (
-            <Card key={detail.id} gap={12}>
-              <View style={styles.detailHeading}>
-                <View style={styles.flex}><Text variant="caption">Movement {detail.sequenceNo} · 1 Container</Text><Text variant="bodyMedium" selectable>{detail.containerBarcode || detail.containerId}</Text></View>
-                <StatusPill status={detail.status} size="sm" dot />
-              </View>
-              <View style={styles.route}>
-                <View style={styles.routeRow}><MapPin size={16} color={colors.primaryText} /><View style={styles.flex}>
-                  <Text variant="caption">Pickup</Text>
-                  <Text variant="bodyMedium">{detail.sourceEndpointCode || detail.sourceEndpointName || detail.sourceEndpointId}</Text>
-                  {detail.sourceStorageLocationId || detail.sourceLevelNo != null ? <Text variant="caption">{[detail.sourceStorageLocationCode || detail.sourceStorageLocationId, detail.sourceLevelNo != null ? `Level ${detail.sourceLevelNo}` : null].filter(Boolean).join(' · ')}</Text> : null}
-                </View></View>
-                <ArrowDown size={14} color={colors.textMuted} style={styles.routeArrow} />
-                <View style={styles.routeRow}><MapPin size={16} color={colors.successText} /><View style={styles.flex}>
-                  <Text variant="caption">Destination</Text>
-                  <Text variant="bodyMedium">{detail.destinationEndpointCode || detail.destinationEndpointName || detail.destinationEndpointId}</Text>
-                  {detail.destinationStorageLocationId || detail.destinationLevelNo != null ? <Text variant="caption">{[detail.destinationStorageLocationCode || detail.destinationStorageLocationId, detail.destinationLevelNo != null ? `Level ${detail.destinationLevelNo}` : null].filter(Boolean).join(' · ')}</Text> : null}
-                </View></View>
-              </View>
-            </Card>
-          ))}
+          {[...data.details].sort((a, b) => a.sequenceNo - b.sequenceNo).map(detail => {
+            const syncEntries = detailWarehouseSyncEntries(detail);
+            return (
+              <Card key={detail.id} gap={12}>
+                <View style={styles.detailHeading}>
+                  <View style={styles.flex}><Text variant="caption">Movement {detail.sequenceNo} · 1 Container</Text><Text variant="bodyMedium" selectable>{detail.containerBarcode || detail.containerId}</Text></View>
+                  <StatusPill status={detail.status} size="sm" dot />
+                </View>
+                <View style={styles.route}>
+                  <View style={styles.routeRow}><MapPin size={16} color={colors.primaryText} /><View style={styles.flex}>
+                    <Text variant="caption">Pickup</Text>
+                    <Text variant="bodyMedium">{detail.sourceEndpointCode || detail.sourceEndpointName || detail.sourceEndpointId}</Text>
+                    {detail.sourceStorageLocationId || detail.sourceLevelNo != null ? <Text variant="caption">{[detail.sourceStorageLocationCode || detail.sourceStorageLocationId, detail.sourceLevelNo != null ? `Level ${detail.sourceLevelNo}` : null].filter(Boolean).join(' · ')}</Text> : null}
+                  </View></View>
+                  <ArrowDown size={14} color={colors.textMuted} style={styles.routeArrow} />
+                  <View style={styles.routeRow}><MapPin size={16} color={colors.successText} /><View style={styles.flex}>
+                    <Text variant="caption">Destination</Text>
+                    <Text variant="bodyMedium">{detail.destinationEndpointCode || detail.destinationEndpointName || detail.destinationEndpointId}</Text>
+                    {detail.destinationStorageLocationId || detail.destinationLevelNo != null ? <Text variant="caption">{[detail.destinationStorageLocationCode || detail.destinationStorageLocationId, detail.destinationLevelNo != null ? `Level ${detail.destinationLevelNo}` : null].filter(Boolean).join(' · ')}</Text> : null}
+                  </View></View>
+                </View>
+                {syncEntries.length > 0 ? (
+                  <View style={styles.syncSection}>
+                    <Text variant="label" color="textSecondary">Warehouse Sync</Text>
+                    {syncEntries.map(({ stage, posting }) => {
+                      const matchedJob = jobs.data?.items.find(item => item.id === posting.jobId);
+                      const stageTitle = stage === 'pickup' ? t('Pickup Sync') : t('Delivery Sync');
+                      return (
+                        <View key={stage} style={styles.syncRow}>
+                          <View style={styles.flex}>
+                            <Text variant="caption" color="textPrimary">
+                              {matchedJob ? `${stageTitle} · ${matchedJob.jobNo}` : stageTitle}
+                            </Text>
+                            {posting.status === 'POSTED' && posting.postedAt ? (
+                              <Text variant="caption" color="textSecondary">
+                                {t('Synced: {date}', { date: transportDate(posting.postedAt) })}
+                              </Text>
+                            ) : (
+                              <>
+                                <Text variant="caption" color="textSecondary">
+                                  {t('Recorded: {date}', { date: transportDate(posting.recordedAt) })}
+                                </Text>
+                                {posting.nextAttemptAt ? (
+                                  <Text variant="caption" color="textSecondary">
+                                    {t('Next retry: {date}', { date: transportDate(posting.nextAttemptAt) })}
+                                  </Text>
+                                ) : null}
+                              </>
+                            )}
+                          </View>
+                          <StatusPill
+                            status={posting.status}
+                            label={warehouseSyncLabel(posting.status)}
+                            tone={warehouseSyncTone(posting.status)}
+                            size="sm"
+                            dot
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </Card>
+            );
+          })}
 
           <View style={styles.sectionHeading}><Truck size={18} color={colors.primaryText} /><Text variant="headline">Related Jobs{jobs.data ? ` (${jobs.data.total})` : ''}</Text></View>
           <Text variant="caption">Select a job to view its robot, tasks and execution steps.</Text>
@@ -217,6 +329,19 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   route: { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md, padding: 12, gap: 8 },
   routeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   routeArrow: { marginLeft: 1 },
+  syncWarningBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12,
+    backgroundColor: colors.warningBg, borderColor: colors.warningBorder, borderWidth: 1, borderRadius: radii.md,
+  },
+  syncErrorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12,
+    backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder, borderWidth: 1, borderRadius: radii.md,
+  },
+  syncSection: {
+    backgroundColor: colors.surfaceSubtle, borderRadius: radii.md, padding: 12, gap: 8,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
+  },
+  syncRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   jobCard: { backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 12, minHeight: 44 },
   pressed: { opacity: 0.75 },
 });

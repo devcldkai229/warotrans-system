@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Services;
 
 namespace WaroTrans.WorkflowExecution.Features.Shared;
 
@@ -66,7 +68,10 @@ public sealed record JobDetailDto(
     string? BlockingReason = null,
     // Which trip (robot load) of its request this Job is, and how many trips the request has.
     int? TripNo = null,
-    int? TripCount = null);
+    int? TripCount = null,
+    JobOperatorPauseDto? OperatorPause = null);
+
+public sealed record JobOperatorPauseDto(Guid? PausedBy, DateTimeOffset? PausedAt, string? Reason);
 
 public sealed record JobContainerDto(
     Guid Id,
@@ -119,7 +124,8 @@ public sealed record JobStepDto(
     DateTimeOffset? EscalatedAt = null);
 
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
-public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser currentUser, IAccountNameLookup? accountNames = null)
+public sealed class JobQueries(
+    WorkflowExecutionDbContext db, ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IAccountNameLookup? accountNames = null)
 {
     public async Task<JobDetailDto> GetDetailAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -156,6 +162,15 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                 .Select(c => c.JobId)
                 .Distinct()
                 .CountAsync(cancellationToken)
+            : null;
+
+        var warehouseDenial = job.Status is JobStatus.RUNNING or JobStatus.PAUSED or JobStatus.REASSIGNING
+            ? await warehouseScope.JobDenialAsync(job.MapVersionId, currentUser, cancellationToken)
+            : null;
+        var resumeDenial = warehouseDenial
+            ?? JobActionPolicy.ResumeOwnershipReason(job, currentUser.AccountId, currentUser.Role == AppRoles.Admin);
+        var operatorPause = job.Status == JobStatus.PAUSED && job.FailureCode == JobExecutionEngine.OperatorPausedCode
+            ? new JobOperatorPauseDto(job.OperatorPausedBy, job.OperatorPausedAt, job.FailureMessage)
             : null;
 
         return new JobDetailDto(
@@ -208,13 +223,14 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                         })
                         .ToList()))
                 .ToList(),
-            JobActionPolicy.Evaluate(job.Status, currentUser.Can),
+            JobActionPolicy.Evaluate(job.Status, currentUser.Can, warehouseDenial, resumeDenial),
             job.Priority,
             job.DeadlineAt,
             job.QueuedAt,
             job.BlockingReason,
             Number(job.ContextValues, "batchSequenceNo"),
-            tripCount);
+            tripCount,
+            operatorPause);
     }
 
     public async Task<(IReadOnlyList<JobSummaryDto> Items, int Total)> ListAsync(

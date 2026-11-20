@@ -26,8 +26,9 @@ test('the new password follows the backend policy', () => {
 });
 
 test('screens are gated by server permissions, never by the role name', () => {
-  const staff = { role: 'STAFF', permissions: [PERMISSIONS.robotStop, PERMISSIONS.transportCreate] };
+  const staff = { role: 'STAFF', permissions: [PERMISSIONS.robotStop, PERMISSIONS.transportCreate, PERMISSIONS.productCreate] };
   assert.equal(sessionCan(staff, PERMISSIONS.robotStop), true);
+  assert.equal(sessionCan(staff, PERMISSIONS.productCreate), true);
   assert.equal(sessionCan(staff, PERMISSIONS.robotManualDrive), false);
   assert.equal(sessionCan({ role: 'ADMIN' }, PERMISSIONS.robotStop), false);
   assert.equal(sessionCan(null, PERMISSIONS.robotRead), false);

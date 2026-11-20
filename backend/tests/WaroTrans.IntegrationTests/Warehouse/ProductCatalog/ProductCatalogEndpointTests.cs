@@ -28,7 +28,7 @@ public sealed record ListCategoriesDto(IReadOnlyList<CategoryDto> Items, int Tot
 
 /// <summary>
 /// Product master catalog: products and their categories. Tokens come from the real login endpoint, so the
-/// AdminOnly policy on writes and the authenticated-user fallback on reads are both exercised.
+/// Product-specific create permission and the separate catalog configuration permission are both exercised.
 /// </summary>
 [Collection(IntegrationCollection.Name)]
 public sealed class ProductCatalogEndpointTests(WaroTransWebApplicationFactory factory)
@@ -216,15 +216,23 @@ public sealed class ProductCatalogEndpointTests(WaroTransWebApplicationFactory f
     }
 
     [Fact]
-    public async Task Create_product_as_staff_returns_403_and_without_a_token_401()
+    public async Task Staff_can_create_products_and_technician_and_anonymous_callers_are_denied()
     {
-        var (staff, token) = await SignInAsync(AccountRole.STAFF, "sam");
+        var (staff, staffToken) = await SignInAsync(AccountRole.STAFF, "sam");
+        var (technician, technicianToken) = await SignInAsync(AccountRole.TECHNICIAN, "tech");
         var category = await SeedCategoryAsync();
 
-        var asStaff = await staff.SendWithTokenAsync(HttpMethod.Post, Products, token, NewProduct(category.Id));
+        var asStaff = await staff.SendWithTokenAsync(HttpMethod.Post, Products, staffToken, NewProduct(category.Id));
+        var asTechnician = await technician.SendWithTokenAsync(
+            HttpMethod.Post, Products, technicianToken, NewProduct(category.Id, "TECH-SKU"));
         var anonymous = await CreateAnonymousClient().PostAsJsonAsync(Products, NewProduct(category.Id));
 
-        Assert.Equal(HttpStatusCode.Forbidden, asStaff.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, asStaff.StatusCode);
+        var product = await asStaff.Content.ReadFromJsonAsync<ProductDto>();
+        Assert.NotNull(product);
+        Assert.True(product.IsActive);
+        Assert.Equal(category.Id, product.CategoryId);
+        Assert.Equal(HttpStatusCode.Forbidden, asTechnician.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
     }
 

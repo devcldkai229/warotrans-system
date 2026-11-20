@@ -92,6 +92,11 @@ public sealed class RobotCommandLifecycleJobStepHandler(
         switch (integrationEvent.Phase)
         {
             case RobotCommandLifecycleChanged.Phases.AckAccepted:
+                if (step.AcceptedMoveCommandId != integrationEvent.CommandId)
+                {
+                    step.AcceptedMoveCommandId = integrationEvent.CommandId;
+                    step.MoveAcceptedAt = utcNow;
+                }
                 if (step.Status is JobStepStatus.PENDING or JobStepStatus.READY or JobStepStatus.WAITING)
                 {
                     step.Status = JobStepStatus.EXECUTING;

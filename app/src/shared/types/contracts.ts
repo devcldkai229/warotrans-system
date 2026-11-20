@@ -526,6 +526,12 @@ export interface JobTaskResponse {
   steps: JobStepResponse[];
 }
 
+export interface JobOperatorPause {
+  pausedBy: string | null;
+  pausedAt: UtcDateTime | null;
+  reason: string | null;
+}
+
 export interface JobDetailResponse {
   id: string;
   jobNo: string;
@@ -542,6 +548,34 @@ export interface JobDetailResponse {
   failureMessage?: string | null;
   containers: JobContainerResponse[];
   tasks: JobTaskResponse[];
+  availableActions?: ActionAvailability[];
+  operatorPause?: JobOperatorPause | null;
+}
+
+export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE';
+
+export interface HandoverStopContainerResponse {
+  containerId: string;
+  barcode: string | null;
+}
+
+export interface HandoverStopResponse {
+  id: string;
+  jobId: string;
+  jobNo: string;
+  mapVersionId: string;
+  endpointId: string;
+  moveId: string;
+  action: string;
+  containers: HandoverStopContainerResponse[];
+  offerOpensAt: UtcDateTime;
+  robotReadyAt: UtcDateTime | null;
+  claimedBy: string | null;
+  claimedByName: string | null;
+  beginDeadline: UtcDateTime | null;
+  beganAt: UtcDateTime | null;
+  version: number;
+  availableActions: ActionAvailability[];
 }
 
 export interface ReportTaskProblemBody {

@@ -38,18 +38,44 @@ import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
+import { Button, Card, ProgressMeter, ReasonSheet, StatusPill, Text } from '../../shared/ui';
 import { AmrCargoBayVisualizer } from './AmrCargoBayVisualizer';
 import { JobContainersCard, JobOverviewCard, JobStepsAccordion, ReportProblemCard } from './JobDetailParts';
 import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
 import { useQuery } from '@tanstack/react-query';
 import { JobTaskDetailSheet } from './JobTaskDetailSheet';
-import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB, isTerminalJobStatus } from './jobData';
+import {
+  AppJobItem,
+  EMPTY_JOB,
+  isStopStateInFlight,
+  isTerminalJobStatus,
+  isUncertainCommandError,
+  JOB_STATUS_PRESENTATION,
+  mapJobDetailToAppJobItem,
+  stopStatePresentation,
+  submitIssueAndOptionalPause,
+} from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { HandoverActionsCard } from './HandoverActionsCard';
+import { HandoverStopCard } from './HandoverStopCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
-import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
-import { cancelRobotCommand, getJobDetail, getRobot, reportTaskProblem, resumeJob, startJob } from '../../shared/api';
+import { IncidentCategory, IssueReportingModal, type IssueSubmitInput } from '../monitoring/IssueReportingModal';
+import {
+  cancelRobotCommand,
+  getJobAction,
+  getJobDetail,
+  getRobot,
+  getRobotStopState,
+  getUserErrorMessage,
+  isJobActionAllowed,
+  listHandoverStops,
+  mobileCapabilities,
+  pauseJob,
+  reportTaskProblem,
+  resumeJob,
+  startJob,
+} from '../../shared/api';
+import { localizeServerMessage, t } from '../../shared/i18n';
 import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { createJobRefresh } from './jobRefresh';
@@ -82,6 +108,8 @@ export function JobDetailScreen() {
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [showNudgeControls, setShowNudgeControls] = useState(false);
   const [isStartingJob, setIsStartingJob] = useState(false);
+  const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
+  const [pauseNotice, setPauseNotice] = useState<string | null>(null);
   const [bottomConsoleHeight, setBottomConsoleHeight] = useState(160);
 
   /** Shared safety hold context */
@@ -107,6 +135,7 @@ export function JobDetailScreen() {
     let isMounted = true;
     setIsLoadingJob(true); setJobError(null); setJobRefreshError(null); setJob(EMPTY_JOB);
     setSelectedTaskId(null); setShowFullJobNo(false); setVerificationStepId(null);
+    setPauseSheetOpen(false); setPauseNotice(null);
     setIsVerifyOpen(isInitialVerify); setIsIssueOpen(isInitialIssue);
     if (!jobId) { setJobError('No job was selected.'); setIsLoadingJob(false); return; }
     const initialRequestVersion = jobReader.version + 1;
@@ -118,6 +147,16 @@ export function JobDetailScreen() {
     const poll = setInterval(() => { void refreshJob().catch(() => {}); }, 5000);
     return () => { isMounted = false; clearInterval(poll); jobReader.invalidate(); };
   }, [jobId, refreshJob]);
+
+  const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
+  const stopsQuery = useQuery({
+    queryKey: ['handover-stops', session?.id],
+    queryFn: ({ signal }) => listHandoverStops({ signal }),
+    enabled: Boolean(session?.id && canOperate && job.id && job.status === 'RUNNING'),
+    refetchInterval: 5_000,
+  });
+  const { refetch: refetchStops } = stopsQuery;
+  const activeStop = stopsQuery.data?.find(item => item.jobId === job.id);
 
   useEffect(() => {
     if (
@@ -131,8 +170,9 @@ export function JobDetailScreen() {
         .catch((err) => {
           console.warn('Failed to refetch job detail on realtime jobUpdated:', err);
         });
+      if (canOperate) void refetchStops();
     }
-  }, [lastJobUpdate, jobId, job.id, job.jobNo, refreshJob]);
+  }, [lastJobUpdate, jobId, job.id, job.jobNo, canOperate, refreshJob, refetchStops]);
 
   // A traffic grant / wait / release for this job (trafficUpdated): its waiting reason and progress changed.
   useEffect(() => {
@@ -201,6 +241,19 @@ export function JobDetailScreen() {
     enabled: !!job.assignedRobotId,
     refetchInterval: 15_000,
   });
+  const stopStateQuery = useQuery({
+    queryKey: ['robot-stop-state', job.assignedRobotId],
+    queryFn: ({ signal }) => getRobotStopState(job.assignedRobotId!, signal),
+    enabled: Boolean(job.assignedRobotId && (job.status === 'PAUSED' || pauseNotice)),
+    refetchInterval: q => isStopStateInFlight(q.state.data?.state) ? 2_000 : job.status === 'PAUSED' ? 5_000 : false,
+    retry: false,
+  });
+  const startAction = getJobAction(job, 'START');
+  const resumeAction = getJobAction(job, 'RESUME');
+  const canStart = canOperate && isJobActionAllowed(job, 'START', true);
+  const canPause = mobileCapabilities.pauseJob && sessionCan(session, PERMISSIONS.jobPause) && isJobActionAllowed(job, 'PAUSE', job.status === 'RUNNING');
+  const canResume = canOperate && isJobActionAllowed(job, 'RESUME', true);
+  const actionReasonText = (code?: string | null) => code ? localizeServerMessage(code, code.replace(/_/g, ' ')) : null;
   const robotCode = robotQuery.data?.code ?? (job.robot !== 'Unassigned' ? job.robot : undefined);
   const live = robotCode ? robotTelemetry[robotCode] : undefined;
   const connectivity = robotCode ? robotConnectivity[robotCode] : undefined;
@@ -209,11 +262,24 @@ export function JobDetailScreen() {
     : typeof robotQuery.data?.linearVelocity === 'number' ? robotQuery.data.linearVelocity : null;
   const liveBattery = typeof live?.batteryPercent === 'number' ? live.batteryPercent : robotQuery.data?.batteryPercent ?? null;
 
-  const handleNudge = (_delta: string) => {
-    toast.warning('Dock nudging is unavailable during job execution. Use the supervised robot controls.');
-  };
-  const handleToggleSoftHold = () => {
-    toast.warning('Pausing a job is unavailable. A paused job can be resumed from this screen.');
+  const handlePauseJob = async (reason: string) => {
+    try {
+      const updated = await pauseJob(job.id, reason);
+      if (activeJobId.current !== job.id) return;
+      jobReader.invalidate();
+      setJob(mapJobDetailToAppJobItem(updated, session?.id));
+      setPauseSheetOpen(false);
+      setPauseNotice(null);
+      void stopStateQuery.refetch();
+      toast.success('Job paused. Checking robot stop state.');
+    } catch (error: unknown) {
+      if (activeJobId.current === job.id && isUncertainCommandError(error)) {
+        setPauseNotice(t('The pause result could not be confirmed. Refresh the job and robot stop state before retrying.'));
+        void refreshJob().catch(() => {});
+        void stopStateQuery.refetch();
+      }
+      throw new Error(getUserErrorMessage(error, 'Job could not be paused.'));
+    }
   };
   const handleResumeJob = async () => {
     if (isStartingJob) return;
@@ -223,9 +289,11 @@ export function JobDetailScreen() {
       if (activeJobId.current !== job.id) return;
       jobReader.invalidate();
       setJob(mapJobDetailToAppJobItem(updated, session?.id));
+      setPauseNotice(null);
+      void stopStateQuery.refetch();
       toast.success('Job resumed.');
     } catch (error: unknown) {
-      if (activeJobId.current === job.id) toast.error(error instanceof Error ? error.message : 'Job could not be resumed.');
+      if (activeJobId.current === job.id) toast.error(getUserErrorMessage(error, 'Job could not be resumed.'));
     } finally { setIsStartingJob(false); }
   };
 
@@ -244,15 +312,32 @@ export function JobDetailScreen() {
     toast.success(`Handover verified for ${scannedCode}.`);
   };
 
-  const handleIssueSubmit = async (cat: IncidentCategory, notes: string) => {
-    try {
-      const issue = await reportTaskProblem(job.activeTaskId, {
-        reason: cat,
-        note: notes.trim() || `Staff reported ${cat} on job ${job.jobNo}`,
-      }, job.activeStepId, { jobId: job.id });
-      setIsIssueOpen(false);
-      toast.success(`Issue ${issue.code} recorded. Robot state has not been changed.`);
-    } catch (error: any) { toast.error(error.message || 'Incident could not be recorded.'); throw error; }
+  const handleIssueSubmit = async (input: IssueSubmitInput) => {
+    const description = input.notes.trim() || `Staff reported ${input.category} on job ${job.jobNo}`;
+    const outcome = await submitIssueAndOptionalPause({
+      existingIssue: input.existingIssue,
+      createIssue: () => reportTaskProblem(
+        job.activeTaskId,
+        { reason: input.category, note: description },
+        job.activeStepId,
+        { jobId: job.id, containerId: activeContainerId, robotId: job.assignedRobotId },
+      ),
+      pauseJob: input.pauseJob ? () => pauseJob(job.id, description.slice(0, 500)) : undefined,
+    });
+    if (outcome.pausedJob && activeJobId.current === job.id) {
+      jobReader.invalidate();
+      setJob(mapJobDetailToAppJobItem(outcome.pausedJob, session?.id));
+      setPauseNotice(null);
+      void stopStateQuery.refetch();
+      toast.success(t('Issue {code} recorded and job paused.', { code: outcome.issue.code }));
+    } else if (outcome.pauseError && outcome.pauseUncertain && activeJobId.current === job.id) {
+      setPauseNotice(t('The pause result could not be confirmed. Refresh the job and robot stop state before retrying.'));
+      void refreshJob().catch(() => {});
+      void stopStateQuery.refetch();
+    } else if (!outcome.pauseError) {
+      toast.success(t('Issue {code} recorded. Robot state has not been changed.', { code: outcome.issue.code }));
+    }
+    return outcome;
   };
 
   if (isLoadingJob || jobError || !job.id) return <View style={styles.root}>
@@ -323,6 +408,19 @@ export function JobDetailScreen() {
               </Text>
             </Pressable>
 
+            {canPause ? <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                setPauseSheetOpen(true);
+              }}
+            >
+              <PauseCircle size={16} color={colors.warningText} />
+              <Text variant="body" color={colors.warningText} style={styles.menuItemText}>
+                Pause Job
+              </Text>
+            </Pressable> : null}
+
             {!isTerminalJobStatus(job.status) ? <Pressable
               style={styles.menuItem}
               onPress={() => {
@@ -361,6 +459,104 @@ export function JobDetailScreen() {
           charging={robotQuery.data?.status === 'CHARGING'}
           onOpenMap={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
         />
+
+        {(job.status === 'PAUSED' || Boolean(pauseNotice)) && (() => {
+          const stopState = stopStateQuery.data;
+          const stopMeta = stopStatePresentation(stopState?.state);
+          const pauseTime = job.operatorPause?.pausedAt
+            ? new Date(job.operatorPause.pausedAt).toLocaleString()
+            : null;
+          return (
+            <Card padding="md" gap={10}>
+              <View style={styles.cardHeaderRow}>
+                <Text variant="headline">
+                  {job.operatorPause
+                    ? t('Paused By Operator')
+                    : job.status === 'PAUSED'
+                      ? t('Job Paused')
+                      : t('Pause Status Unverified')}
+                </Text>
+                <StatusPill status={job.status} size="sm" dot />
+              </View>
+              {job.operatorPause ? (
+                <View style={{ gap: 4 }}>
+                  <Text variant="caption" color={colors.textSecondary}>
+                    {job.operatorPause.pausedBy === session?.id ? t('Paused by you') : t('Paused by another operator')}
+                    {pauseTime ? ` · ${pauseTime}` : ''}
+                  </Text>
+                  <Text variant="body" color={colors.textPrimary}>
+                    {t('Reason: {reason}', { reason: job.operatorPause.reason || '—' })}
+                  </Text>
+                </View>
+              ) : job.status === 'PAUSED' ? (
+                <Text variant="body" color={colors.textSecondary}>
+                  {job.failureMessage || job.failureCode || t('Execution paused by system or workflow policy.')}
+                </Text>
+              ) : null}
+              {pauseNotice ? (
+                <View style={styles.refreshWarning}>
+                  <Text variant="caption" color={colors.warningText}>{pauseNotice}</Text>
+                  <Button
+                    title="Refresh Job & Stop State"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => {
+                      setPauseNotice(null);
+                      void refreshJob().catch(() => {});
+                      if (job.assignedRobotId) void stopStateQuery.refetch();
+                    }}
+                  />
+                </View>
+              ) : null}
+              {job.assignedRobotId ? (
+                <View style={styles.stopStateBox}>
+                  <View style={styles.cardHeaderRow}>
+                    <Text variant="label" color={colors.textSecondary}>Robot Stop State</Text>
+                    {stopStateQuery.data ? (
+                      <StatusPill
+                        status={stopState!.state}
+                        label={t(stopMeta.label)}
+                        tone={stopMeta.tone}
+                        size="sm"
+                        dot
+                      />
+                    ) : null}
+                  </View>
+                  {stopStateQuery.isError ? (
+                    <View style={{ gap: 8 }}>
+                      <Text variant="caption" color={colors.dangerText}>Could not load robot stop state.</Text>
+                      <Button title="Retry" variant="outline" size="sm" onPress={() => { void stopStateQuery.refetch(); }} />
+                    </View>
+                  ) : stopState ? (
+                    <>
+                      {stopState.state !== 'STOPPED_VERIFIED' ? (
+                        <Text variant="caption" color={colors.warningText}>
+                          Job PAUSED does not prove the robot has physically stopped.
+                        </Text>
+                      ) : null}
+                      {stopState.errorCode ? (
+                        <Text variant="caption" color={colors.dangerText}>
+                          {t('Stop error: {code}', { code: stopState.errorCode })}
+                        </Text>
+                      ) : null}
+                      {(isStopStateInFlight(stopState.state) || stopState.state === 'UNKNOWN' || stopState.state === 'REJECTED') ? (
+                        <Button
+                          title="Refresh Stop State"
+                          variant="outline"
+                          size="sm"
+                          loading={stopStateQuery.isFetching}
+                          onPress={() => { void stopStateQuery.refetch(); }}
+                        />
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text variant="caption" color={colors.textSecondary}>Loading…</Text>
+                  )}
+                </View>
+              ) : null}
+            </Card>
+          );
+        })()}
 
         {/* Primary Handover Focus Card (When waiting at station) */}
         {isWaiting && primaryTarget && (
@@ -447,6 +643,20 @@ export function JobDetailScreen() {
           </Card>
         )}
 
+        {job.status === 'RUNNING' && activeStop ? (
+          <HandoverStopCard
+            stop={activeStop}
+            placeName={places.name(activeStop.endpointId, activeStop.endpointId)}
+            accountId={session?.id}
+            canOperate={canOperate}
+            onUpdated={() => {
+              void refetchStops();
+              void refreshJob().catch(() => {});
+            }}
+            onRefresh={refetchStops}
+          />
+        ) : null}
+
         {/* Web parity: claim / give back / take over, confirm without scanning, confirm the whole stop at once. */}
         {isWaiting && activeStep ? (
           <HandoverActionsCard
@@ -458,12 +668,13 @@ export function JobDetailScreen() {
             containerCode={activeContainer?.code || primaryTarget?.code || activeContainerId || 'Container'}
             containerLabel={id => job.containers.find(container => container.containerId === id)?.code || id}
             accountId={session?.id}
-            canOperate={sessionCan(session, PERMISSIONS.jobOperate)}
+            canOperate={canOperate}
             canTakeOver={sessionCan(session, PERMISSIONS.jobTakeover)}
             onUpdated={detail => {
               if (activeJobId.current !== job.id) return;
               jobReader.invalidate();
               setJob(mapJobDetailToAppJobItem(detail, session?.id));
+              void refetchStops();
               void refreshJob().catch(() => {});
             }}
           />
@@ -485,9 +696,24 @@ export function JobDetailScreen() {
       {/* Sticky Bottom Action Console */}
       <View style={styles.bottomConsole} onLayout={(event) => setBottomConsoleHeight(event.nativeEvent.layout.height)}>
         {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
-        {isQueuedOrCreated && <Text variant="caption" color={colors.textSecondary}>
-          The system assigns an available robot when you start this Job.
+        {isQueuedOrCreated && <Text variant="caption" color={!canStart && startAction?.reason ? colors.warningText : colors.textSecondary}>
+          {!canStart && startAction?.reason
+            ? actionReasonText(startAction.reason)
+            : t('The system assigns an available robot when you start this Job.')}
         </Text>}
+        {(job.status === 'PAUSED' || job.status === 'REASSIGNING') && !canResume && resumeAction?.reason ? (
+          <Text variant="caption" color={colors.warningText}>{actionReasonText(resumeAction.reason)}</Text>
+        ) : null}
+        {canPause && (isWaiting || isEnRoute) ? (
+          <Button
+            title="Pause Job"
+            variant="outline"
+            size="md"
+            fullWidth
+            icon={PauseCircle}
+            onPress={() => setPauseSheetOpen(true)}
+          />
+        ) : null}
         <View style={styles.consoleCtaRow}>
           {isQueuedOrCreated ? (
             <Button
@@ -496,10 +722,20 @@ export function JobDetailScreen() {
               size="lg"
               fullWidth
               loading={isStartingJob}
+              disabled={!canStart || isStartingJob}
               onPress={handleStartJob}
             />
           ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
-            <Button title="Resume Job" variant="primary" size="lg" fullWidth loading={isStartingJob} onPress={handleResumeJob} icon={RefreshCw} />
+            <Button
+              title="Resume Job"
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={isStartingJob}
+              disabled={!canResume || isStartingJob}
+              onPress={handleResumeJob}
+              icon={RefreshCw}
+            />
           ) : job.status === 'RECOVERY_REQUIRED' ? (
             <Button
               title="Initiate Cargo Rescue"
@@ -599,15 +835,34 @@ export function JobDetailScreen() {
         visible={isIssueOpen}
         robotCode={job.robot}
         jobId={job.id}
+        containerCode={activeContainer?.code}
+        canPause={canPause}
         onClose={() => setIsIssueOpen(false)}
         onSubmit={handleIssueSubmit}
+        onRefreshJob={async () => {
+          await refreshJob();
+          if (job.assignedRobotId) void stopStateQuery.refetch();
+        }}
       />
+
+      {pauseSheetOpen ? (
+        <ReasonSheet
+          title="Pause Job"
+          message="Pause this running job and send a STOP (PAUSE) command to the robot. Your reason is recorded."
+          confirmTitle="Pause Job"
+          required
+          danger
+          onClose={() => setPauseSheetOpen(false)}
+          onSubmit={handlePauseJob}
+        />
+      ) : null}
     </View>
   );
 }
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   refreshWarning: { padding: 12, gap: 8, backgroundColor: colors.warningBg, borderRadius: radii.md },
+  stopStateBox: { padding: 12, gap: 8, backgroundColor: colors.surfaceSubtle, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
   robotSelectorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   robotSelectorChip: {
     minHeight: 44, paddingHorizontal: 16, borderRadius: radii.pill,

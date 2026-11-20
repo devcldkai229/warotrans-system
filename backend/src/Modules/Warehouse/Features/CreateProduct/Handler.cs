@@ -66,7 +66,7 @@ public sealed class CreateProductHandler(
         }
         catch (DbUpdateException exception) when (UniqueViolation.ConstraintOf(exception) is { } constraint)
         {
-            // Two Admins creating the same product at once: both pre-checks above passed.
+            // Concurrent creates can both pass the pre-checks; the unique constraint decides.
             throw constraint.Contains("barcode", StringComparison.OrdinalIgnoreCase)
                 ? BarcodeTaken(supplierBarcode ?? string.Empty)
                 : SkuTaken(sku);

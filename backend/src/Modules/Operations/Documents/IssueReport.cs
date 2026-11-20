@@ -20,6 +20,7 @@ public sealed class IssueReport
     public Guid? JobStepId { get; set; }
     public Guid? StorageLocationId { get; set; }
     public Guid? RobotId { get; set; }
+    public string? ProblemCode { get; set; }
 
     [BsonRepresentation(BsonType.String)]
     public IssueType IssueType { get; set; }

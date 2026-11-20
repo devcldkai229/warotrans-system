@@ -50,4 +50,17 @@ public sealed record TransportRequestDetailItemResponse(
     string? DestinationEndpointCode,
     string? DestinationEndpointName,
     short? DestinationLevelNo,
-    string Status);
+    string Status,
+    WarehouseHandoverSyncResponse? WarehouseSync = null);
+
+public sealed record WarehouseHandoverSyncResponse(
+    WarehouseStockPostingResponse? Pickup,
+    WarehouseStockPostingResponse? Delivery);
+
+/// <param name="Status">PENDING, RETRYING, or POSTED for a recorded handover.</param>
+public sealed record WarehouseStockPostingResponse(
+    Guid JobId,
+    string Status,
+    DateTimeOffset RecordedAt,
+    DateTimeOffset? PostedAt,
+    DateTimeOffset? NextAttemptAt);

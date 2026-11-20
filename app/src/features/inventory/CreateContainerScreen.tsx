@@ -19,7 +19,7 @@ import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { t } from '../../shared/i18n';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
-import { batchTotal, buildContainerBatchBody, createBatchRequestId, newBatchGroup } from './inboundBatch';
+import { batchTotal, buildContainerBatchBody, createBatchRequestId, DEFAULT_QUANTITY, DEFAULT_UNIT, newBatchGroup } from './inboundBatch';
 
 type Scan = 'product' | 'package' | null;
 
@@ -67,7 +67,7 @@ export function CreateContainerScreen() {
     if (lock.current || !product || !operating.data || number < 1) return;
     lock.current = true; setPending(true); setError(null);
     try {
-      const group = { ...newBatchGroup([], String(number)), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
+      const group = { ...newBatchGroup([], String(number), DEFAULT_QUANTITY, DEFAULT_UNIT), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
       const body = buildContainerBatchBody(operating.data.warehouse.id, createBatchRequestId(), batchTotal([group]), [group]);
       const result = await createContainerBatch(body);
       triggerHaptic('success');
@@ -83,7 +83,7 @@ export function CreateContainerScreen() {
   // A pre-printed label scanned while a product is chosen becomes that container (the server checks the label).
   const claimLabel = async (label: string) => {
     if (!product || !operating.data) return { ok: false, message: t('Choose the product first.') };
-    const group = { ...newBatchGroup([], '1'), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
+    const group = { ...newBatchGroup([], '1', DEFAULT_QUANTITY, DEFAULT_UNIT), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
     try {
       const body = { ...buildContainerBatchBody(operating.data.warehouse.id, createBatchRequestId(), '1', [group]), labelBarcode: label };
       await createContainerBatch(body);

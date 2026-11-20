@@ -38,11 +38,22 @@ test('unsupported BE commands cannot send a request or report success', async ()
 test('a staff incident becomes an IssueReport on the operations API', async () => {
   let request;
   const load = modules(async (url, init) => { request = { url, body: JSON.parse(init.body) }; return { id: 'issue', code: 'ISS-1', status: 'OPEN' }; });
-  const issue = await load('src/shared/api/executionApi.ts').reportTaskProblem(undefined, { reason: 'CONTAINER_DAMAGED', note: 'torn' }, 'step-1', { jobId: 'job-1' });
+  const issue = await load('src/shared/api/executionApi.ts').reportTaskProblem(
+    undefined,
+    { reason: 'CONTAINER_DAMAGED', note: 'torn' },
+    'step-1',
+    { jobId: 'job-1', containerId: 'container-1', robotId: 'robot-1' },
+  );
   assert.equal(issue.code, 'ISS-1');
   assert.match(request.url, /\/api\/operations\/issues$/);
-  assert.deepEqual(plain({ type: request.body.issueType, severity: request.body.severity, jobId: request.body.jobId, step: request.body.jobStepId }),
-    { type: 'CONTAINER', severity: 'HIGH', jobId: 'job-1', step: 'step-1' });
+  assert.deepEqual(plain({
+    type: request.body.issueType,
+    severity: request.body.severity,
+    jobId: request.body.jobId,
+    step: request.body.jobStepId,
+    containerId: request.body.containerId,
+    robotId: request.body.robotId,
+  }), { type: 'CONTAINER', severity: 'HIGH', jobId: 'job-1', step: 'step-1', containerId: 'container-1', robotId: 'robot-1' });
   assert.match(request.body.description, /torn/);
 });
 test('transport submits the chosen workflow and preserves storage locations and levels', async () => {
@@ -113,12 +124,53 @@ test('job details cannot silently substitute another ID', async () => {
   await assert.rejects(() => load('src/shared/api/executionApi.ts').getJobDetail('requested-job'), error => error.code === 'job_identity_mismatch');
 });
 test('job presentation uses real task ownership and completed step counts', () => {
-  const map = modules(async () => {}).call(null, 'src/features/jobs/jobData.ts').mapJobDetailToAppJobItem;
+  const { mapJobDetailToAppJobItem, stopStatePresentation, submitIssueAndOptionalPause } = modules(async () => {}).call(null, 'src/features/jobs/jobData.ts');
   const job = { id: 'job', jobNo: 'JOB-1', status: 'RUNNING', createdAt: '2026-10-20', containers: [], contextValues: { assignedStaffId: 'operator-a' },
     tasks: [{ sequenceNo: 1, steps: [{ sequenceNo: 1, status: 'COMPLETED', stepType: 'CHECK' }, { sequenceNo: 2, status: 'WAITING', stepType: 'HUMAN_INTERACTION' }] }] };
-  assert.equal(map(job, 'operator-a').isMine, true);
-  assert.equal(map(job, 'operator-b').isMine, false);
-  assert.equal(map(job, 'operator-a').progressPercent, 50);
-  assert.equal(map({ ...job, status: 'ASSIGNED', contextValues: {} }).hasWaitingHandover, false);
-  assert.equal(map(job).battery, '—');
+  assert.equal(mapJobDetailToAppJobItem(job, 'operator-a').isMine, true);
+  assert.equal(mapJobDetailToAppJobItem(job, 'operator-b').isMine, false);
+  assert.equal(mapJobDetailToAppJobItem(job, 'operator-a').progressPercent, 50);
+  assert.equal(mapJobDetailToAppJobItem({ ...job, status: 'ASSIGNED', contextValues: {} }).hasWaitingHandover, false);
+  assert.equal(mapJobDetailToAppJobItem(job).battery, '—');
+
+  // WH-03: waiting HUMAN_INTERACTION step claimedBy drives isMine without needing robot assignment.
+  const claimedJob = {
+    ...job,
+    contextValues: {},
+    tasks: [{ sequenceNo: 1, steps: [{ sequenceNo: 1, status: 'WAITING', stepType: 'HUMAN_INTERACTION', claimedBy: 'staff-a' }] }],
+  };
+  assert.equal(mapJobDetailToAppJobItem(claimedJob, 'staff-a').isMine, true);
+  assert.equal(mapJobDetailToAppJobItem(claimedJob, 'staff-b').isMine, false);
+  assert.equal(mapJobDetailToAppJobItem({ ...claimedJob, status: 'COMPLETED' }, 'staff-a').isMine, false);
+
+  assert.equal(stopStatePresentation('STOPPED_VERIFIED').tone, 'success');
+  assert.equal(stopStatePresentation('REQUESTED').tone, 'warning');
+  assert.equal(stopStatePresentation('UNKNOWN').tone, 'danger');
+  assert.equal(stopStatePresentation('REJECTED').tone, 'danger');
+
+  return (async () => {
+    let issueCalls = 0;
+    let pauseCalls = 0;
+    const partial = await submitIssueAndOptionalPause({
+      createIssue: async () => { issueCalls += 1; return { id: 'iss-1', code: 'ISS-001', status: 'OPEN' }; },
+      pauseJob: async () => { pauseCalls += 1; throw new ApiError(0, 'NETWORK_ERROR', 'Timeout'); },
+    });
+    assert.equal(partial.issue.code, 'ISS-001');
+    assert.equal(partial.pausedJob, null);
+    assert.equal(partial.pauseUncertain, true);
+    assert.equal(issueCalls, 1);
+    assert.equal(pauseCalls, 1);
+
+    // Retrying with existingIssue only pauses and never creates a duplicate issue ticket.
+    const retried = await submitIssueAndOptionalPause({
+      existingIssue: partial.issue,
+      createIssue: async () => { issueCalls += 1; return { id: 'iss-2', code: 'ISS-002', status: 'OPEN' }; },
+      pauseJob: async () => { pauseCalls += 1; return { id: 'job', status: 'PAUSED' }; },
+    });
+    assert.equal(issueCalls, 1);
+    assert.equal(pauseCalls, 2);
+    assert.equal(retried.issue.code, 'ISS-001');
+    assert.equal(retried.pausedJob.status, 'PAUSED');
+    assert.equal(retried.pauseError, null);
+  })();
 });

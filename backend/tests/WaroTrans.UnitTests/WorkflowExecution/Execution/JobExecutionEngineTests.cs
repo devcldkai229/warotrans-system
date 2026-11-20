@@ -1608,12 +1608,15 @@ public sealed class JobExecutionEngineTests
         var jobId = await ProvisionAsync();
         await Engine().StartAsync(jobId, null);
         var (_, _, _, moveStepId, oldCommand) = _fleet.Commands[0];
+        var operatorId = Guid.NewGuid();
 
-        await Engine().PauseAsync(jobId, "pallet in the aisle");
+        await Engine().PauseAsync(jobId, "pallet in the aisle", operatorId);
 
         var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
         Assert.Equal(JobStatus.PAUSED, job.Status);
         Assert.Equal(JobExecutionEngine.OperatorPausedCode, job.FailureCode);
+        Assert.Equal(operatorId, job.OperatorPausedBy);
+        Assert.NotNull(job.OperatorPausedAt);
         Assert.Equal((_fleet.RobotId, "PAUSE"), Assert.Single(_fleet.Stops));
         Assert.Equal(JobStepStatus.PENDING, (await StepsAsync(jobId)).First(s => s.Key == "MOVE_PICKUP").Status);
 
@@ -1621,14 +1624,24 @@ public sealed class JobExecutionEngineTests
         await RobotResultAsync(moveStepId, outcome: "CANCELED", commandId: oldCommand);
         Assert.Equal(JobStatus.PAUSED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
 
-        // Resume releases the hold first, then drives on with a new command.
+        // A different Staff account cannot lift the hold and a failed readiness check leaves it in place.
         SetRobot(r => r with { MotionHeld = true });
-        await Engine().ResumeAsync(jobId, null);
+        var denied = await Assert.ThrowsAsync<AppException>(() => Engine().ResumeAsync(jobId, null, actor: Guid.NewGuid()));
+        Assert.Equal("job_pause_owner_required", denied.Code);
+        SetRobot(r => r with { IsOnline = false });
+        var offline = await Assert.ThrowsAsync<ConflictException>(() => Engine().ResumeAsync(jobId, null, actor: operatorId));
+        Assert.Equal("robot_not_available", offline.Code);
+        Assert.Empty(_fleet.Resumes);
+
+        SetRobot(r => r with { IsOnline = true });
+        await Engine().ResumeAsync(jobId, null, actor: operatorId);
 
         Assert.Equal([_fleet.RobotId], _fleet.Resumes);
         Assert.Equal(2, _fleet.Commands.Count);
         Assert.NotEqual(oldCommand, _fleet.Commands[^1].CommandId);
         Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Null(job.OperatorPausedBy);
+        Assert.Null(job.OperatorPausedAt);
     }
 
     [Fact]
@@ -1636,10 +1649,24 @@ public sealed class JobExecutionEngineTests
     {
         var jobId = await ProvisionAsync();
 
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().PauseAsync(jobId, null));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().PauseAsync(jobId, null, Guid.NewGuid()));
 
         Assert.Equal("job_not_running", ex.Code);
         Assert.Empty(_fleet.Stops);
+    }
+
+    [Fact]
+    public async Task A_blank_pause_reason_does_not_stop_the_robot()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+
+        var error = await Assert.ThrowsAsync<DomainValidationException>(
+            () => Engine().PauseAsync(jobId, "  ", Guid.NewGuid()));
+
+        Assert.Equal("job_pause_reason_required", error.Code);
+        Assert.Empty(_fleet.Stops);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
     }
 
     [Fact]

@@ -21,6 +21,8 @@ public sealed class Job
     public DateTimeOffset? CompletedAt { get; set; }
     public string? FailureCode { get; set; }
     public string? FailureMessage { get; set; }
+    public Guid? OperatorPausedBy { get; set; }
+    public DateTimeOffset? OperatorPausedAt { get; set; }
 
     /// <summary>FL-07: copied from the request.</summary>
     public int Priority { get; set; }

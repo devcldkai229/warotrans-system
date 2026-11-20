@@ -26,7 +26,7 @@ import { triggerHaptic } from '../../shared/utils/haptics';
  * after an AMR comes past them at 1.4 m/s.
  */
 export const SOFT_HOLD_SIMULATION_NOTICE =
-  'Pause/resume is unavailable on the current backend. No robot stop is requested by this control.';
+  'Nearby-robot soft hold is unavailable on the current backend. No robot stop is requested by this control. To pause an active job, open Job Detail.';
 
 export interface SafetyActionSheetProps {
   visible: boolean;
@@ -76,7 +76,7 @@ export function SafetyActionSheet({
       icon: CirclePause,
       title: 'Pause Nearby Robots · Unavailable',
       description:
-        'Pause/resume requires a backend contract. Contact the supervisor.',
+        'Nearby-robot soft hold requires a backend contract. Pause an active job from Job Detail instead.',
       kind: 'toggle',
       tone: isHolding ? 'warning' : 'neutral',
     },

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.Fleet.Contracts;
+using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Persistence;
 
 namespace WaroTrans.WorkflowExecution.Services;
@@ -13,5 +14,11 @@ public sealed class RobotWorkQuery(WorkflowExecutionDbContext db) : IRobotWorkQu
     public Task<bool> HasActiveJobAsync(Guid robotId, CancellationToken cancellationToken = default) =>
         db.JobRobotAssignments.AsNoTracking().AnyAsync(
             a => a.RobotId == robotId && a.EndedAt == null && a.Job.Status != Enums.JobStatus.RECOVERY_REQUIRED,
+            cancellationToken);
+
+    public Task<bool> HasOperatorPausedJobAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        db.JobRobotAssignments.AsNoTracking().AnyAsync(
+            a => a.RobotId == robotId && a.EndedAt == null
+                && a.Job.Status == Enums.JobStatus.PAUSED && a.Job.FailureCode == JobExecutionEngine.OperatorPausedCode,
             cancellationToken);
 }

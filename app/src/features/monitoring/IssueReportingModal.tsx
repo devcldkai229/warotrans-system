@@ -1,5 +1,5 @@
 import { mobileCapabilities } from '../../shared/api/capabilities';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -8,21 +8,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { translateText } from '../../shared/i18n';
+import { t, translateText } from '../../shared/i18n';
 import { RawText as Text } from '../../shared/ui/Text';
 import {
   AlertOctagon,
   AlertTriangle,
-  ArrowLeft,
   Box,
   Camera,
   Check,
-  Image as ImageIcon,
-  RefreshCw,
+  PauseCircle,
   ScanLine,
   ShieldAlert,
   Warehouse,
-  X,
 } from 'lucide-react-native';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
@@ -31,8 +28,8 @@ import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
-import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import type { IssueAndPauseOutcome, IssueReceipt } from '../jobs/jobData';
 
 export type IncidentCategory =
   | 'CONTAINER_DAMAGED'
@@ -41,12 +38,22 @@ export type IncidentCategory =
   | 'QUANTITY_MISMATCH'
   | 'AMR_PATH_BLOCKED';
 
+export interface IssueSubmitInput {
+  category: IncidentCategory;
+  notes: string;
+  pauseJob: boolean;
+  existingIssue?: IssueReceipt | null;
+}
+
 interface IssueReportingModalProps {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (category: IncidentCategory, notes: string) => Promise<void>;
+  onSubmit: (input: IssueSubmitInput) => Promise<IssueAndPauseOutcome>;
+  onRefreshJob?: () => Promise<unknown>;
   robotCode?: string;
   jobId?: string;
+  containerCode?: string;
+  canPause?: boolean;
 }
 
 const CATEGORIES: {
@@ -91,48 +98,77 @@ export function IssueReportingModal({
   visible,
   onClose,
   onSubmit,
+  onRefreshJob,
   robotCode = 'Unassigned',
   jobId = '',
+  containerCode,
+  canPause = false,
 }: IssueReportingModalProps) {
   const { styles, colors } = useThemedStyles(createStyles);
   const [selectedCat, setSelectedCat] = useState<IncidentCategory>('CONTAINER_DAMAGED');
   const [notes, setNotes] = useState('');
-  const [photoAttached, setPhotoAttached] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<'report' | 'pause' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const handleSubmit = async () => {
+  const [createdIssue, setCreatedIssue] = useState<IssueReceipt | null>(null);
+  const [pauseUncertain, setPauseUncertain] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setSelectedCat('CONTAINER_DAMAGED');
+      setNotes('');
+      setIsSubmitting(null);
+      setSubmitError(null);
+      setCreatedIssue(null);
+      setPauseUncertain(false);
+    }
+  }, [visible, jobId, containerCode]);
+
+  const handleAction = async (shouldPause: boolean) => {
     if (isSubmitting) return;
     triggerHaptic('warning');
-    setIsSubmitting(true);
+    setIsSubmitting(shouldPause ? 'pause' : 'report');
     setSubmitError(null);
-    try { await onSubmit(selectedCat, notes); onClose(); }
-    catch (error: unknown) { setSubmitError(error instanceof Error ? error.message : 'Incident could not be recorded.'); }
-    finally { setIsSubmitting(false); }
-  };
-
-  const handleSnapPhoto = () => {
-    triggerHaptic('success');
-    toast.info('Photo capture and attachment are not configured.');
-    setPhotoAttached(false);
-    setCameraActive(false);
+    try {
+      const outcome = await onSubmit({
+        category: selectedCat,
+        notes,
+        pauseJob: shouldPause,
+        existingIssue: createdIssue,
+      });
+      if (outcome.pauseError) {
+        setCreatedIssue(outcome.issue);
+        setPauseUncertain(outcome.pauseUncertain);
+        setSubmitError(
+          outcome.pauseError instanceof Error
+            ? outcome.pauseError.message
+            : t('Job could not be paused. Refresh the job before trying again.'),
+        );
+        return;
+      }
+      onClose();
+    } catch (error: unknown) {
+      setSubmitError(error instanceof Error ? error.message : t('Incident could not be recorded.'));
+    } finally {
+      setIsSubmitting(null);
+    }
   };
 
   if (!visible) return null;
+
+  const formLocked = Boolean(createdIssue) || Boolean(isSubmitting);
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
       transparent={false}
-      onRequestClose={onClose}
+      onRequestClose={isSubmitting ? () => {} : onClose}
     >
       <View style={styles.fullScreenContainer}>
         <SubScreenHeader
-          label={`Incident report · ${robotCode}`}
+          label={containerCode ? `Incident report · ${robotCode} · ${containerCode}` : `Incident report · ${robotCode}`}
           title="Report Exception"
-          onBack={onClose}
+          onBack={isSubmitting ? () => {} : onClose}
         />
 
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -147,6 +183,19 @@ export function IssueReportingModal({
             </View>
           </View>
 
+          {createdIssue && (
+            <View style={styles.partialBox}>
+              <Text style={styles.partialTitle}>
+                {t('Issue {code} recorded', { code: createdIssue.code })}
+              </Text>
+              <Text style={styles.partialDesc}>
+                {pauseUncertain
+                  ? t('The pause result could not be confirmed. Refresh the job to verify whether it paused before retrying.')
+                  : t('The ticket is saved. Retry pausing only, without creating another ticket.')}
+              </Text>
+            </View>
+          )}
+
           {/* 1. Category Picker */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Incident category</Text>
@@ -156,6 +205,7 @@ export function IssueReportingModal({
                 return (
                   <Pressable
                     key={c.id}
+                    disabled={formLocked}
                     onPress={() => {
                       triggerHaptic('tap');
                       setSelectedCat(c.id);
@@ -163,8 +213,10 @@ export function IssueReportingModal({
                     style={[
                       styles.catCard,
                       isSelected && styles.catCardSelected,
+                      formLocked && styles.locked,
                     ]}
                     accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected, disabled: formLocked }}
                   >
                     <View
                       style={[
@@ -209,69 +261,16 @@ export function IssueReportingModal({
           <View style={styles.evidenceCard}>
             <View style={styles.evidenceHeader}>
               <Text style={styles.sectionLabel}>Photo evidence</Text>
-              <View style={[styles.evidenceBadge, photoAttached && styles.evidenceBadgeAttached]}>
-                <Text style={[styles.evidenceBadgeText, photoAttached && styles.evidenceBadgeTextAttached]}>
-                  {photoAttached ? 'Attached' : 'Optional'}
-                </Text>
+              <View style={styles.evidenceBadge}>
+                <Text style={styles.evidenceBadgeText}>Unavailable</Text>
               </View>
             </View>
-
-            {!photoAttached ? (
-              cameraActive ? (
-                <View style={styles.cameraBox}>
-                  <View style={styles.camTop}>
-                    <Text style={styles.camRecText}>● Live viewfinder</Text>
-                    <Text style={styles.camDeviceText}>Camera 01</Text>
-                  </View>
-                  <View style={styles.camReticle}>
-                    <Text style={styles.camReticleText}>Align defect within frame</Text>
-                  </View>
-                  <View style={styles.camActions}>
-                    <Button
-                      label="Cancel"
-                      onPress={() => setCameraActive(false)}
-                      variant="outline"
-                      size="sm"
-                    />
-                    <Pressable onPress={handleSnapPhoto} style={styles.shutterBtn}>
-                      <Camera size={20} color="#ffffff" />
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <Button
-                  label="Open Camera to Capture Evidence"
-                  icon={<Camera size={16} color={colors.textPrimary} />}
-                  onPress={() => setCameraActive(true)}
-                  variant="outline"
-                  size="md"
-                  style={{ marginTop: 6 }}
-                />
-              )
-            ) : (
-              <View style={styles.previewCard}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <View style={styles.previewIconBox}>
-                    <ImageIcon size={20} color={colors.textPrimary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.previewFilename} numberOfLines={1}>
-                      DEFECT_{selectedCat.substring(0, 8)}.JPG
-                    </Text>
-                    <Text style={styles.previewMeta}>Evidence attached · 1.4 MB</Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                  <Pressable onPress={() => setCameraActive(true)} style={styles.retakeBtn}>
-                    <RefreshCw size={13} color={colors.textPrimary} />
-                    <Text style={styles.retakeText}>Retake</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setPhotoAttached(false)} style={styles.deletePhotoBtn}>
-                    <X size={15} color="#dc2626" />
-                  </Pressable>
-                </View>
-              </View>
-            )}
+            <View style={styles.evidenceUnavailable}>
+              <Camera size={16} color={colors.textMuted} />
+              <Text style={styles.evidenceUnavailableText}>
+                Photo upload is not configured on this server yet. Submit the report without a photo.
+              </Text>
+            </View>
           </View>
 
           {/* 3. Operator Notes */}
@@ -281,28 +280,80 @@ export function IssueReportingModal({
               accessibilityLabel={translateText('Operator description')}
               value={notes}
               onChangeText={setNotes}
+              editable={!formLocked}
+              maxLength={500}
               placeholder={translateText('e.g. Left corner cracked, 2 units dislodged onto lane 2...')}
               placeholderTextColor={colors.textMuted}
               multiline
               numberOfLines={3}
-              style={styles.notesInput}
+              style={[styles.notesInput, formLocked && styles.locked]}
             />
           </View>
         </ScrollView>
 
-        {!mobileCapabilities.reportIssue && <Text style={{ color: colors.textSecondary, padding: 16 }}>Reporting is unavailable on this backend. Contact the supervisor directly.</Text>}
-        {submitError && <Text style={{ color: colors.danger, padding: 16 }}>{submitError}</Text>}
-        {/* Bottom Fixed Action in Warm Dark Gray */}
+        {!mobileCapabilities.reportIssue && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>Reporting is unavailable on this backend. Contact the supervisor directly.</Text>
+          </View>
+        )}
+        {submitError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText} accessibilityRole="alert">{submitError}</Text>
+          </View>
+        )}
         <View style={styles.footer}>
-          <Button
-            label="Submit Exception"
-            icon={<AlertTriangle size={18} color="#ffffff" />}
-            onPress={handleSubmit}
-            disabled={isSubmitting || !mobileCapabilities.reportIssue}
-            variant="primary"
-            size="lg"
-            style={{ width: '100%' }}
-          />
+          {createdIssue ? (
+            <View style={styles.footerStack}>
+              {canPause && (
+                <Button
+                  label="Retry Pause Only"
+                  icon={<PauseCircle size={18} color="#ffffff" />}
+                  onPress={() => { void handleAction(true); }}
+                  disabled={Boolean(isSubmitting)}
+                  loading={isSubmitting === 'pause'}
+                  variant="danger"
+                  size="lg"
+                  style={{ width: '100%' }}
+                />
+              )}
+              <Button
+                label="Refresh & Close"
+                onPress={() => {
+                  void onRefreshJob?.();
+                  onClose();
+                }}
+                disabled={Boolean(isSubmitting)}
+                variant="outline"
+                size="md"
+                style={{ width: '100%' }}
+              />
+            </View>
+          ) : (
+            <View style={styles.footerStack}>
+              {canPause && (
+                <Button
+                  label="Submit & Pause Job"
+                  icon={<PauseCircle size={18} color="#ffffff" />}
+                  onPress={() => { void handleAction(true); }}
+                  disabled={Boolean(isSubmitting) || !mobileCapabilities.reportIssue}
+                  loading={isSubmitting === 'pause'}
+                  variant="danger"
+                  size="lg"
+                  style={{ width: '100%' }}
+                />
+              )}
+              <Button
+                label="Submit Report"
+                icon={<AlertTriangle size={18} color={canPause ? colors.textPrimary : '#ffffff'} />}
+                onPress={() => { void handleAction(false); }}
+                disabled={Boolean(isSubmitting) || !mobileCapabilities.reportIssue}
+                loading={isSubmitting === 'report'}
+                variant={canPause ? 'outline' : 'primary'}
+                size="lg"
+                style={{ width: '100%' }}
+              />
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -321,6 +372,29 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     padding: 16,
     paddingBottom: 32,
     gap: 16,
+  },
+  locked: {
+    opacity: 0.6,
+  },
+  partialBox: {
+    backgroundColor: colors.warningBg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    padding: 14,
+    gap: 4,
+  },
+  partialTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.warningText,
+    fontFamily: typography.fontSans,
+  },
+  partialDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.warningText,
+    fontFamily: typography.fontSans,
   },
   safetyBox: {
     flexDirection: 'row',
@@ -560,10 +634,43 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     textAlignVertical: 'top',
     fontFamily: typography.fontSans,
   },
+  evidenceUnavailable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  evidenceUnavailableText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  errorBanner: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: colors.dangerBg,
+    borderTopWidth: 1,
+    borderTopColor: colors.dangerBorder,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.dangerText,
+    fontFamily: typography.fontSans,
+  },
   footer: {
     padding: 16,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  footerStack: {
+    gap: 10,
   },
 });

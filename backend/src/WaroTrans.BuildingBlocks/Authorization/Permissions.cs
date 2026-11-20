@@ -20,6 +20,10 @@ public static class Permissions
     // Warehouse
     public const string WarehouseRead = "warehouse.read";
     public const string WarehouseWrite = "warehouse.write";
+
+    /// <summary>Add a Product to an existing category during receiving.</summary>
+    public const string ProductCreate = "product.create";
+
     public const string ContainerCreate = "container.create";
 
     /// <summary>Say which shelf a Container that lost its place is really on.</summary>
@@ -106,7 +110,7 @@ public static class Permissions
     [
         UserManage, ConsoleAccess,
         MapRead, MapWrite,
-        WarehouseRead, WarehouseWrite, ContainerCreate, ContainerRecover, VoucherWrite,
+        WarehouseRead, WarehouseWrite, ProductCreate, ContainerCreate, ContainerRecover, VoucherWrite,
         TransportRead, TransportCreate, TransportCancel, TransportReject,
         WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel, HumanTaskTakeover,
         RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotLocalize, RobotStop, RobotManualDrive,

@@ -10,6 +10,7 @@ using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Services;
 
 namespace WaroTrans.WorkflowExecution.Features.HumanTasks;
 
@@ -40,6 +41,8 @@ public sealed class HumanTaskQueries(
     WorkflowExecutionDbContext db,
     IWarehouseModule warehouse,
     IAccountNameLookup accountNames,
+    ICurrentUser currentUser,
+    StaffWarehouseScope warehouseScope,
     TimeProvider clock)
 {
     /// <summary>Human steps waiting on a running Job, soonest deadline first. A claim that ran out counts as free.</summary>
@@ -55,9 +58,13 @@ public sealed class HumanTaskQueries(
                 Step = s,
                 s.JobTask.JobId,
                 s.JobTask.Job.JobNo,
+                s.JobTask.Job.MapVersionId,
                 Definition = db.WorkflowSteps.First(w => w.Id == s.WorkflowStepId)
             })
             .ToListAsync(cancellationToken);
+
+        var visibleMaps = await warehouseScope.VisibleMapIdsAsync(rows.Select(row => row.MapVersionId), currentUser, cancellationToken);
+        rows.RemoveAll(row => !visibleMaps.Contains(row.MapVersionId));
 
         var containerIds = rows.Select(r => ContainerOf(r.Step.ResolvedInputs)).OfType<Guid>().Distinct().ToList();
         var barcodes = (await warehouse.GetContainersAsync(containerIds, cancellationToken)).ToDictionary(c => c.Id, c => c.Barcode);
@@ -108,8 +115,10 @@ public static class HumanTaskEndpoints
             .WithTags("Jobs");
 
         group.MapPost("/job-steps/{id:guid}/claim", async (
-                Guid id, JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
+                Guid id, JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db, ICurrentUser currentUser,
+                StaffWarehouseScope warehouseScope, CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureStepAccessAsync(id, currentUser, cancellationToken);
                 await engine.ClaimHumanStepAsync(id, Actor(currentUser), cancellationToken);
                 return Results.Ok(await DetailOfStepAsync(id, queries, db, cancellationToken));
             })
@@ -120,8 +129,10 @@ public static class HumanTaskEndpoints
             .WithTags("Jobs");
 
         group.MapPost("/job-steps/{id:guid}/release", async (
-                Guid id, JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
+                Guid id, JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db, ICurrentUser currentUser,
+                StaffWarehouseScope warehouseScope, CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureStepAccessAsync(id, currentUser, cancellationToken);
                 await engine.ReleaseHumanStepAsync(id, Actor(currentUser), cancellationToken);
                 return Results.Ok(await DetailOfStepAsync(id, queries, db, cancellationToken));
             })
@@ -174,8 +185,10 @@ public static class HumanTaskEndpoints
                 JobExecutionEngine engine,
                 JobQueries queries,
                 ICurrentUser currentUser,
+                StaffWarehouseScope warehouseScope,
                 CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
                 if (!Enum.TryParse<HandoverType>(request.Type, ignoreCase: true, out var type) || !Enum.IsDefined(type))
                 {
                     throw new DomainValidationException("type must be PICKUP or DROPOFF.", "handover_type_required");
