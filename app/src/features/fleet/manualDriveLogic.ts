@@ -47,7 +47,7 @@ export interface ManualDriveGateInput {
   appActive: boolean;
   linkInterrupted: boolean;
   robot: Pick<RobotResponse, 'isOnline' | 'isEnabled' | 'currentCommandId' | 'motionHeld'> | null;
-  lease: Pick<ManualLeaseResponse, 'active' | 'heldByMe' | 'holderName'> | null;
+  lease: Pick<ManualLeaseResponse, 'active' | 'heldByMe' | 'holderName' | 'sequenced' | 'leaseId'> | null;
 }
 
 export function manualDriveBlockReason(input: ManualDriveGateInput): string | null {
@@ -83,7 +83,73 @@ export function manualDriveBlockReason(input: ManualDriveGateInput): string | nu
       ? `${input.lease.holderName} holds the manual-drive lease.`
       : 'Acquire the manual-drive lease before moving the robot.';
   }
+  if (input.lease.sequenced && !input.lease.leaseId?.trim()) {
+    return 'Manual lease identifier missing. Release and re-acquire lease.';
+  }
   return null;
+}
+
+export interface SequencedSetpointMeta {
+  leaseId: string;
+  seq: number;
+  clientSentAt: string;
+}
+
+export function createSequencedLeaseTracker() {
+  let activeLeaseId: string | null = null;
+  let seq = 0;
+  let serverOffsetMs = 0;
+
+  return {
+    syncLease(
+      lease: Pick<ManualLeaseResponse, 'heldByMe' | 'leaseId' | 'sequenced' | 'serverTime'> | null | undefined,
+      localNowMs = Date.now(),
+    ) {
+      if (!lease?.heldByMe) {
+        activeLeaseId = null;
+        seq = 0;
+        serverOffsetMs = 0;
+        return;
+      }
+      const nextLeaseId = lease.leaseId?.trim() || null;
+      if (!nextLeaseId) {
+        activeLeaseId = null;
+        seq = 0;
+      } else if (nextLeaseId !== activeLeaseId) {
+        activeLeaseId = nextLeaseId;
+        seq = 0;
+      }
+      if (lease.serverTime) {
+        const serverMs = Date.parse(lease.serverTime);
+        if (Number.isFinite(serverMs)) {
+          serverOffsetMs = serverMs - localNowMs;
+        }
+      }
+    },
+    nextSetpoint(localNowMs = Date.now()): SequencedSetpointMeta | null {
+      if (!activeLeaseId) return null;
+      seq += 1;
+      return {
+        leaseId: activeLeaseId,
+        seq,
+        clientSentAt: new Date(localNowMs + serverOffsetMs).toISOString(),
+      };
+    },
+    clear() {
+      activeLeaseId = null;
+      seq = 0;
+      serverOffsetMs = 0;
+    },
+    get leaseId() {
+      return activeLeaseId;
+    },
+    get seq() {
+      return seq;
+    },
+    get serverOffsetMs() {
+      return serverOffsetMs;
+    },
+  };
 }
 
 export interface TeleopClock {

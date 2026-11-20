@@ -234,4 +234,9 @@ export const viServerErrors: Record<string, string> = {
   payload_weight_exceeded: 'Tổng khối lượng hàng vượt quá giới hạn tải của robot.',
   recovery_invalid: 'Không đọc được dữ liệu phiên khôi phục từ máy chủ.',
   recovery_candidates_invalid: 'Không đọc được danh sách robot cứu hộ khả dụng từ máy chủ.',
+  manual_sequence_unavailable: 'Máy chủ hoặc gateway robot chưa bật chế độ lái theo chuỗi lease.',
+  manual_lease_changed: 'Quyền giữ lái thủ công đã thay đổi hoặc hết hạn. Hãy nhận lại quyền.',
+  manual_sequence_out_of_order: 'Đã có lệnh lái mới hơn được chấp nhận.',
+  manual_sequence_required: 'Thiếu leaseId, seq hoặc thời gian gửi hợp lệ cho lệnh lái thủ công.',
+  manual_setpoint_stale: 'Lệnh vận tốc đã quá hạn thời gian cho phép. Hãy thao tác lại.',
 };

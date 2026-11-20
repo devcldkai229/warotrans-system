@@ -7,6 +7,7 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 const {
   JOYSTICK_DEADZONE,
   TELEOP_REPEAT_MS,
+  createSequencedLeaseTracker,
   createTeleopController,
   manualDriveBlockReason,
   stickToVelocity,
@@ -186,4 +187,58 @@ test('createTeleopController skips zero retry on 401/403/0 errors and interrupts
   assert.equal(controller.isMoving, false);
   assert.equal(errors.length, 1);
   controller.dispose();
+});
+
+test('createSequencedLeaseTracker increments seq monotonically, keeps seq on renewal, and applies serverTime offset', () => {
+  const tracker = createSequencedLeaseTracker();
+  assert.equal(tracker.nextSetpoint(), null);
+
+  tracker.syncLease(
+    { heldByMe: true, sequenced: true, leaseId: 'lease-1', serverTime: '2026-11-20T10:00:05.000Z' },
+    Date.parse('2026-11-20T10:00:00.000Z'),
+  );
+  assert.equal(tracker.leaseId, 'lease-1');
+  assert.equal(tracker.serverOffsetMs, 5000);
+
+  const s1 = tracker.nextSetpoint(Date.parse('2026-11-20T10:00:01.000Z'));
+  assert.deepEqual(plain(s1), {
+    leaseId: 'lease-1',
+    seq: 1,
+    clientSentAt: '2026-11-20T10:00:06.000Z',
+  });
+
+  // Renewing same leaseId preserves monotonic seq counter.
+  tracker.syncLease(
+    { heldByMe: true, sequenced: true, leaseId: 'lease-1', serverTime: '2026-11-20T10:00:15.000Z' },
+    Date.parse('2026-11-20T10:00:10.000Z'),
+  );
+  const s2 = tracker.nextSetpoint(Date.parse('2026-11-20T10:00:11.000Z'));
+  assert.equal(s2.seq, 2);
+
+  // New leaseId resets seq back to 1 on next setpoint.
+  tracker.syncLease(
+    { heldByMe: true, sequenced: true, leaseId: 'lease-2', serverTime: '2026-11-20T10:00:25.000Z' },
+    Date.parse('2026-11-20T10:00:20.000Z'),
+  );
+  const s3 = tracker.nextSetpoint(Date.parse('2026-11-20T10:00:21.000Z'));
+  assert.deepEqual(plain(s3), {
+    leaseId: 'lease-2',
+    seq: 1,
+    clientSentAt: '2026-11-20T10:00:26.000Z',
+  });
+
+  tracker.clear();
+  assert.equal(tracker.leaseId, null);
+  assert.equal(tracker.nextSetpoint(), null);
+
+  assert.match(
+    manualDriveBlockReason({
+      hasPermission: true,
+      appActive: true,
+      linkInterrupted: false,
+      robot: { isOnline: true, isEnabled: true, currentCommandId: null, motionHeld: false },
+      lease: { active: true, heldByMe: true, holderName: 'Tech', sequenced: true, leaseId: null },
+    }),
+    /identifier/,
+  );
 });

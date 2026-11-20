@@ -242,6 +242,9 @@ export interface ManualLeaseResponse {
   holderName: string | null;
   until: UtcDateTime | null;
   heldByMe: boolean;
+  leaseId?: string | null;
+  sequenced?: boolean;
+  serverTime?: UtcDateTime | null;
 }
 
 export interface TeleopRobotResponse {

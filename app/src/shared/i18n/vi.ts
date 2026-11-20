@@ -2089,4 +2089,6 @@ export const vi: Record<string, string> = {
   "No rescue robot is assigned to this recovery case.": "Phiên khôi phục này chưa được phân công robot cứu hộ.",
   "Wait until the rescue robot arrives at the transfer point.": "Hãy chờ robot cứu hộ di chuyển tới điểm chuyển hàng.",
   "Fetching recovery case, onboard container manifest, and eligible rescue robots.": "Đang tải phiên khôi phục, danh sách container trên robot và các robot cứu hộ đủ điều kiện.",
+  "Manual lease identifier missing. Release and re-acquire lease.": "Thiếu mã phiên giữ lái thủ công. Hãy trả quyền và nhận lại quyền lái.",
+  "A valid sequenced manual lease is required before driving.": "Cần có phiên giữ lái thủ công theo chuỗi hợp lệ trước khi điều khiển.",
 };

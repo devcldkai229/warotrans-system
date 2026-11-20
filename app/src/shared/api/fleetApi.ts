@@ -57,6 +57,9 @@ function validManualLease(robotId: string, result: ManualLeaseResponse): ManualL
   if (!result || result.robotId !== robotId || typeof result.active !== 'boolean' || typeof result.heldByMe !== 'boolean') {
     throw new ApiError(502, 'manual_lease_invalid', 'Could not verify the manual-drive lease state. Refresh and try again.');
   }
+  if (result.sequenced === true && result.heldByMe && (typeof result.leaseId !== 'string' || !result.leaseId.trim())) {
+    throw new ApiError(502, 'manual_lease_invalid', 'Could not verify the manual-drive lease state. Refresh and try again.');
+  }
   return result;
 }
 export async function getManualLease(robotId: string, signal?: AbortSignal): Promise<ManualLeaseResponse> {
@@ -68,25 +71,33 @@ export async function getManualLease(robotId: string, signal?: AbortSignal): Pro
 }
 export async function acquireManualLease(
   robotId: string,
-  options: { takeover?: boolean; reason?: string } = {},
+  options: { takeover?: boolean; reason?: string; sequenced?: boolean; leaseId?: string | null } = {},
 ): Promise<ManualLeaseResponse> {
   requireMobileCapability('manualDriveTeleop');
+  const payload: Record<string, unknown> = {
+    takeover: Boolean(options.takeover),
+    reason: options.reason?.trim() || null,
+    sequenced: options.sequenced ?? true,
+  };
+  const leaseId = options.leaseId?.trim();
+  if (leaseId) {
+    payload.leaseId = leaseId;
+  }
   const result = await apiFetch<ManualLeaseResponse>(
     `/api/fleet/robots/${encodeURIComponent(robotId)}/manual/lease`,
     {
       method: 'POST',
-      body: JSON.stringify({
-        takeover: Boolean(options.takeover),
-        reason: options.reason?.trim() || null,
-      }),
+      body: JSON.stringify(payload),
     },
     callerToken(),
   );
   return validManualLease(robotId, result);
 }
-export async function releaseManualLease(robotId: string): Promise<void> {
+export async function releaseManualLease(robotId: string, leaseId?: string | null): Promise<void> {
+  const trimmedLeaseId = leaseId?.trim();
+  const query = trimmedLeaseId ? `?leaseId=${encodeURIComponent(trimmedLeaseId)}` : '';
   await apiFetch<null>(
-    `/api/fleet/robots/${encodeURIComponent(robotId)}/manual/lease`,
+    `/api/fleet/robots/${encodeURIComponent(robotId)}/manual/lease${query}`,
     { method: 'DELETE' },
     callerToken(),
   );
@@ -97,10 +108,22 @@ export async function teleopRobot(
   angular: number,
   assist = true,
   signal?: AbortSignal,
+  sequence?: { leaseId: string; seq: number; clientSentAt: string },
 ): Promise<TeleopRobotResponse> {
   requireMobileCapability('manualDriveTeleop');
   if (!Number.isFinite(linear) || !Number.isFinite(angular)) {
     throw new ApiError(400, 'teleop_invalid_velocity', 'Velocity setpoints must be finite numbers.');
+  }
+  const payload: Record<string, unknown> = { linear, angular, assist };
+  if (sequence !== undefined) {
+    const leaseId = typeof sequence.leaseId === 'string' ? sequence.leaseId.trim() : '';
+    const clientSentAt = typeof sequence.clientSentAt === 'string' ? sequence.clientSentAt.trim() : '';
+    if (!leaseId || !Number.isInteger(sequence.seq) || sequence.seq <= 0 || !clientSentAt) {
+      throw new ApiError(400, 'manual_sequence_required', 'A valid sequenced manual lease is required before driving.');
+    }
+    payload.leaseId = leaseId;
+    payload.seq = sequence.seq;
+    payload.clientSentAt = clientSentAt;
   }
   const hasTokenReader = typeof getAccessToken === 'function';
   const token = hasTokenReader ? getAccessToken() : undefined;
@@ -113,7 +136,7 @@ export async function teleopRobot(
     `/api/fleet/robots/${encodeURIComponent(robotId)}/teleop`,
     {
       method: 'POST',
-      body: JSON.stringify({ linear, angular, assist }),
+      body: JSON.stringify(payload),
       signal,
     },
     boundToken,

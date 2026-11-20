@@ -35,6 +35,7 @@ import { Button, Card, EmptyState, ReasonSheet, SegmentedControl, StatusPill, Te
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { ManualJoystickPad } from './ManualJoystickPad';
 import {
+  createSequencedLeaseTracker,
   createTeleopController,
   MANUAL_LEASE_RENEW_MS,
   manualDriveBlockReason,
@@ -126,6 +127,7 @@ export function ManualDriveScreen() {
   const lease = leaseQuery.data ?? null;
   const leaseRef = useRef<ManualLeaseResponse | null>(lease);
   leaseRef.current = lease;
+  const leaseTrackerRef = useRef(createSequencedLeaseTracker());
 
   const blockReason = manualDriveBlockReason({
     hasPermission: canDrivePermission,
@@ -148,7 +150,8 @@ export function ManualDriveScreen() {
     if (!selectedRobotId) {
       return Promise.reject(new Error('Robot not selected.'));
     }
-    return teleopRobot(selectedRobotId, linear, angular, assist, signal);
+    const seqMeta = leaseTrackerRef.current.nextSetpoint() ?? undefined;
+    return teleopRobot(selectedRobotId, linear, angular, assist, signal, seqMeta);
   };
 
   const controllerRef = useRef<ReturnType<typeof createTeleopController> | null>(null);
@@ -166,8 +169,10 @@ export function ManualDriveScreen() {
         if (status === 0) {
           setLinkInterrupted(true);
           setLeaseDesired(false);
+          leaseTrackerRef.current.clear();
         } else if (status === 401 || status === 403 || status === 409) {
           setLeaseDesired(false);
+          leaseTrackerRef.current.clear();
           void leaseQuery.refetch();
         }
         setTeleopError(getUserErrorMessage(failure, 'Manual drive command failed.'));
@@ -196,8 +201,10 @@ export function ManualDriveScreen() {
         setTargetVelocity({ linear: 0, angular: 0 });
         setInterruptedNotice(true);
         if (leaseDesiredRef.current && robotIdRef.current) {
+          const leaseIdToRelease = leaseTrackerRef.current.leaseId;
           setLeaseDesired(false);
-          void releaseManualLease(robotIdRef.current).catch(() => {});
+          leaseTrackerRef.current.clear();
+          void releaseManualLease(robotIdRef.current, leaseIdToRelease).catch(() => {});
         }
       }
     });
@@ -209,6 +216,7 @@ export function ManualDriveScreen() {
       controllerRef.current?.interrupt({ skipZeroSend: true });
       setTargetVelocity({ linear: 0, angular: 0 });
       setLeaseDesired(false);
+      leaseTrackerRef.current.clear();
     });
   }, []);
 
@@ -218,6 +226,7 @@ export function ManualDriveScreen() {
       controllerRef.current?.interrupt({ skipZeroSend: true });
       setTargetVelocity({ linear: 0, angular: 0 });
       setLeaseDesired(false);
+      leaseTrackerRef.current.clear();
       setLinkInterrupted(true);
     }
     wasConnectedRef.current = isConnected;
@@ -230,8 +239,12 @@ export function ManualDriveScreen() {
     let cancelled = false;
     const syncLease = async () => {
       try {
-        const granted = await acquireManualLease(selectedRobotId);
+        const granted = await acquireManualLease(selectedRobotId, {
+          sequenced: true,
+          leaseId: leaseTrackerRef.current.leaseId ?? undefined,
+        });
         if (cancelled) return;
+        leaseTrackerRef.current.syncLease(granted);
         client.setQueryData(['manual-lease', session?.id, selectedRobotId], granted);
         setLeaseError(null);
         setLinkInterrupted(false);
@@ -241,11 +254,14 @@ export function ManualDriveScreen() {
         controllerRef.current?.interrupt({ skipZeroSend: true });
         setTargetVelocity({ linear: 0, angular: 0 });
         setLeaseDesired(false);
+        leaseTrackerRef.current.clear();
         setLeaseError(getUserErrorMessage(failure, 'Could not switch manual lease state. Refresh and try again.'));
         void leaseQuery.refetch();
       }
     };
-    void syncLease();
+    if (!leaseTrackerRef.current.leaseId) {
+      void syncLease();
+    }
     const timer = setInterval(() => {
       void syncLease();
     }, MANUAL_LEASE_RENEW_MS);
@@ -260,9 +276,11 @@ export function ManualDriveScreen() {
     return () => {
       const activeRobot = robotIdRef.current;
       const hadLease = leaseDesiredRef.current || leaseRef.current?.heldByMe;
+      const leaseIdToRelease = leaseTrackerRef.current.leaseId;
       controllerRef.current?.dispose();
+      leaseTrackerRef.current.clear();
       if (hadLease && activeRobot) {
-        void releaseManualLease(activeRobot).catch(() => {});
+        void releaseManualLease(activeRobot, leaseIdToRelease).catch(() => {});
       }
     };
   }, []);
@@ -279,8 +297,10 @@ export function ManualDriveScreen() {
     setLinkInterrupted(false);
     setInterruptedNotice(false);
     if (leaseDesiredRef.current && selectedRobotId) {
+      const leaseIdToRelease = leaseTrackerRef.current.leaseId;
       setLeaseDesired(false);
-      void releaseManualLease(selectedRobotId).catch(() => {});
+      leaseTrackerRef.current.clear();
+      void releaseManualLease(selectedRobotId, leaseIdToRelease).catch(() => {});
     }
     setSelectedRobotKey(nextRobot.id);
   };
@@ -290,8 +310,10 @@ export function ManualDriveScreen() {
     controllerRef.current?.interrupt();
     setTargetVelocity({ linear: 0, angular: 0 });
     if ((leaseDesiredRef.current || lease?.heldByMe) && selectedRobotId) {
+      const leaseIdToRelease = leaseTrackerRef.current.leaseId;
       setLeaseDesired(false);
-      void releaseManualLease(selectedRobotId).catch(() => {});
+      leaseTrackerRef.current.clear();
+      void releaseManualLease(selectedRobotId, leaseIdToRelease).catch(() => {});
     }
     goBack();
   };
@@ -306,18 +328,22 @@ export function ManualDriveScreen() {
       if (leaseDesired || lease?.heldByMe) {
         controllerRef.current?.interrupt();
         setTargetVelocity({ linear: 0, angular: 0 });
+        const leaseIdToRelease = leaseTrackerRef.current.leaseId;
         setLeaseDesired(false);
-        await releaseManualLease(selectedRobotId);
+        leaseTrackerRef.current.clear();
+        await releaseManualLease(selectedRobotId, leaseIdToRelease);
         await leaseQuery.refetch();
       } else {
         setLinkInterrupted(false);
         setInterruptedNotice(false);
-        const granted = await acquireManualLease(selectedRobotId);
+        const granted = await acquireManualLease(selectedRobotId, { sequenced: true });
+        leaseTrackerRef.current.syncLease(granted);
         client.setQueryData(['manual-lease', session?.id, selectedRobotId], granted);
         setLeaseDesired(true);
       }
     } catch (failure) {
       setLeaseDesired(false);
+      leaseTrackerRef.current.clear();
       setLeaseError(getUserErrorMessage(failure, 'Could not switch manual lease state. Refresh and try again.'));
       void leaseQuery.refetch();
     } finally {
@@ -330,7 +356,13 @@ export function ManualDriveScreen() {
     setLeaseError(null);
     setLinkInterrupted(false);
     setInterruptedNotice(false);
-    const granted = await acquireManualLease(selectedRobotId, { takeover: true, reason });
+    leaseTrackerRef.current.clear();
+    const granted = await acquireManualLease(selectedRobotId, {
+      takeover: true,
+      reason,
+      sequenced: true,
+    });
+    leaseTrackerRef.current.syncLease(granted);
     client.setQueryData(['manual-lease', session?.id, selectedRobotId], granted);
     setLeaseDesired(true);
     setTakeoverOpen(false);

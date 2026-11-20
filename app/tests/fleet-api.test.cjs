@@ -140,26 +140,40 @@ test('manual lease, teleop, stopRobot and resumeRobotMotion enforce caller token
 
   await api.getManualLease('robot-1');
   await api.acquireManualLease('robot-1', { takeover: true, reason: '  shift swap  ' });
-  await api.teleopRobot('robot-1', 0.2, 0, true);
-  await api.releaseManualLease('robot-1');
+  await api.acquireManualLease('robot-1', { sequenced: true, leaseId: 'lease-1' });
+  await api.teleopRobot('robot-1', 0.2, 0, true, undefined, {
+    leaseId: 'lease-1',
+    seq: 1,
+    clientSentAt: '2026-11-20T09:00:01.000Z',
+  });
+  await api.releaseManualLease('robot-1', 'lease-1');
   await api.stopRobot('robot-1', 'STOP', '  obstacle  ');
   await api.resumeRobotMotion('robot-1');
 
   assert.deepEqual(plain(requests), [
     { path: '/api/fleet/robots/robot-1/manual/lease', method: 'GET' },
-    { path: '/api/fleet/robots/robot-1/manual/lease', method: 'POST', body: { takeover: true, reason: 'shift swap' }, token: 'tech-token' },
-    { path: '/api/fleet/robots/robot-1/teleop', method: 'POST', body: { linear: 0.2, angular: 0, assist: true }, token: 'tech-token' },
-    { path: '/api/fleet/robots/robot-1/manual/lease', method: 'DELETE', token: 'tech-token' },
+    { path: '/api/fleet/robots/robot-1/manual/lease', method: 'POST', body: { takeover: true, reason: 'shift swap', sequenced: true }, token: 'tech-token' },
+    { path: '/api/fleet/robots/robot-1/manual/lease', method: 'POST', body: { takeover: false, reason: null, sequenced: true, leaseId: 'lease-1' }, token: 'tech-token' },
+    { path: '/api/fleet/robots/robot-1/teleop', method: 'POST', body: { linear: 0.2, angular: 0, assist: true, leaseId: 'lease-1', seq: 1, clientSentAt: '2026-11-20T09:00:01.000Z' }, token: 'tech-token' },
+    { path: '/api/fleet/robots/robot-1/manual/lease?leaseId=lease-1', method: 'DELETE', token: 'tech-token' },
     { path: '/api/fleet/robots/robot-1/commands/stop', method: 'POST', body: { mode: 'STOP', reason: 'obstacle' }, token: 'tech-token' },
     { path: '/api/fleet/robots/robot-1/commands/resume', method: 'POST', token: 'tech-token' },
   ]);
 
   await assert.rejects(() => api.teleopRobot('robot-1', NaN, 0), error => error.code === 'teleop_invalid_velocity');
   await assert.rejects(() => api.teleopRobot('robot-1', 0.2, Infinity), error => error.code === 'teleop_invalid_velocity');
+  await assert.rejects(() => api.teleopRobot('robot-1', 0.2, 0, true, undefined, { leaseId: ' ', seq: 1, clientSentAt: '2026-11-20T09:00:01.000Z' }), error => error.code === 'manual_sequence_required');
+  await assert.rejects(() => api.teleopRobot('robot-1', 0.2, 0, true, undefined, { leaseId: 'lease-1', seq: 0, clientSentAt: '2026-11-20T09:00:01.000Z' }), error => error.code === 'manual_sequence_required');
 
   currentToken = null;
   await assert.rejects(() => api.teleopRobot('robot-1', 0.2, 0), error => error.status === 401 && error.code === 'unauthenticated');
 
   const badLeaseApi = loadFleet(async () => ({ robotId: 'other-robot', active: true, heldByMe: true }));
   await assert.rejects(() => badLeaseApi.getManualLease('robot-1'), error => error.status === 502 && error.code === 'manual_lease_invalid');
+  const badSequencedApi = loadFleet(
+    async () => ({ robotId: 'robot-1', active: true, heldByMe: true, sequenced: true, leaseId: null }),
+    () => 'tech-token',
+    { mobileCapabilities: { manualDriveTeleop: true }, requireMobileCapability: () => {} },
+  );
+  await assert.rejects(() => badSequencedApi.acquireManualLease('robot-1'), error => error.status === 502 && error.code === 'manual_lease_invalid');
 });
