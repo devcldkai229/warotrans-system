@@ -114,6 +114,23 @@ public static class IssueEndpoints
             .RequirePermission(Permissions.IssueCreate)
             .WithName("ResolveOwnHandoverIssue");
 
+        group.MapPost("/issues/{id:guid}/evidence/photos", async (
+                Guid id, Guid photoId, int expectedVersion, HttpRequest request, IssueService issues, CancellationToken cancellationToken) =>
+                Results.Ok(await issues.UploadPhotoAsync(id, photoId, expectedVersion, request, cancellationToken)))
+            .RequirePermission(Permissions.IssueCreate)
+            .WithName("UploadIssuePhoto");
+
+        group.MapGet("/issues/{id:guid}/evidence/photos/{photoId:guid}", async (
+                Guid id, Guid photoId, HttpResponse response, IssueService issues, CancellationToken cancellationToken) =>
+            {
+                var photo = await issues.ReadPhotoAsync(id, photoId, cancellationToken);
+                response.Headers.CacheControl = "private, no-store";
+                response.Headers.XContentTypeOptions = "nosniff";
+                return Results.File(photo.Bytes, photo.MimeType);
+            })
+            .RequirePermission(Permissions.IssueRead)
+            .WithName("ReadIssuePhoto");
+
         return group;
     }
 }

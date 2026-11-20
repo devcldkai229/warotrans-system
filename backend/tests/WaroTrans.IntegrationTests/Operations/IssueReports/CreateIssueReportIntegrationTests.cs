@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -165,6 +166,46 @@ public sealed class CreateIssueReportIntegrationTests(WaroTransWebApplicationFac
         Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
         using var inaccessible = await client.GetWithTokenAsync($"{Issues}/{id}", otherSession.AccessToken);
         Assert.Equal(HttpStatusCode.NotFound, inaccessible.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_issue_photo_has_a_real_authenticated_uri_and_retries_do_not_duplicate_it()
+    {
+        var (client, reporter) = await SignInAsync("photo-reporter", AccountRole.STAFF);
+        var peer = await client.LoginAsync((await Factory.CreateAccountAsync("photo-peer", AccountRole.STAFF)).Username);
+        using var created = await client.SendWithTokenAsync(HttpMethod.Post, Issues, reporter.AccessToken, NewIssue());
+        var id = (await BodyAsync(created)).GetProperty("id").GetGuid();
+        var photoId = Guid.NewGuid();
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR42mMAAQAABQABDQottAAAAABJRU5ErkJggg==");
+
+        async Task<HttpResponseMessage> UploadAsync(byte[] bytes)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{Issues}/{id}/evidence/photos?photoId={photoId}&expectedVersion=1");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", reporter.AccessToken);
+            request.Content = new ByteArrayContent(bytes);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            return await client.SendAsync(request);
+        }
+
+        using var unsupported = await UploadAsync([1, 2, 3]);
+        Assert.Equal("issue_photo_invalid", await unsupported.ReadErrorCodeAsync());
+        using var first = await UploadAsync(png);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var body = await BodyAsync(first);
+        Assert.Equal(2, body.GetProperty("version").GetInt32());
+        var photo = Assert.Single(body.GetProperty("evidence").EnumerateArray(), item => item.GetProperty("kind").GetString() == "PHOTO");
+        var uri = photo.GetProperty("uri").GetString()!;
+        Assert.False(photo.TryGetProperty("data", out _));
+
+        using var retry = await UploadAsync(png);
+        Assert.Equal(2, (await BodyAsync(retry)).GetProperty("version").GetInt32());
+        using var allowed = await client.GetWithTokenAsync(uri, reporter.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+        Assert.Equal("image/png", allowed.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(png, await allowed.Content.ReadAsByteArrayAsync());
+        using var privatePhoto = await client.GetWithTokenAsync(uri, peer.AccessToken);
+        Assert.Equal(HttpStatusCode.NotFound, privatePhoto.StatusCode);
     }
 
     [Fact]

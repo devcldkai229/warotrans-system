@@ -183,6 +183,8 @@ POST `/api/operations/hazards` takes `requestId`, `mapVersionId`, `hazardType`, 
 
 The Issue includes a `hazard` with the warehouse, map version, location IDs, location code and type. The `WAREHOUSE_HAZARD` inbox item opens that Issue. Admins, Staff in the active warehouse and Technicians with robot scope there receive the alert. Only authorized issue managers can change its lifecycle. Traffic control remains a separate operation.
 
+To attach an optional photo to an Issue, POST raw JPEG or PNG bytes to `/api/operations/issues/{id}/evidence/photos?photoId={uuid}&expectedVersion={version}` with the matching image Content-Type. The limit is 2 MiB per photo and four photos per Issue. Keep the photo UUID on retry. The response returns the updated Issue, including the authorized GET URI for the stored photo. A failed upload leaves the Issue available and can be retried independently.
+
 ## Payload recovery
 
 Under `/api/workflow-execution/jobs/{jobId}/recovery`, GET returns `{ recovery }` with the case ID, version, `claimedBy`, manifest barcodes, robot IDs, `robotArrived` and `availableActions`. GET `/candidates` returns `{ items }` with each robot's effective `maxContainers`, eligibility and reasons for the full cargo currently on board.

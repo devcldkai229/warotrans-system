@@ -27,7 +27,7 @@ public sealed record ListIssuesQuery(
 /// Admin all issues; Technician the ones they reported, are assigned to, or that concern a robot in their scope;
 /// Staff the ones they reported or are assigned to. An issue outside that set is "not found".
 /// </summary>
-public sealed class IssueService(
+public sealed partial class IssueService(
     OperationsMongoContext mongo,
     ICurrentUser currentUser,
     IHttpContextAccessor httpContextAccessor,
@@ -53,7 +53,8 @@ public sealed class IssueService(
         var key = $"hazard:{me:N}:{request.RequestId:N}";
         var severity = Enum.Parse<IssueSeverity>(request.Severity);
         var description = request.Description.Trim();
-        var issue = await mongo.IssueReports.Find(item => item.SourceKey == key).FirstOrDefaultAsync(cancellationToken);
+        var issue = await mongo.IssueReports.Find(item => item.SourceKey == key)
+            .Project<IssueReport>(WithoutPhotoBytes).FirstOrDefaultAsync(cancellationToken);
         if (issue is null)
         {
             var location = await mapLocations.FindPublishedLocationAsync(request.MapVersionId, request.EdgeId, request.ZoneId,
@@ -237,6 +238,7 @@ public sealed class IssueService(
             .SortByDescending(i => i.ReportedAt)
             .Skip(Math.Max(0, query.Skip))
             .Limit(Math.Clamp(query.Take, 1, MaxTake))
+            .Project<IssueReport>(WithoutPhotoBytes)
             .ToListAsync(cancellationToken);
         return new ListIssuesResponse(total, items.Select(Project).ToList());
     }
@@ -444,7 +446,11 @@ public sealed class IssueService(
                 Builders<IssueReport>.Filter.Eq(i => i.Id, issue.Id),
                 Builders<IssueReport>.Filter.Eq(i => i.Version, expectedVersion)),
             update.Inc(i => i.Version, 1).Set(i => i.UpdatedAt, clock.GetUtcNow()),
-            new FindOneAndUpdateOptions<IssueReport> { ReturnDocument = ReturnDocument.After },
+            new FindOneAndUpdateOptions<IssueReport>
+            {
+                ReturnDocument = ReturnDocument.After,
+                Projection = WithoutPhotoBytes
+            },
             cancellationToken);
 
         return saved ?? throw new ConflictException("The issue was changed by someone else; reload it.", "issue_version_conflict");
@@ -455,7 +461,8 @@ public sealed class IssueService(
         var filter = Builders<IssueReport>.Filter.And(
             Builders<IssueReport>.Filter.Eq(i => i.Id, id),
             await VisibleFilterAsync(cancellationToken));
-        return await mongo.IssueReports.Find(filter).FirstOrDefaultAsync(cancellationToken) ?? throw NotFound();
+        return await mongo.IssueReports.Find(filter).Project<IssueReport>(WithoutPhotoBytes).FirstOrDefaultAsync(cancellationToken)
+            ?? throw NotFound();
     }
 
     private async Task<FilterDefinition<IssueReport>> VisibleFilterAsync(CancellationToken cancellationToken)
