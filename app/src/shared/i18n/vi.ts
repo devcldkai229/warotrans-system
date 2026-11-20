@@ -1824,4 +1824,13 @@ export const vi: Record<string, string> = {
   "Scan the shelf label": "Quét tem kệ",
   "Shelf code": "Mã kệ",
   "Scan or type the shelf code": "Quét hoặc nhập mã kệ",
+  "Containers currently stored on a shelf.": "Container hiện đang lưu trên kệ.",
+  "Choose an outbound gate": "Hãy chọn cổng xuất kho",
+  "Total Stock": "Tổng tồn kho",
+  "On Shelves": "Trên kệ",
+  "Awaiting Putaway": "Chờ đưa lên kệ",
+  "{total} in stock · {locations} locations": "{total} tồn kho · {locations} vị trí",
+  "{count} confirmed containers awaiting putaway (not on shelves yet).": "{count} container đã xác nhận nhập đang chờ đưa lên kệ (chưa lên kệ).",
+  "All Confirmed Stock Awaits Putaway": "Toàn bộ tồn đã xác nhận đang chờ đưa lên kệ",
+  "{count} containers are in warehouse stock and waiting to be put away onto shelves.": "{count} container đã vào tồn kho và đang chờ đưa lên kệ.",
 };

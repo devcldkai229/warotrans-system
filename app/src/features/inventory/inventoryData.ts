@@ -54,3 +54,22 @@ export function groupInventoryByProduct(rows: InventoryStockItem[]): InventoryPr
   }
   return [...products.values()];
 }
+
+export interface WarehouseStockSummary {
+  totalContainers: number;
+  unallocatedContainers: number;
+  allocatedContainers: number;
+}
+
+export function summarizeWarehouseStock(
+  page: { warehouseContainerCount?: number; unallocatedContainerCount?: number } | undefined,
+): WarehouseStockSummary | null {
+  if (!page || typeof page.warehouseContainerCount !== 'number') return null;
+  const totalContainers = Math.max(0, page.warehouseContainerCount);
+  const unallocatedContainers = Math.max(0, Math.min(totalContainers, page.unallocatedContainerCount ?? 0));
+  return {
+    totalContainers,
+    unallocatedContainers,
+    allocatedContainers: Math.max(0, totalContainers - unallocatedContainers),
+  };
+}

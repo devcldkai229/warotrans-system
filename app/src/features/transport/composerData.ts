@@ -32,9 +32,10 @@ export interface ComposerContext {
 const onShelf = (container: ContainerListItem) => container.status === 'STORED' && !!container.currentStorageLocationId;
 
 /**
- * Whether the workflow can move this container, with the backend's CreateTransportRequest rules (same as the web
- * composer): INBOUND takes a container not on a shelf yet that is on a confirmed receiving voucher; OUTBOUND a container
- * on a shelf that is on a confirmed issue voucher; INTERNAL a container on a shelf. Null when it can, else the reason.
+ * Whether the workflow can move this container, matching the backend's CreateTransportRequest rules:
+ * INBOUND takes a container not on a shelf yet that is on a confirmed receiving voucher; OUTBOUND takes any
+ * free container currently stored on a shelf (outbound vouchers are created later at the gate); INTERNAL takes a
+ * container on a shelf. Null when it can, else the reason.
  */
 export function ineligibleReason(container: ContainerListItem, kind: WorkflowKind, held: Set<string>): string | null {
   if (held.has(container.id) || container.inActiveTransport) return 'Already in a transport request';
@@ -45,9 +46,7 @@ export function ineligibleReason(container: ContainerListItem, kind: WorkflowKin
       if (!(voucher?.type === 'INBOUND' && voucher.status === 'CONFIRMED')) return 'Not on a confirmed receiving voucher';
       return null;
     case 'OUTBOUND':
-      if (!onShelf(container)) return 'Not on a shelf';
-      if (!(voucher?.type === 'OUTBOUND' && voucher.status === 'CONFIRMED')) return 'Not on a confirmed issue voucher';
-      return null;
+      return onShelf(container) ? null : 'Not on a shelf';
     case 'INTERNAL':
       return onShelf(container) ? null : 'Not on a shelf';
     default:
@@ -65,11 +64,11 @@ export interface ContainerGroup {
 }
 
 /**
- * INBOUND / OUTBOUND: one group per confirmed voucher of that type, newest first, then the rest.
- * INTERNAL: one group per shelf (by its name). Other workflows: one group.
+ * INBOUND: one group per confirmed voucher, newest first, then the rest.
+ * OUTBOUND / INTERNAL: one group per shelf (by its name). Other workflows: one group.
  */
 export function groupContainers(containers: ContainerListItem[], kind: WorkflowKind, locationName: (id: string | null) => string): ContainerGroup[] {
-  if (kind === 'INBOUND' || kind === 'OUTBOUND') {
+  if (kind === 'INBOUND') {
     const byVoucher = new Map<string, { at: string; group: ContainerGroup }>();
     const rest: ContainerListItem[] = [];
     for (const item of containers) {
@@ -77,7 +76,7 @@ export function groupContainers(containers: ContainerListItem[], kind: WorkflowK
       if (voucher && voucher.type === kind && voucher.status === 'CONFIRMED') {
         const entry = byVoucher.get(voucher.id) ?? {
           at: voucher.confirmedAt ?? voucher.createdAt,
-          group: { key: voucher.id, title: voucher.code, subtitle: kind === 'INBOUND' ? 'Receiving voucher' : 'Issue voucher', voucher: true, items: [] },
+          group: { key: voucher.id, title: voucher.code, subtitle: 'Receiving voucher', voucher: true, items: [] },
         };
         entry.group.items.push(item);
         byVoucher.set(voucher.id, entry);
@@ -88,7 +87,7 @@ export function groupContainers(containers: ContainerListItem[], kind: WorkflowK
     const groups = [...byVoucher.values()].sort((a, b) => b.at.localeCompare(a.at)).map(entry => entry.group);
     return rest.length ? [...groups, { key: 'other', title: 'Other containers', subtitle: null, voucher: false, items: rest }] : groups;
   }
-  if (kind === 'INTERNAL') {
+  if (kind === 'OUTBOUND' || kind === 'INTERNAL') {
     const byShelf = new Map<string, ContainerGroup>();
     for (const item of containers) {
       const key = item.currentStorageLocationId ?? 'none';
@@ -133,11 +132,14 @@ const stationNamed = (places: ComposerPlace[], word: 'INBOUND' | 'OUTBOUND') => 
   return places.filter(place => place.kind === 'endpoint' && pattern.test(place.code));
 };
 
+export function outboundGates(places: ComposerPlace[]): ComposerPlace[] {
+  return stationNamed(places, 'OUTBOUND');
+}
+
 /** Where the container is now; an inbound container not placed yet starts at the receiving point when there is one. */
 export function defaultSource(container: ContainerListItem, kind: WorkflowKind, places: ComposerPlace[]): ComposerPlace | null {
   if (container.currentStorageLocationId) {
-    const shelf = places.find(place => place.storageLocationId === container.currentStorageLocationId);
-    if (shelf) return shelf;
+    return places.find(place => place.storageLocationId === container.currentStorageLocationId) ?? null;
   }
   if (container.currentEndpointId) {
     const at = placeForEndpoint(places, container.currentEndpointId);
@@ -176,6 +178,13 @@ export interface Movement { source: ComposerPlace | null; destination: ComposerP
 export function movementProblem(movement: Movement | undefined): string | null {
   if (!movement?.source) return 'Choose where to pick it up';
   if (!movement.destination) return 'Choose where to deliver it';
+  if (movement.source.endpointId === movement.destination.endpointId) return 'Pick-up and delivery must differ';
+  return null;
+}
+
+export function outboundMovementProblem(movement: Movement | undefined, hasGates: boolean): string | null {
+  if (!movement?.source) return 'Location Unavailable On This Map';
+  if (!movement.destination) return hasGates ? 'Choose an outbound gate' : 'No outbound point is configured on this map.';
   if (movement.source.endpointId === movement.destination.endpointId) return 'Pick-up and delivery must differ';
   return null;
 }

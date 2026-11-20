@@ -32,7 +32,7 @@ import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { SegmentedControl } from '../../shared/ui/SegmentedControl';
 import { RawText as Text, Text as StatusText } from '../../shared/ui/Text';
-import { containerLocationFilters, getContainerLocation, groupInventoryByProduct } from './inventoryData';
+import { containerLocationFilters, getContainerLocation, groupInventoryByProduct, summarizeWarehouseStock } from './inventoryData';
 import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { t } from '../../shared/i18n';
@@ -94,7 +94,7 @@ export function InventoryLookupScreen() {
       const loaded = pages.reduce((count, item) => count + item.items.length, 0);
       return page.items.length > 0 && loaded < page.total ? loaded : undefined;
     },
-    enabled: Boolean(activeWarehouseId) && inventoryTab === 'skus',
+    enabled: Boolean(activeWarehouseId),
   });
   const recoverLocations = useQuery({
     queryKey: ['recover-locations', activeWarehouseId],
@@ -105,6 +105,7 @@ export function InventoryLookupScreen() {
   const containerTotal = containersQuery.data?.total || 0;
   const stockRows = inventoryQuery.data?.pages.flatMap(page => page.items) || [];
   const stockTotal = inventoryQuery.data?.pages[0]?.total || 0;
+  const stockSummary = summarizeWarehouseStock(inventoryQuery.data?.pages[0]);
   const catalogProducts = useMemo(() => groupInventoryByProduct(inventoryQuery.data?.pages.flatMap(page => page.items) || []), [inventoryQuery.data]);
   const levelOptions: { value: LevelFilterKey; label: string }[] = [
     { value: 'ALL', label: 'All Levels' },
@@ -183,7 +184,11 @@ export function InventoryLookupScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label={activeWarehouseId ? `${containers.length} Containers Loaded · ${uniqueLocationsCount} Locations` : 'Loading Inventory…'}
+        label={activeWarehouseId
+          ? (stockSummary
+            ? t('{total} in stock · {locations} locations', { total: stockSummary.totalContainers, locations: uniqueLocationsCount })
+            : `${containers.length} Containers Loaded · ${uniqueLocationsCount} Locations`)
+          : 'Loading Inventory…'}
         title="Find Containers & Stock"
         onBack={goBack}
       />
@@ -344,6 +349,27 @@ export function InventoryLookupScreen() {
         </View>
       )}
 
+      {Boolean(activeWarehouseId) && stockSummary && (
+        <View style={styles.stockSummaryBar}>
+          <View style={styles.stockMetric}>
+            <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.totalContainers}</StatusText>
+            <StatusText variant="caption" color="textSecondary">Total Stock</StatusText>
+          </View>
+          <View style={styles.stockMetricDivider} />
+          <View style={styles.stockMetric}>
+            <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.allocatedContainers}</StatusText>
+            <StatusText variant="caption" color="textSecondary">On Shelves</StatusText>
+          </View>
+          <View style={styles.stockMetricDivider} />
+          <View style={styles.stockMetric}>
+            <StatusText variant="headline" fontWeight="700" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textPrimary'} style={styles.tabularValue}>
+              {stockSummary.unallocatedContainers}
+            </StatusText>
+            <StatusText variant="caption" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textSecondary'}>Awaiting Putaway</StatusText>
+          </View>
+        </View>
+      )}
+
       {/* Tầng 2: Segmented Control Tabs (directly below the search box) */}
       <View style={styles.tabsWrapper}>
         <SegmentedControl
@@ -415,7 +441,7 @@ export function InventoryLookupScreen() {
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
-            refreshControl={<RefreshControl refreshing={containersQuery.isRefetching} onRefresh={() => { void containersQuery.refetch(); }} tintColor={colors.primary} />}
+            refreshControl={<RefreshControl refreshing={containersQuery.isRefetching} onRefresh={() => { void containersQuery.refetch(); void inventoryQuery.refetch(); }} tintColor={colors.primary} />}
           >
           {filteredContainers.map((c) => {
             const statusText = String(c.status || 'Status Unavailable');
@@ -504,14 +530,20 @@ export function InventoryLookupScreen() {
         <>
           <View style={styles.categoryBar}>
             <StatusText variant="caption">Recorded Inventory · {stockRows.length} of {stockTotal} Stock Rows</StatusText>
-            <StatusText variant="caption">Counts Represent Containers. More Locations May Appear As Rows Load.</StatusText>
+            {stockSummary && stockSummary.unallocatedContainers > 0 ? (
+              <StatusText variant="caption" color="primaryText">
+                {t('{count} confirmed containers awaiting putaway (not on shelves yet).', { count: stockSummary.unallocatedContainers })}
+              </StatusText>
+            ) : (
+              <StatusText variant="caption">Counts Represent Containers. More Locations May Appear As Rows Load.</StatusText>
+            )}
           </View>
 
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
-            refreshControl={<RefreshControl refreshing={inventoryQuery.isRefetching && !inventoryQuery.isFetchingNextPage} onRefresh={() => { void inventoryQuery.refetch(); }} tintColor={colors.primary} />}
+            refreshControl={<RefreshControl refreshing={inventoryQuery.isRefetching && !inventoryQuery.isFetchingNextPage} onRefresh={() => { void inventoryQuery.refetch(); void containersQuery.refetch(); }} tintColor={colors.primary} />}
           >
             {catalogProducts.map((prod) => (
               <View key={prod.id} style={styles.productCard}>
@@ -559,10 +591,17 @@ export function InventoryLookupScreen() {
             {catalogProducts.length === 0 && !loading && !loadError && (
               <View style={styles.emptyState}>
                 <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
-                <Text style={styles.emptyTitle}>No matching products found</Text>
-                <Text style={styles.emptySub}>
-                  Try searching with a different product name, SKU, or storage location.
-                </Text>
+                {!serverSearch && stockSummary && stockSummary.unallocatedContainers > 0 ? <>
+                  <Text style={styles.emptyTitle}>{t('All Confirmed Stock Awaits Putaway')}</Text>
+                  <Text style={styles.emptySub}>
+                    {t('{count} containers are in warehouse stock and waiting to be put away onto shelves.', { count: stockSummary.unallocatedContainers })}
+                  </Text>
+                </> : <>
+                  <Text style={styles.emptyTitle}>No matching products found</Text>
+                  <Text style={styles.emptySub}>
+                    Try searching with a different product name, SKU, or storage location.
+                  </Text>
+                </>}
               </View>
             )}
             {inventoryQuery.hasNextPage && <Button label={inventoryQuery.isFetchingNextPage ? 'Loading…' : 'Load More Stock'} variant="outline"
@@ -621,6 +660,31 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     marginHorizontal: 16,
     marginTop: 10,
     marginBottom: 4,
+  },
+  stockSummaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stockMetric: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  stockMetricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+  },
+  tabularValue: {
+    fontVariant: ['tabular-nums'],
   },
   spatialFilterSection: {
     backgroundColor: colors.surface,
@@ -704,7 +768,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    paddingHorizontal: 16,
     paddingVertical: 8,
+    gap: 2,
     zIndex: 9,
   },
   categoryScroll: {

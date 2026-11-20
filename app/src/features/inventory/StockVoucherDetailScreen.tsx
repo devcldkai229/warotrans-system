@@ -195,11 +195,10 @@ export function StockVoucherDetailScreen() {
               {!!data.confirmedAt && <Text variant="caption" color="textSecondary">{t('Confirmed {date}', { date: voucherDate(data.confirmedAt) })}</Text>}
               {data.status === 'CONFIRMED' && <Text variant="caption" color="textSecondary">{data.stockPostedAt ? t('Stock posted {date}', { date: voucherDate(data.stockPostedAt) }) : 'Stock posting status is unavailable.'}</Text>}
               {!!data.cancelledAt && <Text variant="caption" color="textSecondary">{t('Cancelled {date}', { date: voucherDate(data.cancelledAt) })}</Text>}
-              {/* A confirmed voucher with containers still to move: dispatch robots with every open container filled in
-                  (inbound picks up at the receiving point, outbound delivers to the shipping point). */}
-              {data.status === 'CONFIRMED' && data.lines.some(line => !line.done) ? <Button
-                title={inbound ? 'Dispatch Robots To Put Away' : 'Dispatch Robots To Ship'} icon={Truck} fullWidth
-                onPress={() => navigate('transport_create', { workflow: inbound ? 'inbound' : 'outbound', containers: data.lines.filter(line => !line.done && (!checked.length || checked.includes(line.containerBarcode))).map(line => line.containerBarcode) })} /> : null}
+              {/* A confirmed inbound voucher with containers still to put away: dispatch robots from the receiving point. */}
+              {inbound && data.status === 'CONFIRMED' && data.lines.some(line => !line.done) ? <Button
+                title="Dispatch Robots To Put Away" icon={Truck} fullWidth
+                onPress={() => navigate('transport_create', { workflow: 'inbound', containers: data.lines.filter(line => !line.done && (!checked.length || checked.includes(line.containerBarcode))).map(line => line.containerBarcode) })} /> : null}
               {data.status !== 'CANCELLED' && data.lines.length ? <Button title={checked.length ? t('Scan Containers ({done}/{total} checked)', { done: checked.length, total: data.lines.length }) : 'Scan Containers To Check'}
                 icon={ScanLine} variant="outline" fullWidth onPress={() => setScanning(true)} /> : null}
               <Button title={showCode ? 'Hide Voucher Code' : 'Show Voucher Code'} icon={QrCode} variant="ghost" size="sm" onPress={() => setShowCode(value => !value)} />

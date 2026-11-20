@@ -25,26 +25,36 @@ test('workflow codes map to the web kinds', () => {
   assert.equal(data.workflowKindOf('POINT_TO_POINT_TRANSPORT'), 'OTHER');
 });
 
-test('inbound offers containers on a confirmed receiving voucher that are not shelved; outbound and relocation follow the backend rules', () => {
+test('inbound offers containers on a confirmed receiving voucher that are not shelved; outbound and relocation take free stored shelf containers without needing an outbound voucher', () => {
   const held = new Set(['busy']);
   const fresh = container('a', { voucher: voucher('INBOUND') });
   const shelved = container('b', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: voucher('INBOUND') });
+  const shelvedNoVoucher = container('b2', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: null });
   const draft = container('c', { voucher: voucher('INBOUND', 'DRAFT') });
   assert.equal(data.ineligibleReason(fresh, 'INBOUND', held), null);
   assert.equal(data.ineligibleReason(shelved, 'INBOUND', held), 'Already on a shelf');
   assert.equal(data.ineligibleReason(draft, 'INBOUND', held), 'Not on a confirmed receiving voucher');
   assert.equal(data.ineligibleReason(container('busy', { voucher: voucher('INBOUND') }), 'INBOUND', held), 'Already in a transport request');
   const issued = container('d', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: voucher('OUTBOUND') });
+  assert.equal(data.ineligibleReason(shelvedNoVoucher, 'OUTBOUND', held), null);
+  assert.equal(data.ineligibleReason(shelved, 'OUTBOUND', held), null);
   assert.equal(data.ineligibleReason(issued, 'OUTBOUND', held), null);
-  assert.equal(data.ineligibleReason(shelved, 'OUTBOUND', held), 'Not on a confirmed issue voucher');
+  assert.equal(data.ineligibleReason(fresh, 'OUTBOUND', held), 'Not on a shelf');
+  assert.equal(data.ineligibleReason(container('busy', { status: 'STORED', currentStorageLocationId: 'L-A1' }), 'OUTBOUND', held), 'Already in a transport request');
+  assert.equal(data.ineligibleReason({ ...shelvedNoVoucher, inActiveTransport: true }, 'OUTBOUND', held), 'Already in a transport request');
   assert.equal(data.ineligibleReason(shelved, 'INTERNAL', held), null);
   assert.equal(data.ineligibleReason(fresh, 'INTERNAL', held), 'Not on a shelf');
 });
 
-test('containers group by voucher (newest first) for inbound and by shelf name for relocation', () => {
+test('containers group by voucher (newest first) for inbound and by shelf name for outbound and relocation', () => {
   const older = { ...voucher('INBOUND', 'CONFIRMED', 'old'), confirmedAt: '2026-11-17T00:00:00Z' };
   const groups = data.groupContainers([container('a', { voucher: older }), container('b', { voucher: voucher('INBOUND') }), container('c')], 'INBOUND', () => '');
   assert.deepEqual(plain(groups.map(group => group.key)), ['INBOUND-1', 'old', 'other']);
+  const outboundShelves = data.groupContainers([
+    container('x', { status: 'STORED', currentStorageLocationId: 'L-C1' }),
+    container('y', { status: 'STORED', currentStorageLocationId: 'L-A1' }),
+  ], 'OUTBOUND', id => places.find(place => place.storageLocationId === id).name);
+  assert.deepEqual(plain(outboundShelves.map(group => group.title)), ['Shelf A 1', 'Shelf C 1']);
   const shelves = data.groupContainers([container('x', { currentStorageLocationId: 'L-C1' }), container('y', { currentStorageLocationId: 'L-A1' })], 'INTERNAL',
     id => places.find(place => place.storageLocationId === id).name);
   assert.deepEqual(plain(shelves.map(group => group.title)), ['Shelf A 1', 'Shelf C 1']);
@@ -78,4 +88,50 @@ test('request details carry shelf and endpoint ids in selection order and refuse
   ]);
   assert.throws(() => data.buildDetails([a], { a: { source: inbound, destination: null } }), /CTN-a: Choose where to deliver it/);
   assert.throws(() => data.buildDetails([a], { a: { source: shelfA, destination: shelfA } }), /must differ/);
+});
+
+test('outbound auto-fills single gate, requires one TR gate choice when multiple exist, and never falls back when shelf is missing from map', () => {
+  const twoGatePlaces = data.composerPlaces({
+    endpoints: [...endpoints, ep('EP-OUTBOUND-2', 'Outbound 2')],
+    locations,
+    mapId: MAP,
+  });
+  assert.deepEqual(plain(data.outboundGates(places).map(gate => gate.code)), ['EP-OUTBOUND']);
+  assert.deepEqual(plain(data.outboundGates(twoGatePlaces).map(gate => gate.code)), ['EP-OUTBOUND', 'EP-OUTBOUND-2']);
+  assert.equal(data.defaultDestination('OUTBOUND', places).code, 'EP-OUTBOUND');
+  assert.equal(data.defaultDestination('OUTBOUND', twoGatePlaces), null);
+
+  // Stored container without any outbound voucher resolves real shelf source and builds valid outbound TR detail
+  const storedWithoutVoucher = container('no-voucher', {
+    status: 'STORED',
+    currentStorageLocationId: 'L-A1',
+    currentEndpointId: 'e-EP-SHELF-A-1',
+    currentLevelNo: 3,
+    voucher: null,
+  });
+  const gate1 = data.outboundGates(twoGatePlaces)[0];
+  const src = data.defaultSource(storedWithoutVoucher, 'OUTBOUND', twoGatePlaces);
+  assert.equal(src.code, 'SHELF-A-1');
+  assert.equal(data.outboundMovementProblem({ source: src, destination: gate1 }, true), null);
+  const outboundDetail = data.buildDetails([storedWithoutVoucher], { 'no-voucher': { source: src, destination: gate1 } });
+  assert.deepEqual(plain(outboundDetail), [{
+    sequenceNo: 1,
+    containerId: 'no-voucher',
+    sourceStorageLocationId: 'L-A1',
+    sourceEndpointId: 'e-EP-SHELF-A-1',
+    sourceLevelNo: 3,
+    destinationStorageLocationId: null,
+    destinationEndpointId: 'e-EP-OUTBOUND',
+    destinationLevelNo: null,
+  }]);
+
+  // Validation messages & missing active shelf guard
+  assert.equal(
+    data.defaultSource({ ...storedWithoutVoucher, currentStorageLocationId: 'L-INACTIVE', currentEndpointId: 'e-EP-INBOUND' }, 'OUTBOUND', places),
+    null,
+  );
+  assert.equal(data.outboundMovementProblem({ source: null, destination: gate1 }, true), 'Location Unavailable On This Map');
+  assert.equal(data.outboundMovementProblem({ source: src, destination: null }, true), 'Choose an outbound gate');
+  assert.equal(data.outboundMovementProblem({ source: src, destination: null }, false), 'No outbound point is configured on this map.');
+  assert.equal(data.outboundMovementProblem({ source: src, destination: src }, true), 'Pick-up and delivery must differ');
 });

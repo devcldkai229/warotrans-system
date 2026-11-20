@@ -26,8 +26,8 @@ module.exports = function createLoader(overrides = {}, globals = {}) {
       return require(dependency);
     };
     vm.runInNewContext(`(function(require,module,exports){${source}\n})`, {
-      console, URL, URLSearchParams, Headers, Response, Request, setTimeout, clearTimeout,
-      setInterval, clearInterval, __DEV__: false, process: { env: {} }, ...globals,
+      console, URL, URLSearchParams, Headers, Response, Request, AbortController, AbortSignal,
+      setTimeout, clearTimeout, setInterval, clearInterval, __DEV__: false, process: { env: {} }, ...globals,
     }, { filename: file })(localRequire, module, module.exports);
     return module.exports;
   }
