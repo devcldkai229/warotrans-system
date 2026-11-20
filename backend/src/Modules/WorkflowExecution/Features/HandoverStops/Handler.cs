@@ -132,6 +132,8 @@ public sealed class HandoverStopsHandler(
         if (task.HandoverVersion != request.Version
             && await navigation.GetMapVersionAsync(job.MapVersionId, CancellationToken.None) is { } map)
             await events.PublishAsync(new HandoverStopQueueChanged(job.Id, task.Id, map.WarehouseId), CancellationToken.None);
+        if (action is HandoverStopAction.Begin or HandoverStopAction.Extend)
+            await engine.TryArmBegunHandoverStopAsync(jobId, CancellationToken.None);
 
         return (await ProjectAsync([stop], actor, now, cancellationToken))[0];
     }

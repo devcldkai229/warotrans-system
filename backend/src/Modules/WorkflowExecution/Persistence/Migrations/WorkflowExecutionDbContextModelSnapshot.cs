@@ -289,6 +289,14 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ButtonArmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("button_arm_id");
+
+                    b.Property<Guid?>("ButtonConfirmationMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("button_confirmation_message_id");
+
                     b.Property<Guid?>("ClaimedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("claimed_by");
@@ -300,6 +308,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid?>("ConfirmedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("confirmed_by");
+
+                    b.Property<Guid?>("ConfirmedByRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by_robot_id");
 
                     b.Property<string>("ContainerIds")
                         .IsRequired()

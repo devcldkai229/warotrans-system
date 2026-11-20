@@ -319,6 +319,14 @@ current WAITING step, interactionType, containerId, endpointId. Completes throug
 
 Idempotent on `messageId` / already-completed step with ROBOT_BUTTON evidence.
 
+### Grouped handover and recovery confirmations
+
+For grouped handover, the backend publishes `handoverStop: { id, moveId, version, containerIds }` on an `interaction_request` after Staff begin the stop. The existing `jobStepId` and `containerId` identify the first manifest entry. The gateway echoes `handoverStop: { id, moveId, version }` and sets `requestMessageId` to the arm request's `messageId`. The gateway uses one press to confirm the whole manifest and replaces the previous arm if a newer request arrives. It advertises `HANDOVER_STOP_CONFIRM_V1` only when it supports the grouped request and reply.
+
+For recovery, the backend sends `interactionType: "RECOVERY_TRANSFER_CONFIRM"` and `recoveryTransfer: { id, version, containerIds }` to the rescue robot. The arm request uses the recovery MOVE step as `jobStepId`, the first manifest entry as `containerId`, and the transfer point as `endpointId`. Echo these fields and `recoveryTransfer: { id, version }` together with `requestMessageId`. The gateway advertises `RECOVERY_TRANSFER_CONFIRM_V1` for this flow. Business acceptance comes from `interaction_result`.
+
+Grouped requests are gated by `HumanTasks:EnableHandoverStopButton` and `Recovery:EnableTransferButton`. Both default to false. Enable each after the gateway advertises the matching capability and confirms the expected request, including reconnect, repeat press and a version change. A rejected press leaves the cargo state unchanged.
+
 ## Interaction result (backend → robot)
 
 Business acceptance (separate from MQTT QoS). Robot clears armed state on `accepted=true`

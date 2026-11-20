@@ -16,4 +16,5 @@ public sealed class HumanTaskOptions
     public int StopWorkWindowSeconds { get; set; } = 300;
     public int StopWorkExtensionSeconds { get; set; } = 120;
     public int StopDisconnectSeconds { get; set; } = 60;
+    public bool EnableHandoverStopButton { get; set; }
 }

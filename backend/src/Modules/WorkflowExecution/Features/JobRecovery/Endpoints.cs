@@ -32,7 +32,9 @@ public sealed record JobRecoveryDto(
     Guid? ClaimedBy,
     int Version,
     IReadOnlyList<RecoveryContainerDto> Containers,
-    IReadOnlyList<ActionAvailability> AvailableActions);
+    IReadOnlyList<ActionAvailability> AvailableActions,
+    bool ButtonArmed,
+    Guid? ConfirmedByRobotId);
 
 public sealed record RecoveryContainerDto(Guid ContainerId, string? Barcode);
 
@@ -152,6 +154,18 @@ public static class JobRecoveryEndpoints
             .WithSummary("A person saw the cargo move to the second robot; the Job now belongs to it")
             .WithTags("Jobs");
 
+        group.MapPost("/jobs/{id:guid}/recovery/arm-button", async (
+                Guid id, ConfirmRecoveryTransferRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db,
+                ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IWarehouseModule warehouse, CancellationToken cancellationToken) =>
+            {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
+                await engine.ArmRecoveryTransferAsync(id, new(request.CaseId, request.Version, Actor(currentUser)), request.RobotId,
+                    request.Scans, cancellationToken);
+                return Results.Ok(new { recovery = await ReadAsync(id, db, warehouse, engine, currentUser, cancellationToken) });
+            })
+            .RequirePermission(Permissions.JobOperate).Audited("job.recovery_button_armed", "JOB", "id")
+            .WithName("ArmRecoveryTransferButton").WithTags("Jobs");
+
         group.MapPost("/jobs/{id:guid}/recovery/resume-same-robot", async (
                 Guid id,
                 ResumeRecoveryRequest request,
@@ -201,6 +215,8 @@ public static class JobRecoveryEndpoints
         var target = recovery.Status == JobRecoveryStatuses.TargetAssigned;
         var canOperate = RolePermissionMatrix.RoleHas(user.Role, Permissions.JobOperate);
         var requestDenial = active ? await engine.RecoveryRequestDenialAsync(jobId, cancellationToken) : null;
+        var confirmDenial = ownership ?? requestDenial ?? (!target ? "recovery_no_target" : !arrived ? "recovery_robot_not_arrived" : null);
+        var canArm = confirmDenial is null && recovery.ToRobotId is { } targetId && await engine.CanArmRecoveryButtonAsync(targetId, cancellationToken);
         return new JobRecoveryDto(
             recovery.Id, recovery.JobId, recovery.Status, recovery.Reason, recovery.FromRobotId, recovery.ToRobotId, recovery.RecoveryEndpointId,
             recovery.ContainerIds, arrived, recovery.ConfirmedBy, recovery.ConfirmedAt, recovery.Note, recovery.CreatedAt, recovery.ResolvedAt,
@@ -209,10 +225,11 @@ public static class JobRecoveryEndpoints
                 ActionAvailability.Of("CLAIM", !active ? "job_not_in_recovery" : recovery.ClaimedBy is null ? null : "recovery_claimed", canOperate),
                 ActionAvailability.Of("RELEASE", ownership ?? (target ? "recovery_target_assigned" : null), canOperate),
                 ActionAvailability.Of("ASSIGN", ownership ?? requestDenial ?? (target ? "recovery_target_assigned" : null), canOperate),
-                ActionAvailability.Of("UNASSIGN", ownership ?? (target ? null : "recovery_no_target"), canOperate),
-                ActionAvailability.Of("CONFIRM", ownership ?? requestDenial ?? (!target ? "recovery_no_target"
-                    : !arrived ? "recovery_robot_not_arrived" : null), canOperate),
+                ActionAvailability.Of("UNASSIGN", ownership ?? (!target ? "recovery_no_target"
+                    : recovery.ButtonArmId is not null ? "recovery_button_armed" : null), canOperate),
+                ActionAvailability.Of("CONFIRM", confirmDenial, canOperate),
+                ActionAvailability.Of("ARM_BUTTON", confirmDenial ?? (canArm ? null : "recovery_button_unavailable"), canOperate),
                 ActionAvailability.Of("RESUME_SAME_ROBOT", ownership ?? requestDenial ?? (target ? "recovery_target_assigned" : null), canOperate)
-            ]);
+            ], active && recovery.ButtonArmId is not null, recovery.ConfirmedByRobotId);
     }
 }

@@ -171,19 +171,54 @@ public sealed class FleetModuleApi(
     {
         var robot = await db.Robots.AsNoTracking().FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
+        await PublishInteractionAsync(robot, jobId, jobStepId, interactionType, containerId, endpointId,
+            Guid.NewGuid(), null, null, cancellationToken);
+    }
 
+    public async Task<bool> ArmHandoverStopButtonAsync(
+        Guid robotId, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId,
+        Guid requestId, RobotHandoverStop handoverStop, CancellationToken cancellationToken = default)
+    {
+        var robot = await db.Robots.AsNoTracking().FirstOrDefaultAsync(item => item.Id == robotId, cancellationToken);
+        if (robot is not { IsEnabled: true, IsOnline: true }
+            || robot.Capabilities?.Split(',').Contains(RobotHandoverStop.Capability, StringComparer.Ordinal) != true)
+            return false;
+        await PublishInteractionAsync(robot, jobId, jobStepId, interactionType, containerId, endpointId,
+            requestId, handoverStop, null, cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> ArmRecoveryButtonAsync(
+        Guid robotId, Guid jobId, Guid moveStepId, Guid containerId, Guid endpointId,
+        Guid requestId, RobotRecoveryTransfer recoveryTransfer, CancellationToken cancellationToken = default)
+    {
+        var robot = await db.Robots.AsNoTracking().FirstOrDefaultAsync(item => item.Id == robotId, cancellationToken);
+        if (robot is not { IsEnabled: true, IsOnline: true }
+            || robot.Capabilities?.Split(',').Contains(RobotRecoveryTransfer.Capability, StringComparer.Ordinal) != true)
+            return false;
+        await PublishInteractionAsync(robot, jobId, moveStepId, RobotRecoveryTransfer.InteractionType, containerId, endpointId,
+            requestId, null, recoveryTransfer, cancellationToken);
+        return true;
+    }
+
+    private async Task PublishInteractionAsync(
+        Robot robot, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId,
+        Guid requestId, RobotHandoverStop? handoverStop, RobotRecoveryTransfer? recoveryTransfer, CancellationToken cancellationToken)
+    {
         await interactionPublisher.PublishRequestAsync(
             new RobotInteractionRequestMessage
             {
                 SchemaVersion = 1,
-                MessageId = Guid.NewGuid(),
+                MessageId = requestId,
                 RobotCode = robot.Code,
                 JobId = jobId,
                 JobStepId = jobStepId,
                 InteractionType = interactionType,
                 ContainerId = containerId,
                 EndpointId = endpointId,
-                SentAt = DateTimeOffset.UtcNow
+                SentAt = DateTimeOffset.UtcNow,
+                HandoverStop = handoverStop,
+                RecoveryTransfer = recoveryTransfer
             },
             cancellationToken);
 
@@ -265,5 +300,6 @@ public sealed class FleetModuleApi(
         r.MotionHeld,
         r.HasActiveManualLease(DateTimeOffset.UtcNow),
         r.BatteryMeasuredAt,
-        r.MaxContainers);
+        r.MaxContainers,
+        r.Capabilities?.Split(',', StringSplitOptions.RemoveEmptyEntries));
 }

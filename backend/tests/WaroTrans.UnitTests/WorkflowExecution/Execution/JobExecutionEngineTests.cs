@@ -1,11 +1,14 @@
 ﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Enums;
@@ -42,8 +45,9 @@ public sealed class JobExecutionEngineTests
     private WorkflowExecutionDbContext _db = null!;
     private Guid _mapVersionId;
 
-    private JobExecutionEngine Engine() =>
-        new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance, warehouse: _warehouse);
+    private JobExecutionEngine Engine(RecoveryOptions? configuration = null) =>
+        new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance,
+            warehouse: _warehouse, recoveryOptions: configuration is null ? null : Options.Create(configuration));
 
     private RobotCommandLifecycleJobStepHandler ResultHandler() =>
         new(_db, Engine(), _events, NullLogger<RobotCommandLifecycleJobStepHandler>.Instance);
@@ -1869,16 +1873,18 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(movesBefore + 1, await _db.JobTasks.CountAsync(t => t.JobId == jobId));
     }
 
-    [Fact]
-    public async Task Claimed_recovery_keeps_the_manifest_together_and_refuses_a_cancelled_request()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Claimed_recovery_keeps_the_manifest_together_and_refuses_a_cancelled_request(bool robotButton)
     {
         var jobId = await JobOnTheWayWithCargoAsync();
         await RobotOfflineAsync();
         var destination = RecoveryEndpoint();
         var second = _fleet.AddRobot(_mapVersionId);
-        _fleet.Robots[second] = _fleet.Robots[second] with { MaxContainers = 1 };
+        _fleet.Robots[second] = _fleet.Robots[second] with { MaxContainers = 1, Capabilities = [RobotRecoveryTransfer.Capability] };
         var recovery = await _db.JobRecoveryCases.SingleAsync(item => item.JobId == jobId);
-        var engine = Engine();
+        var engine = Engine(new RecoveryOptions { EnableTransferButton = robotButton });
         var claim = new RecoveryCaseAccess(recovery.Id, recovery.Version, _staff);
         await engine.SetRecoveryClaimAsync(jobId, claim, false, default);
         var access = claim with { Version = recovery.Version };
@@ -1911,9 +1917,33 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(_fleet.RobotId, (await _db.JobRobotAssignments.SingleAsync(item => item.JobId == jobId && item.EndedAt == null)).RobotId);
 
         _requests.Status = "IN_PROGRESS";
-        var closed = await Confirm(scans);
+        JobRecoveryCase closed;
+        if (robotButton)
+        {
+            var needsScan = await Assert.ThrowsAsync<DomainValidationException>(
+                () => engine.ArmRecoveryTransferAsync(jobId, version, second, scans[..1], default));
+            Assert.Equal("handover_scan_manifest_mismatch", needsScan.Code);
+            await engine.ArmRecoveryTransferAsync(jobId, version, second, scans, default);
+            await engine.ArmRecoveryTransferAsync(jobId, version, second, scans, default);
+
+            var click = new RobotInteractionConfirmed(
+                second, _fleet.Robots[second].Code, Guid.NewGuid(), jobId, recovery.MoveStepId!.Value,
+                RobotRecoveryTransfer.InteractionType, recovery.ContainerIds[0], destination, DateTimeOffset.UtcNow,
+                recovery.ButtonArmId, RecoveryTransfer: new(recovery.Id, recovery.Version));
+            var stale = await Assert.ThrowsAsync<ConflictException>(() =>
+                engine.ConfirmRecoveryTransferByRobotAsync(click with { RequestMessageId = Guid.NewGuid() }, default));
+            Assert.Equal("interaction_arm_changed", stale.Code);
+            closed = await engine.ConfirmRecoveryTransferByRobotAsync(click, default);
+            Assert.Equal(second, closed.ConfirmedByRobotId);
+            Assert.Null(closed.ConfirmedBy);
+            Assert.Equal(closed.Id, (await engine.ConfirmRecoveryTransferByRobotAsync(click, default)).Id);
+        }
+        else
+        {
+            closed = await Confirm(scans);
+            Assert.Equal(closed.Id, (await Confirm(scans)).Id);
+        }
         Assert.Equal(JobRecoveryStatuses.Transferred, closed.Status);
-        Assert.Equal(closed.Id, (await Confirm(scans)).Id);
         Assert.Equal(second, (await _db.JobRobotAssignments.SingleAsync(item => item.JobId == jobId && item.EndedAt == null)).RobotId);
 
         _requests.Status = "CANCELLING";
@@ -2487,6 +2517,11 @@ public sealed class JobExecutionEngineTests
 
         public Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RobotSnapshot>>(Robots.Values.Where(r => r.CurrentMapVersionId == mapVersionId).ToList());
+
+        public Task<bool> ArmRecoveryButtonAsync(
+            Guid robotId, Guid jobId, Guid moveStepId, Guid containerId, Guid endpointId,
+            Guid requestId, RobotRecoveryTransfer recoveryTransfer, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Robots[robotId].Capabilities?.Contains(RobotRecoveryTransfer.Capability) == true);
 
         /// <summary>Like Fleet: a busy or offline robot is not eligible.</summary>
         public Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>

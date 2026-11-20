@@ -1,6 +1,8 @@
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
+using WaroTrans.Navigation.Contracts;
 using WaroTrans.Operations.Contracts;
 using WaroTrans.Operations.Enums;
 using WaroTrans.Transportation.Enums;
@@ -17,6 +19,8 @@ namespace WaroTrans.Host.Realtime;
 /// </summary>
 public sealed class AdminNotificationProducer(
     INotificationService notifications,
+    INavigationModule navigation,
+    IStaffOperatingWarehouse staffWarehouse,
     ILogger<AdminNotificationProducer> logger)
     : IIntegrationEventHandler<JobStatusChanged>,
         IIntegrationEventHandler<RobotConnectivityChanged>,
@@ -42,6 +46,12 @@ public sealed class AdminNotificationProducer(
         SafelyAsync(async () =>
         {
             var reason = string.IsNullOrWhiteSpace(e.FailureCode) ? null : $" Reason: {e.FailureCode}.";
+            NotificationAudience? recoveryAudience = null;
+            if (e.Status == "RECOVERY_REQUIRED" && e.MapVersionId is { } mapId
+                && await navigation.GetMapVersionAsync(mapId, cancellationToken) is { } map
+                && map.WarehouseId == await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken))
+                recoveryAudience = new NotificationAudience([AppRoles.Admin, AppRoles.Staff, AppRoles.Technician],
+                    RobotId: e.RobotId, WarehouseId: map.WarehouseId);
             NotificationDraft? draft = e.Status switch
             {
                 "FAILED" => new(NotificationType.ALERT, "JOB_FAILED", $"Job {e.JobNo} failed",
@@ -51,7 +61,8 @@ public sealed class AdminNotificationProducer(
                 "REASSIGNING" => new(NotificationType.WARNING, "JOB_REASSIGNING", $"Job {e.JobNo} needs another robot",
                     $"The robot could not finish the job; assign it to a different robot.{reason}", Job, e.JobId, $"job:{e.JobId}:REASSIGNING"),
                 "RECOVERY_REQUIRED" => new(NotificationType.ALERT, "JOB_RECOVERY_REQUIRED", $"Job {e.JobNo} needs recovery",
-                    $"The job lost its robot and has to be recovered by an admin.{reason}", Job, e.JobId, $"job:{e.JobId}:RECOVERY_REQUIRED"),
+                    $"The robot needs help transferring its cargo.{reason}", "RECOVERY", e.JobId, $"job:{e.JobId}:RECOVERY_REQUIRED",
+                    Audience: recoveryAudience),
                 _ => null
             };
 

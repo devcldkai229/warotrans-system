@@ -65,7 +65,7 @@ public static class NotificationRoutes
             ? null
             : entityType switch
             {
-                "JOB" => $"/monitor/jobs/{id}",
+                "JOB" or "RECOVERY" => $"/monitor/jobs/{id}",
                 "REQUEST" => $"/monitor/requests?requestId={id}",
                 "ROBOT" => $"/monitor/fleet?robotId={id}",
                 "ISSUE" => $"/operations/issues/{id}",

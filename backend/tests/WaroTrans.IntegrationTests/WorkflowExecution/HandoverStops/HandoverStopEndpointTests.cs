@@ -5,6 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Enums;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
+using WaroTrans.Fleet.Entities;
+using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Features.ProcessRobotInteractionConfirm;
+using WaroTrans.Fleet.Persistence;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
@@ -107,8 +112,10 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         }
     }
 
-    [Fact]
-    public async Task Confirm_all_verifies_the_entire_stop_and_records_each_container_once()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Confirm_all_verifies_the_entire_stop_and_records_each_container_once(bool robotButton)
     {
         var owner = await Factory.CreateAccountAsync("handover-owner", AccountRole.STAFF);
         var peer = await Factory.CreateAccountAsync("handover-peer", AccountRole.STAFF);
@@ -120,6 +127,20 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
         var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        var settings = scope.ServiceProvider.GetRequiredService<IOptions<HumanTaskOptions>>().Value;
+        var fleet = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+        var robot = Robot.Register(Guid.NewGuid(), job.MapVersionId, "RBT-HANDOVER", "Handover robot", DateTimeOffset.UtcNow);
+        if (robotButton)
+        {
+            robot.Status = RobotStatus.AVAILABLE;
+            robot.IsOnline = true;
+            robot.LastHeartbeatAt = DateTimeOffset.UtcNow.AddHours(1);
+            robot.Capabilities = RobotHandoverStop.Capability;
+            fleet.Add(robot);
+            await fleet.SaveChangesAsync();
+            var trackedJob = (await db.Jobs.FindAsync(job.Id))!;
+            trackedJob.ContextValues = new() { [JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(robot.Id) };
+        }
         var firstTask = (await db.JobTasks.FindAsync(firstStep.JobTaskId))!;
         var firstId = firstTask.ContextValues["containerId"].GetGuid();
         var secondId = Guid.NewGuid();
@@ -155,7 +176,7 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         var definition = (await db.WorkflowSteps.FindAsync(firstStep.WorkflowStepId))!;
         definition.InputBindings = new()
         {
-            ["robotId"] = new() { SourceType = BindingSourceType.CONSTANT, ConstantValue = JsonSerializer.SerializeToElement(Guid.NewGuid()) },
+            ["robotId"] = new() { SourceType = BindingSourceType.CONSTANT, ConstantValue = JsonSerializer.SerializeToElement(robot.Id) },
             ["containerId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "containerId" },
             ["endpointId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "source.endpointId" }
         };
@@ -183,9 +204,20 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         using var legacy = await client.SendWithTokenAsync(HttpMethod.Post,
             $"/api/workflow-execution/job-steps/{firstStep.Id}/confirm", peerToken, new { containerId = firstId });
         Assert.Equal("handover_stop_confirmation_required", await legacy.ReadErrorCodeAsync());
-        using var begin = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/begin", ownerToken,
-            new { moveId, version = claimed.GetProperty("version").GetInt32() });
-        var version = (await ReadAsync(begin)).GetProperty("version").GetInt32();
+        var oldButtonSetting = settings.EnableHandoverStopButton;
+        var mqtt = scope.ServiceProvider.GetRequiredService<CapturingMqttRobotCommandPublisher>();
+        int version;
+        try
+        {
+            settings.EnableHandoverStopButton = robotButton;
+            using var begin = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/begin", ownerToken,
+                new { moveId, version = claimed.GetProperty("version").GetInt32() });
+            version = (await ReadAsync(begin)).GetProperty("version").GetInt32();
+        }
+        finally
+        {
+            settings.EnableHandoverStopButton = oldButtonSetting;
+        }
 
         var completeScans = new[] { new { containerId = firstId, barcode = "HANDOVER-1" }, new { containerId = secondId, barcode = "HANDOVER-2" } };
         using var wrongOwner = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", peerToken,
@@ -221,26 +253,65 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         using var resolve = await client.SendWithTokenAsync(HttpMethod.Post, resolvePath, ownerToken, validResolution);
         Assert.Equal("RESOLVED", (await ReadAsync(resolve)).GetProperty("status").GetString());
 
-        var responses = await Task.WhenAll(Enumerable.Range(0, 2)
-            .Select(_ => client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", ownerToken, confirmation)));
-        try
+        if (robotButton)
         {
-            var payloads = await Task.WhenAll(responses.Select(ReadAsync));
-            Assert.All(payloads, detail => Assert.Equal(job.Id, detail.GetProperty("id").GetGuid()));
+            var armed = Assert.Single(mqtt.PublishedInteractionRequests, item => item.JobId == job.Id && item.HandoverStop is not null);
+            Assert.Equal(2, armed.HandoverStop!.ContainerIds!.Count);
+            var click = new RobotInteractionConfirmMessage
+            {
+                RobotCode = robot.Code, JobId = job.Id, JobStepId = armed.JobStepId, ContainerId = armed.ContainerId,
+                EndpointId = endpoint, InteractionType = armed.InteractionType, MessageId = Guid.NewGuid(),
+                RequestMessageId = armed.MessageId, HandoverStop = armed.HandoverStop with { ContainerIds = null }
+            };
+            settings.EnableHandoverStopButton = true;
+            try
+            {
+                var staleId = Guid.NewGuid();
+                click.RequestMessageId = staleId;
+                await SendButtonAsync(click);
+                Assert.Contains(mqtt.PublishedInteractionResults, result => result.ConfirmMessageId == click.MessageId
+                    && !result.Accepted && result.ReasonCode == "interaction_arm_changed");
+                click.RequestMessageId = armed.MessageId;
+                await SendButtonAsync(click);
+                await SendButtonAsync(click);
+                Assert.Equal(2, mqtt.PublishedInteractionResults.Count(result => result.ConfirmMessageId == click.MessageId && result.Accepted));
+            }
+            finally
+            {
+                settings.EnableHandoverStopButton = oldButtonSetting;
+            }
         }
-        finally
+        else
         {
-            foreach (var response in responses) response.Dispose();
+            var responses = await Task.WhenAll(Enumerable.Range(0, 2)
+                .Select(_ => client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", ownerToken, confirmation)));
+            try
+            {
+                var payloads = await Task.WhenAll(responses.Select(ReadAsync));
+                Assert.All(payloads, detail => Assert.Equal(job.Id, detail.GetProperty("id").GetGuid()));
+            }
+            finally
+            {
+                foreach (var response in responses) response.Dispose();
+            }
         }
         var confirmations = await db.HandoverConfirmations.AsNoTracking().ToListAsync();
         Assert.Equal(2, confirmations.Count);
         Assert.All(confirmations, record =>
         {
-            Assert.Equal(owner.Id, record.ConfirmedBy);
-            Assert.Equal(ConfirmationSource.STAFF_APP, record.ConfirmationSource);
-            Assert.NotNull(record.Evidence);
+            Assert.Equal(robotButton ? null : (Guid?)owner.Id, record.ConfirmedBy);
+            Assert.Equal(robotButton ? ConfirmationSource.ROBOT_BUTTON : ConfirmationSource.STAFF_APP, record.ConfirmationSource);
+            if (robotButton) Assert.Equal(robot.Id, record.ConfirmedByRobotId);
+            else Assert.NotNull(record.Evidence);
         });
         Assert.All(await db.JobContainers.AsNoTracking().ToListAsync(), container => Assert.Equal(JobContainerStatus.ONBOARD, container.Status));
+
+        async Task SendButtonAsync(RobotInteractionConfirmMessage click)
+        {
+            await using var messageScope = Factory.Services.CreateAsyncScope();
+            var handler = messageScope.ServiceProvider.GetRequiredService<ProcessRobotInteractionConfirmHandler>();
+            await handler.HandleAsync(click, default);
+        }
     }
 
     [Fact]

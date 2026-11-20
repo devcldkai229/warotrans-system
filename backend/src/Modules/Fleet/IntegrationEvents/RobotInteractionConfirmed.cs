@@ -1,4 +1,5 @@
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
 
 namespace WaroTrans.Fleet.IntegrationEvents;
 
@@ -14,7 +15,10 @@ public sealed record RobotInteractionConfirmed(
     string InteractionType,
     Guid ContainerId,
     Guid EndpointId,
-    DateTimeOffset SentAt) : IIntegrationEvent
+    DateTimeOffset SentAt,
+    Guid? RequestMessageId = null,
+    RobotHandoverStop? HandoverStop = null,
+    RobotRecoveryTransfer? RecoveryTransfer = null) : IIntegrationEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;

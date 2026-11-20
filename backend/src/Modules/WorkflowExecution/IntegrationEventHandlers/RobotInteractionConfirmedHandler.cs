@@ -23,6 +23,27 @@ public sealed class RobotInteractionConfirmedHandler(
 {
     public async Task HandleAsync(RobotInteractionConfirmed e, CancellationToken cancellationToken = default)
     {
+        if (e.HandoverStop is not null || e.RecoveryTransfer is not null)
+        {
+            try
+            {
+                if (e.RecoveryTransfer is not null)
+                    await engine.ConfirmRecoveryTransferByRobotAsync(e, cancellationToken);
+                else
+                    await engine.ConfirmHandoverStopByRobotAsync(e, cancellationToken);
+                await PublishResultAsync(e, accepted: true, reasonCode: null, cancellationToken);
+            }
+            catch (AppException ex)
+            {
+                await PublishResultAsync(e, accepted: false, ex.Code ?? "interaction_rejected", cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                await PublishResultAsync(e, accepted: false, "interaction_conflict", cancellationToken);
+            }
+            return;
+        }
+
         var step = await db.JobSteps
             .Include(s => s.JobTask)
             .AsNoTracking()

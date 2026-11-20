@@ -21,10 +21,24 @@ public sealed class RobotInteractionConfirmMessageValidator : AbstractValidator<
         RuleFor(x => x.SentAt).Must(t => t != default).WithMessage("SentAt is required.");
         RuleFor(x => x.JobId).NotEmpty();
         RuleFor(x => x.JobStepId).NotEmpty();
-        RuleFor(x => x.InteractionType).NotEmpty().Must(t => AllowedTypes.Contains(t))
-            .WithMessage("InteractionType must be PICKUP_CONFIRM or DROPOFF_CONFIRM.");
+        RuleFor(x => x).Must(x => x.RecoveryTransfer is null ? AllowedTypes.Contains(x.InteractionType)
+            : x.InteractionType == RobotRecoveryTransfer.InteractionType && x.HandoverStop is null)
+            .WithMessage("InteractionType must match a pickup, dropoff or recovery transfer.");
         RuleFor(x => x.ContainerId).NotEmpty();
         RuleFor(x => x.EndpointId).NotEmpty();
         RuleFor(x => x.Source).Equal("ROBOT_BUTTON");
+        When(x => x.HandoverStop is not null, () =>
+        {
+            RuleFor(x => x.RequestMessageId).NotEmpty();
+            RuleFor(x => x.HandoverStop!.Id).NotEmpty();
+            RuleFor(x => x.HandoverStop!.MoveId).NotEmpty();
+            RuleFor(x => x.HandoverStop!.Version).GreaterThan(0);
+        });
+        When(x => x.RecoveryTransfer is not null, () =>
+        {
+            RuleFor(x => x.RequestMessageId).NotEmpty();
+            RuleFor(x => x.RecoveryTransfer!.Id).NotEmpty();
+            RuleFor(x => x.RecoveryTransfer!.Version).GreaterThan(0);
+        });
     }
 }

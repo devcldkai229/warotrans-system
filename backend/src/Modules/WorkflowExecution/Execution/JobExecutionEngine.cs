@@ -7,8 +7,10 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Traffic;
 using WaroTrans.Fleet.Traffic.StationPolicies;
 using WaroTrans.Navigation.Contracts;
@@ -715,7 +717,7 @@ public sealed partial class JobExecutionEngine(
             ContainerIds = onBoard,
             CreatedAt = now
         });
-        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code));
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code, job.MapVersionId));
         await SaveAndPublishAsync(cancellationToken);
         logger.LogWarning("Job {JobNo}: robot failed with {Count} container(s) on board; recovery required", job.JobNo, onBoard.Count);
 
@@ -1060,6 +1062,9 @@ public sealed partial class JobExecutionEngine(
             throw new ConflictException("No robot is on its way for this recovery.", "recovery_no_target");
         }
 
+        if (recovery.ButtonArmId is not null)
+            throw new ConflictException("Review the transfer in progress before calling the robot back.", "recovery_button_armed");
+
         await EndRecoveryMoveAsync(job, recovery, cancellationToken);
         recovery.Status = JobRecoveryStatuses.Open;
         recovery.ToRobotId = null;
@@ -1096,7 +1101,7 @@ public sealed partial class JobExecutionEngine(
     /// no Container ever has two robots. The Job then waits PAUSED: an operator resumes it, and it continues to its
     /// original destination. Refused until the second robot has arrived.
     /// </summary>
-    public async Task<JobRecoveryCase> ConfirmRecoveryTransferAsync(
+    public Task<JobRecoveryCase> ConfirmRecoveryTransferAsync(
         Guid jobId,
         IReadOnlyCollection<Guid> containerIds,
         Guid confirmedBy,
@@ -1104,14 +1109,32 @@ public sealed partial class JobExecutionEngine(
         CancellationToken cancellationToken = default,
         RecoveryCaseAccess? access = null,
         Guid? expectedRobotId = null,
-        IReadOnlyList<HandoverStopScan>? scans = null)
+        IReadOnlyList<HandoverStopScan>? scans = null) =>
+        ConfirmRecoveryTransferCoreAsync(jobId, containerIds, confirmedBy, note, access, expectedRobotId, scans, null, cancellationToken);
+
+    private async Task<JobRecoveryCase> ConfirmRecoveryTransferCoreAsync(
+        Guid jobId, IReadOnlyCollection<Guid> containerIds, Guid? confirmedBy, string? note, RecoveryCaseAccess? access,
+        Guid? expectedRobotId, IReadOnlyList<HandoverStopScan>? scans, RobotInteractionConfirmed? button, CancellationToken cancellationToken)
     {
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         if (access is not null && await FindConfirmedRecoveryAsync(jobId, access, expectedRobotId, cancellationToken) is { } confirmed)
             return confirmed;
+        if (button?.RecoveryTransfer is { } repeat && await db.JobRecoveryCases.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.JobId == jobId && item.Id == repeat.Id && item.Status == JobRecoveryStatuses.Transferred
+            && item.Version - 1 == repeat.Version && item.ButtonArmId == button.RequestMessageId
+            && item.ConfirmedByRobotId == button.RobotId && item.ButtonConfirmationMessageId == button.MessageId, cancellationToken) is { } transferred)
+            return transferred;
 
         var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
-        EnsureRecoveryOwner(recovery, access);
+        if (button is null)
+            EnsureRecoveryOwner(recovery, access);
+        else if (button.RecoveryTransfer is not { } attempt || recovery.Id != attempt.Id || recovery.Version != attempt.Version
+            || recovery.ClaimedBy is null || recovery.ButtonArmId is null || recovery.ButtonArmId != button.RequestMessageId
+            || recovery.ToRobotId != button.RobotId || recovery.MoveStepId != button.JobStepId
+            || recovery.RecoveryEndpointId != button.EndpointId || recovery.ContainerIds.FirstOrDefault() != button.ContainerId
+            || button.InteractionType != RobotRecoveryTransfer.InteractionType)
+            throw new ConflictException("This button message does not match the armed recovery.", "interaction_arm_changed");
+
         if (recovery.Status != JobRecoveryStatuses.TargetAssigned || recovery.ToRobotId is not { } target)
         {
             throw new ConflictException("Send a robot first.", "recovery_no_target");
@@ -1124,13 +1147,13 @@ public sealed partial class JobExecutionEngine(
         }
 
         var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToHashSet();
-        if (!onBoard.SetEquals(recovery.ContainerIds) || (access is null && !onBoard.SetEquals(containerIds)))
+        if (!onBoard.SetEquals(recovery.ContainerIds) || (access is null && button is null && !onBoard.SetEquals(containerIds)))
         {
             throw new DomainValidationException("Name exactly the containers that were on the robot.", "recovery_containers_mismatch");
         }
 
-        if (access is not null)
-            await VerifyRecoveryTransferAsync(job, recovery, target, expectedRobotId, onBoard, scans, cancellationToken);
+        if (access is not null || button is not null)
+            await VerifyRecoveryTransferAsync(job, recovery, target, expectedRobotId, onBoard, scans, cancellationToken, verifiedScans: button is not null);
 
         var now = DateTimeOffset.UtcNow;
         job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
@@ -1142,6 +1165,8 @@ public sealed partial class JobExecutionEngine(
         job.FailureMessage = "The cargo is on the new robot. Resume the Job to continue to its destination.";
         recovery.Status = JobRecoveryStatuses.Transferred;
         recovery.ConfirmedBy = confirmedBy;
+        recovery.ConfirmedByRobotId = button?.RobotId;
+        recovery.ButtonConfirmationMessageId = button?.MessageId;
         recovery.ConfirmedAt = now;
         recovery.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         recovery.ResolvedAt = now;
@@ -1568,6 +1593,9 @@ public sealed partial class JobExecutionEngine(
         {
             return;
         }
+
+        if (await TryArmBegunHandoverStopAsync(job.Id, cancellationToken))
+            return;
 
         var robotId = AssignedRobot(job);
         if (robotId is null)

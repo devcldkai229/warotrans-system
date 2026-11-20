@@ -191,6 +191,8 @@ POST `/claim` and `/release` take `{ caseId, version }`. The case owner can POST
 
 POST `/transfer-confirm` takes `{ caseId, version, robotId, scans: [{ containerId, barcode }], note? }`. It checks the manifest, the selected robot and its current pose, the request status, and blocking handover issues. On success it returns the Job detail, switches custody to the target robot, and leaves the Job paused for a separate Resume. Repeating the confirmed case, version and target as the original confirmer returns the current Job. POST `/resume-same-robot` instead takes `{ caseId, version, note? }` while the case has no recovery target. The application must refresh on `recovery_case_changed` or `recovery_request_inactive`. Apply WorkflowExecution migration `20261120090215_VersionRecoveryCaseClaims`.
 
+When recovery exposes an enabled `ARM_BUTTON` action, POST `/arm-button` with the same case, version, robot and scans. It verifies the entire manifest, keeps custody on the source robot and returns the new case version. Await the actual outcome through GET. The rescue robot finalizes the prepared transfer only when it echoes the matching arm and passes the current checks. The case records `confirmedByRobotId` for this channel. Apply migration `20261120132828_RecordRecoveryButtonConfirmation`. The gateway contract and capability gates are documented in [MQTT Robot Contracts](mqtt-robot-contracts.md#grouped-handover-and-recovery-confirmations).
+
 ## Non-goals (this foundation)
 
 Robot selection, JobAssignment, MQTT, Job execution loop, CreateTransportRequest HTTP endpoint itself.

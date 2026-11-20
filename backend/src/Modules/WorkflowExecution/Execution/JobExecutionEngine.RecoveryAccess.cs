@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks;
 using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
@@ -15,6 +17,46 @@ public sealed record RecoveryRobotCandidate(Guid RobotId, string RobotCode, int 
 
 public sealed partial class JobExecutionEngine
 {
+    internal async Task<bool> CanArmRecoveryButtonAsync(Guid robotId, CancellationToken cancellationToken) =>
+        recoveryOptions?.Value.EnableTransferButton == true
+        && (await fleet.GetRobotAsync(robotId, cancellationToken))?.Capabilities?.Contains(RobotRecoveryTransfer.Capability) == true;
+
+    public async Task ArmRecoveryTransferAsync(
+        Guid jobId, RecoveryCaseAccess access, Guid robotId, IReadOnlyList<HandoverStopScan>? scans, CancellationToken cancellationToken)
+    {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        var replaying = recovery.ButtonArmId is not null && recovery.Version - 1 == access.Version;
+        EnsureRecoveryOwner(recovery, replaying ? access with { Version = recovery.Version } : access);
+        if (recovery is not { Status: JobRecoveryStatuses.TargetAssigned, ToRobotId: { } target, MoveStepId: { } move, RecoveryEndpointId: { } endpoint }
+            || !OrderedSteps(job).Any(item => item.Step.Id == move && item.Step.Status == JobStepStatus.COMPLETED))
+            throw new ConflictException("Wait until the recovery robot reaches the transfer point.", "recovery_robot_not_arrived");
+        if (!await CanArmRecoveryButtonAsync(target, cancellationToken))
+            throw new ConflictException("The recovery robot does not support this button confirmation.", "recovery_button_unavailable");
+
+        var onBoard = job.JobContainers.Where(item => item.Status == JobContainerStatus.ONBOARD).Select(item => item.ContainerId).ToHashSet();
+        if (onBoard.Count == 0 || !onBoard.SetEquals(recovery.ContainerIds))
+            throw new ConflictException("The recovery manifest has changed.", "recovery_case_changed");
+        await VerifyRecoveryTransferAsync(job, recovery, target, robotId, onBoard, scans, cancellationToken);
+
+        if (recovery.ButtonArmId is null)
+        {
+            recovery.ButtonArmId = Guid.NewGuid();
+            recovery.Version++;
+        }
+        await SaveAndPublishAsync(cancellationToken, transaction);
+        if (!await fleet.ArmRecoveryButtonAsync(target, jobId, move, recovery.ContainerIds[0], endpoint,
+                recovery.ButtonArmId.Value, new RobotRecoveryTransfer(recovery.Id, recovery.Version, recovery.ContainerIds), CancellationToken.None))
+            throw new ConflictException("The recovery robot could not arm the button. Refresh the case.", "recovery_button_unavailable");
+    }
+
+    public Task<JobRecoveryCase> ConfirmRecoveryTransferByRobotAsync(RobotInteractionConfirmed button, CancellationToken cancellationToken)
+    {
+        if (recoveryOptions?.Value.EnableTransferButton != true || button.RecoveryTransfer is null)
+            throw new ConflictException("The recovery button is unavailable.", "recovery_button_unavailable");
+        return ConfirmRecoveryTransferCoreAsync(button.JobId, [], null, null, null, button.RobotId, null, button, cancellationToken);
+    }
+
     public async Task SetRecoveryClaimAsync(Guid jobId, RecoveryCaseAccess access, bool release, CancellationToken cancellationToken)
     {
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
@@ -74,13 +116,13 @@ public sealed partial class JobExecutionEngine
 
     private async Task VerifyRecoveryTransferAsync(
         Job job, JobRecoveryCase recovery, Guid target, Guid? expectedRobotId, IReadOnlySet<Guid> onBoard,
-        IReadOnlyList<HandoverStopScan>? scans, CancellationToken cancellationToken)
+        IReadOnlyList<HandoverStopScan>? scans, CancellationToken cancellationToken, bool verifiedScans = false)
     {
         if (expectedRobotId != target)
             throw new ConflictException("The selected recovery robot has changed.", "recovery_target_changed");
         await EnsureRecoveryRequestsActiveAsync(job, cancellationToken);
         await EnsureNoBlockingHandoverIssuesAsync(job.Id, onBoard, cancellationToken);
-        await VerifyContainerScansAsync(onBoard, scans, cancellationToken);
+        if (!verifiedScans) await VerifyContainerScansAsync(onBoard, scans, cancellationToken);
 
         var robot = await fleet.GetRobotAsync(target, cancellationToken)
             ?? throw new ConflictException("The recovery robot is no longer available.", "robot_not_available");
