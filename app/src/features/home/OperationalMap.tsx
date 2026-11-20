@@ -4,10 +4,10 @@ import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect } from 'react-nativ
 import { BatteryMedium, Bot, Layers, X } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto, ZoneDto } from '../../shared/api/navigationApi';
 import type { RobotDto } from '../../shared/api';
-import { getAccessToken, getApiBaseUrl } from '../../shared/api/client';
 import { displayPoint, findMapModel, mapHeading, mapRobotSnapshots, mapViewport, spacedLocations } from '../../shared/maps/mapModel';
 import { zoneColor, zoneLabel } from '../../shared/maps/mapPresentation';
-import { resolveMapPreviewUri, worldToMapPercent } from '../../shared/utils/mapCoordinates';
+import { useMapPreviewSource } from '../../shared/maps/hooks/useMapPreviewSource';
+import { worldToMapPercent } from '../../shared/utils/mapCoordinates';
 import { Button, Text } from '../../shared/ui';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { colors, ThemeColors } from '../../shared/theme/colors';
@@ -46,17 +46,14 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
   const [layersOpen, setLayersOpen] = useState(false);
   const [endpointId, setEndpointId] = useState<string | null>(null);
   const [showScan, setShowScan] = useState(false);
-  const [imageAttempt, setImageAttempt] = useState(0);
-  const [loaded, setLoaded] = useState('');
-  const [failed, setFailed] = useState('');
   const model = useMemo(() => findMapModel(map), [map]);
   const availableHeight = bounds.height || 680;
   const viewport = mapViewport(map, bounds.width || 390, availableHeight, availableHeight > (bounds.width || 390));
   const left = (bounds.width - viewport.width) / 2;
   const sceneTop = (availableHeight - viewport.height) / 2;
-  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl(), getAccessToken());
-  const imageKey = `${map.id}:${uri}:${imageAttempt}`;
   const raster = !model || showScan;
+  const preview = useMapPreviewSource(map.id, map.previewImageUri, raster);
+  const imageKey = `${map.id}:${preview.uri}:${preview.imageAttempt}`;
   const endpoints = map.endpoints.filter(e => e.mapVersionId === map.id && e.isEnabled);
   const zones = (map.zones || []).filter(z => z.mapVersionId === map.id && z.isActive);
   const robots = fleet.filter(robot => robot.currentMapVersionId === map.id && robot.isOnline);
@@ -92,8 +89,8 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
       <Pressable style={styles.tool} accessibilityRole="button" accessibilityLabel="Map layers and locations" onPress={() => setLayersOpen(true)}><Layers size={19} color={colors.textPrimary} /></Pressable>
     </View>
     {sceneVisible && viewport.width > 0 && viewport.height > 0 ? <View style={[styles.floor, { position: 'absolute', left, top: sceneTop, width: viewport.width, height: viewport.height }]}>
-      {raster && uri ? <Image key={imageKey} source={{ uri }} accessibilityLabel={`Published occupancy map ${map.code}`} resizeMode="stretch"
-        onLoad={() => setLoaded(imageKey)} onError={() => setFailed(imageKey)}
+      {raster && preview.uri ? <Image key={imageKey} source={{ uri: preview.uri }} accessibilityLabel={`Published occupancy map ${map.code}`} resizeMode="stretch"
+        onLoad={preview.onImageLoad} onError={preview.onImageError}
         style={{ position: 'absolute', width: map.imageWidthPixels * s, height: map.imageHeightPixels * s,
           left: (viewport.width - map.imageWidthPixels * s) / 2, top: (viewport.height - map.imageHeightPixels * s) / 2,
           transform: [{ rotate: viewport.rotated ? '90deg' : '0deg' }], opacity: model ? 0.28 : 0.65 }} /> : null}
@@ -158,13 +155,13 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
           <Bot size={21} color={localized && robot.isOnline ? colors.primaryText : colors.textMuted} />
         </Pressable>;
       })}
-      {raster && uri && loaded !== imageKey && failed !== imageKey ? <ActivityIndicator style={StyleSheet.absoluteFill} color={colors.primary} /> : null}
+      {preview.isLoading ? <ActivityIndicator style={StyleSheet.absoluteFill} color={colors.primary} /> : null}
     </View> : null}
     {sceneVisible ? <View pointerEvents="none" style={[styles.legend,{bottom:bottomInset+6}]}>
       <View style={styles.scale}><View style={[styles.scaleLine,{width:scaleWidth}]} /><Text variant="caption">{scaleMeters} m</Text></View>
       <Text variant="caption" style={styles.legendText}>{selectedPose ? mapRobotState(selectedPose,map,Date.now(),updateMode).label : mapUpdateLabel(updateMode)}{viewport.rotated ? ' · Rotated View' : ''}</Text>
     </View> : null}
-    {raster && (!uri || failed === imageKey) ? <View style={[styles.imageError,{top:24}]}><Text variant="caption">{uri ? 'Map Image Could Not Be Loaded' : 'Map Preview Is Not Available'}</Text>{uri ? <Button title="Retry Image" variant="outline" size="sm" onPress={() => setImageAttempt(v=>v+1)} /> : null}</View> : null}
+    {preview.hasError ? <View style={[styles.imageError,{top:24}]}><Text variant="caption">{preview.hasPreviewAsset ? 'Map Image Could Not Be Loaded' : 'Map Preview Is Not Available'}</Text>{preview.hasPreviewAsset ? <Button title="Retry Image" variant="outline" size="sm" onPress={preview.retry} /> : null}</View> : null}
     {layersOpen ? <BottomSheet onClose={() => setLayersOpen(false)} accessibilityLabel="map layers">
       <View style={styles.sheetTitle}><Text variant="title" style={styles.flex}>Map Layers</Text><Button title="Close" icon={X} variant="ghost" size="sm" onPress={() => setLayersOpen(false)} /></View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
