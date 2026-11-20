@@ -5,9 +5,9 @@ import { getWorkflow } from './workflowApi';
 import { listRobots } from './fleetApi';
 import { requireMobileCapability } from './capabilities';
 import type {
-  ActionAvailability, HandoverStopAction, HandoverStopResponse, JobContainerResponse, JobDetailResponse,
-  JobStatus, JobStepResponse, JobTaskResponse, HandoverConfirmationBody, HandoverConfirmationResponse,
-  ReportTaskProblemBody,
+  ActionAvailability, HandoverProblemCode, HandoverStopAction, HandoverStopResponse, HandoverStopScan,
+  JobContainerResponse, JobDetailResponse, JobStatus, JobStepResponse, JobTaskResponse,
+  HandoverConfirmationBody, HandoverConfirmationResponse, ReportTaskProblemBody,
 } from '../types/contracts';
 
 export type JobAction = 'START' | 'PAUSE' | 'RESUME' | 'CANCEL';
@@ -309,11 +309,13 @@ export async function confirmInspection(stepId: string, result: 'PASSED' | 'FAIL
   });
   return (await hydrateJobs([response]))[0];
 }
-/** Staff incident categories → backend IssueReport type and severity (OPS-01). */
-const ISSUE_MAPPING: Record<string, { issueType: string; severity: string }> = {
-  CONTAINER_DAMAGED: { issueType: 'CONTAINER', severity: 'HIGH' },
-  BARCODE_UNREADABLE: { issueType: 'CONTAINER', severity: 'MEDIUM' },
-  QUANTITY_MISMATCH: { issueType: 'CONTAINER', severity: 'MEDIUM' },
+/** Staff incident categories → backend IssueReport type, severity and optional handover problemCode (OPS-01). */
+const ISSUE_MAPPING: Record<string, { issueType: string; severity: string; problemCode?: HandoverProblemCode }> = {
+  WRONG_CONTAINER: { issueType: 'CONTAINER', severity: 'HIGH', problemCode: 'WRONG_CONTAINER' },
+  MISSING_CONTAINER: { issueType: 'CONTAINER', severity: 'HIGH', problemCode: 'MISSING_CONTAINER' },
+  CONTAINER_DAMAGED: { issueType: 'CONTAINER', severity: 'HIGH', problemCode: 'CONTAINER_DAMAGED' },
+  BARCODE_UNREADABLE: { issueType: 'CONTAINER', severity: 'MEDIUM', problemCode: 'BARCODE_UNREADABLE' },
+  QUANTITY_MISMATCH: { issueType: 'CONTAINER', severity: 'MEDIUM', problemCode: 'QUANTITY_MISMATCH' },
   SHELF_BLOCKED: { issueType: 'STORAGE', severity: 'MEDIUM' },
   AMR_PATH_BLOCKED: { issueType: 'JOB', severity: 'HIGH' },
 };
@@ -330,18 +332,58 @@ export function reportTaskProblem(
 ) {
   requireMobileCapability('reportIssue');
   const mapped = ISSUE_MAPPING[body.reason] ?? { issueType: 'OTHER', severity: 'MEDIUM' };
+  const problemCode =
+    mapped.problemCode && context.jobId && context.containerId ? mapped.problemCode : null;
   return apiFetch<{ id: string; code: string; status: string }>('/api/operations/issues', {
     method: 'POST',
     body: JSON.stringify({
-      ...mapped,
+      issueType: mapped.issueType,
+      severity: mapped.severity,
       description: `[${body.reason}] ${body.note ?? ''}`.trim(),
       jobId: context.jobId ?? null,
       jobStepId: jobStepId ?? null,
       containerId: context.containerId ?? null,
       robotId: context.robotId ?? null,
+      problemCode,
     }),
   }, callerToken());
 }
 export function completePayloadRecoveryJob(_jobId: string, _robotCode: string): never {
   throw new ApiError(501, 'recovery_not_supported', 'Payload recovery execution is not available on this server.');
+}
+
+export async function confirmHandoverStop(
+  jobId: string,
+  stopId: string,
+  moveId: string,
+  version: number,
+  scans: HandoverStopScan[],
+): Promise<JobDetailResponse> {
+  requireMobileCapability('claimHumanTask');
+  if (typeof moveId !== 'string' || !moveId.trim() || !Number.isInteger(version) || version < 0) {
+    throw new ApiError(400, 'handover_stop_invalid', 'Invalid handover turn reference. Refresh the queue.');
+  }
+  if (!Array.isArray(scans) || !scans.length) {
+    throw new ApiError(400, 'handover_scan_manifest_mismatch', 'Scan each container of this handover once.');
+  }
+  const seen = new Set<string>();
+  const normalizedScans: HandoverStopScan[] = [];
+  for (const item of scans) {
+    const containerId = typeof item?.containerId === 'string' ? item.containerId.trim() : '';
+    const barcode = typeof item?.barcode === 'string' ? item.barcode.trim() : '';
+    if (!containerId || !barcode || seen.has(containerId)) {
+      throw new ApiError(400, 'handover_scan_manifest_mismatch', 'Scan each container of this handover once.');
+    }
+    seen.add(containerId);
+    normalizedScans.push({ containerId, barcode });
+  }
+  const response = await apiFetch<RuntimeJob>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/handover-stops/${encodeURIComponent(stopId)}/confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ moveId: moveId.trim(), version, scans: normalizedScans }),
+    },
+    callerToken(),
+  );
+  return (await hydrateJobs([response]))[0];
 }

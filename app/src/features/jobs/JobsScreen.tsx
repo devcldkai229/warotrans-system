@@ -391,6 +391,10 @@ export function JobsScreen() {
                         void refetchStops();
                         void refetch();
                       }}
+                      onConfirmedJob={() => {
+                        void refetchStops();
+                        void refetch();
+                      }}
                       onRefresh={refetchStops}
                     />
                   ))}

@@ -28,7 +28,9 @@ export const PERMISSIONS = {
   robotLocalize: 'robot.localize',
   robotManualDrive: 'robot.manual.drive',
   notificationRead: 'notification.read',
+  issueRead: 'issue.read',
   issueCreate: 'issue.create',
+  issueManage: 'issue.manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

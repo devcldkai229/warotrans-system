@@ -1,4 +1,6 @@
-import type { HandoverStopResponse, HumanConfirmationOutputs, JobStatus, JobStepResponse } from '../../shared/types/contracts';
+import type {
+  HandoverStopResponse, HandoverStopScan, HumanConfirmationOutputs, IssueReportResponse, JobStatus, JobStepResponse,
+} from '../../shared/types/contracts';
 
 export function humanConfirmation(step?: JobStepResponse): HumanConfirmationOutputs | null {
   if (step?.stepType !== 'HUMAN_INTERACTION' || step.status !== 'COMPLETED') return null;
@@ -101,4 +103,62 @@ export function mergeMyJobIdsWithStops(
     }
   }
   return mine;
+}
+
+export function recordStopScan(
+  stop: Pick<HandoverStopResponse, 'containers'>,
+  scannedByContainerId: Record<string, string>,
+  rawScan: string,
+): { matchedContainerId: string | null; duplicate: boolean; nextScans: Record<string, string> } {
+  const code = rawScan.trim();
+  if (!code) {
+    return { matchedContainerId: null, duplicate: false, nextScans: scannedByContainerId };
+  }
+  const needle = code.toUpperCase();
+  const match = stop.containers.find(
+    item =>
+      (item.barcode && item.barcode.trim().toUpperCase() === needle) ||
+      item.containerId.trim().toUpperCase() === needle,
+  );
+  if (!match) {
+    return { matchedContainerId: null, duplicate: false, nextScans: scannedByContainerId };
+  }
+  const duplicate = Boolean(scannedByContainerId[match.containerId]);
+  const nextScans = {
+    ...scannedByContainerId,
+    [match.containerId]: (match.barcode && match.barcode.trim()) || code,
+  };
+  return { matchedContainerId: match.containerId, duplicate, nextScans };
+}
+
+export function stopScanProgress(
+  stop: Pick<HandoverStopResponse, 'containers'>,
+  scannedByContainerId: Record<string, string>,
+): { total: number; scanned: number; complete: boolean; missingIds: string[]; payload: HandoverStopScan[] } {
+  const payload: HandoverStopScan[] = [];
+  const missingIds: string[] = [];
+  for (const item of stop.containers) {
+    const barcode = scannedByContainerId[item.containerId]?.trim();
+    if (barcode) {
+      payload.push({ containerId: item.containerId, barcode });
+    } else {
+      missingIds.push(item.containerId);
+    }
+  }
+  return {
+    total: stop.containers.length,
+    scanned: payload.length,
+    complete: stop.containers.length > 0 && missingIds.length === 0,
+    missingIds,
+    payload,
+  };
+}
+
+export function isBlockingHandoverIssue(
+  issue: Pick<IssueReportResponse, 'problemCode' | 'status'>,
+): boolean {
+  return (
+    (issue.problemCode === 'WRONG_CONTAINER' || issue.problemCode === 'MISSING_CONTAINER') &&
+    ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(issue.status)
+  );
 }

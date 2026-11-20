@@ -574,7 +574,12 @@ export interface JobDetailResponse {
   operatorPause?: JobOperatorPause | null;
 }
 
-export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE';
+export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE' | 'CONFIRM';
+
+export interface HandoverStopScan {
+  containerId: string;
+  barcode: string;
+}
 
 export interface HandoverStopContainerResponse {
   containerId: string;
@@ -598,6 +603,55 @@ export interface HandoverStopResponse {
   beganAt: UtcDateTime | null;
   version: number;
   availableActions: ActionAvailability[];
+}
+
+export type HandoverProblemCode =
+  | 'WRONG_CONTAINER'
+  | 'MISSING_CONTAINER'
+  | 'BARCODE_UNREADABLE'
+  | 'CONTAINER_DAMAGED'
+  | 'QUANTITY_MISMATCH';
+
+export type IssueStatus = 'OPEN' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+
+export interface IssueEvidenceDto {
+  kind: string;
+  uri: string | null;
+  mimeType: string | null;
+  note: string | null;
+  addedBy: string | null;
+  addedAt: UtcDateTime | null;
+}
+
+export interface IssueReportResponse {
+  id: string;
+  code: string;
+  issueType: string;
+  severity: string;
+  status: IssueStatus | string;
+  description: string;
+  reportedBy: string;
+  assigneeId: string | null;
+  containerId: string | null;
+  transportRequestId: string | null;
+  jobId: string | null;
+  jobStepId: string | null;
+  storageLocationId: string | null;
+  robotId: string | null;
+  evidence: IssueEvidenceDto[];
+  version: number;
+  reportedAt: UtcDateTime;
+  updatedAt: UtcDateTime;
+  resolvedAt: UtcDateTime | null;
+  resolvedBy: string | null;
+  resolution: string | null;
+  allowedTransitions: string[];
+  problemCode: HandoverProblemCode | string | null;
+}
+
+export interface ListIssuesResponse {
+  total: number;
+  items: IssueReportResponse[];
 }
 
 export interface ReportTaskProblemBody {

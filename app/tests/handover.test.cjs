@@ -1,8 +1,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
+const plain = (value) => JSON.parse(JSON.stringify(value));
 const {
-  humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, mergeMyJobIdsWithStops,
+  humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, isBlockingHandoverIssue,
+  mergeMyJobIdsWithStops, recordStopScan, stopScanProgress,
 } = createLoader()('src/features/jobs/handoverData.ts');
 const confirmedStep = (source, actor = {}) => ({
   id: 'handover-1', stepType: 'HUMAN_INTERACTION', operationCode: 'PICKUP_CONFIRM', status: 'COMPLETED',
@@ -213,4 +215,98 @@ test('handover stop helpers classify pre-arrival/ready/in-progress/other and mer
     'staff-a',
   );
   assert.deepEqual([...merged].sort(), ['job-1', 'job-2']);
+});
+
+test('confirmHandoverStop sends moveId, version and deduplicated container scans, propagating 409 holds', async () => {
+  const requests = [];
+  const api = loadApi(async (url, init, token) => {
+    requests.push({ url, method: init.method, body: JSON.parse(init.body), token });
+    return { ...rawJob(), status: 'RUNNING' };
+  });
+
+  const job = await api.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, [
+    { containerId: 'ctn-1', barcode: ' CTN-0001 ' },
+    { containerId: 'ctn-2', barcode: 'CTN-0002' },
+  ]);
+  assert.equal(job.id, 'job');
+  assert.deepEqual(requests[0], {
+    url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/confirm',
+    method: 'POST',
+    body: {
+      moveId: 'move-1',
+      version: 4,
+      scans: [
+        { containerId: 'ctn-1', barcode: 'CTN-0001' },
+        { containerId: 'ctn-2', barcode: 'CTN-0002' },
+      ],
+    },
+    token: 'staff-token',
+  });
+
+  await assert.rejects(
+    () => api.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, []),
+    error => error.code === 'handover_scan_manifest_mismatch',
+  );
+  await assert.rejects(
+    () => api.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, [
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+    ]),
+    error => error.code === 'handover_scan_manifest_mismatch',
+  );
+
+  const blockedApi = loadApi(async () => {
+    const err = new Error('Resolve the wrong or missing container issue before confirming.');
+    err.status = 409;
+    err.code = 'handover_issue_blocking';
+    throw err;
+  });
+  await assert.rejects(
+    () => blockedApi.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, [{ containerId: 'ctn-1', barcode: 'CTN-0001' }]),
+    error => error.status === 409 && error.code === 'handover_issue_blocking',
+  );
+});
+
+test('recordStopScan, stopScanProgress and isBlockingHandoverIssue track multi-container scans and blocking issues', () => {
+  const stop = stopOffer({
+    containers: [
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+      { containerId: 'ctn-2', barcode: 'CTN-0002' },
+    ],
+  });
+
+  const step1 = recordStopScan(stop, {}, ' ctn-0001 ');
+  assert.equal(step1.matchedContainerId, 'ctn-1');
+  assert.equal(step1.duplicate, false);
+
+  const dup = recordStopScan(stop, step1.nextScans, 'CTN-0001');
+  assert.equal(dup.matchedContainerId, 'ctn-1');
+  assert.equal(dup.duplicate, true);
+
+  const wrong = recordStopScan(stop, step1.nextScans, 'CTN-9999');
+  assert.equal(wrong.matchedContainerId, null);
+  assert.deepEqual(plain(stopScanProgress(stop, step1.nextScans)), {
+    total: 2,
+    scanned: 1,
+    complete: false,
+    missingIds: ['ctn-2'],
+    payload: [{ containerId: 'ctn-1', barcode: 'CTN-0001' }],
+  });
+
+  const step2 = recordStopScan(stop, step1.nextScans, 'CTN-0002');
+  assert.deepEqual(plain(stopScanProgress(stop, step2.nextScans)), {
+    total: 2,
+    scanned: 2,
+    complete: true,
+    missingIds: [],
+    payload: [
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+      { containerId: 'ctn-2', barcode: 'CTN-0002' },
+    ],
+  });
+
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'WRONG_CONTAINER', status: 'OPEN' }), true);
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'MISSING_CONTAINER', status: 'IN_PROGRESS' }), true);
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'WRONG_CONTAINER', status: 'RESOLVED' }), false);
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'BARCODE_UNREADABLE', status: 'OPEN' }), false);
 });

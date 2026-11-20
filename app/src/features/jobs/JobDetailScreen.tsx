@@ -58,6 +58,7 @@ import {
 import { VerifyModal } from './VerifyModal';
 import { HandoverActionsCard } from './HandoverActionsCard';
 import { HandoverStopCard } from './HandoverStopCard';
+import { JobIssuesCard } from './JobIssuesCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal, type IssueSubmitInput } from '../monitoring/IssueReportingModal';
 import {
@@ -69,6 +70,7 @@ import {
   getUserErrorMessage,
   isJobActionAllowed,
   listHandoverStops,
+  listIssues,
   mobileCapabilities,
   pauseJob,
   reportTaskProblem,
@@ -101,6 +103,8 @@ export function JobDetailScreen() {
   const [verificationStepId, setVerificationStepId] = useState<string | null>(null);
   const [isMismatch, setIsMismatch] = useState(isInitialMismatch);
   const [isIssueOpen, setIsIssueOpen] = useState(isInitialIssue);
+  const [issueModalCategory, setIssueModalCategory] = useState<IncidentCategory | undefined>(undefined);
+  const [issueModalContainerId, setIssueModalContainerId] = useState<string | undefined>(undefined);
   const [showMenu, setShowMenu] = useState(false);
   const [showFullJobNo, setShowFullJobNo] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -149,6 +153,9 @@ export function JobDetailScreen() {
   }, [jobId, refreshJob]);
 
   const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
+  const canReadIssues = sessionCan(session, PERMISSIONS.issueRead);
+  const canCreateIssues = sessionCan(session, PERMISSIONS.issueCreate);
+  const canManageIssues = sessionCan(session, PERMISSIONS.issueManage);
   const stopsQuery = useQuery({
     queryKey: ['handover-stops', session?.id],
     queryFn: ({ signal }) => listHandoverStops({ signal }),
@@ -157,6 +164,13 @@ export function JobDetailScreen() {
   });
   const { refetch: refetchStops } = stopsQuery;
   const activeStop = stopsQuery.data?.find(item => item.jobId === job.id);
+  const issuesQuery = useQuery({
+    queryKey: ['job-issues', session?.id, job.id],
+    queryFn: ({ signal }) => listIssues({ jobId: job.id }, signal),
+    enabled: Boolean(session?.id && canReadIssues && job.id),
+    refetchInterval: 10_000,
+  });
+  const { refetch: refetchIssues } = issuesQuery;
 
   useEffect(() => {
     if (
@@ -171,8 +185,9 @@ export function JobDetailScreen() {
           console.warn('Failed to refetch job detail on realtime jobUpdated:', err);
         });
       if (canOperate) void refetchStops();
+      if (canReadIssues) void refetchIssues();
     }
-  }, [lastJobUpdate, jobId, job.id, job.jobNo, canOperate, refreshJob, refetchStops]);
+  }, [lastJobUpdate, jobId, job.id, job.jobNo, canOperate, canReadIssues, refreshJob, refetchStops, refetchIssues]);
 
   // A traffic grant / wait / release for this job (trafficUpdated): its waiting reason and progress changed.
   useEffect(() => {
@@ -314,16 +329,20 @@ export function JobDetailScreen() {
 
   const handleIssueSubmit = async (input: IssueSubmitInput) => {
     const description = input.notes.trim() || `Staff reported ${input.category} on job ${job.jobNo}`;
+    const targetContainerId = input.containerId ?? activeContainerId;
+    const stepIdForIssue = targetContainerId === activeContainerId ? job.activeStepId : undefined;
     const outcome = await submitIssueAndOptionalPause({
       existingIssue: input.existingIssue,
       createIssue: () => reportTaskProblem(
         job.activeTaskId,
         { reason: input.category, note: description },
-        job.activeStepId,
-        { jobId: job.id, containerId: activeContainerId, robotId: job.assignedRobotId },
+        stepIdForIssue,
+        { jobId: job.id, containerId: targetContainerId, robotId: job.assignedRobotId },
       ),
       pauseJob: input.pauseJob ? () => pauseJob(job.id, description.slice(0, 500)) : undefined,
     });
+    if (canReadIssues) void refetchIssues();
+    if (canOperate) void refetchStops();
     if (outcome.pausedJob && activeJobId.current === job.id) {
       jobReader.invalidate();
       setJob(mapJobDetailToAppJobItem(outcome.pausedJob, session?.id));
@@ -653,12 +672,26 @@ export function JobDetailScreen() {
               void refetchStops();
               void refreshJob().catch(() => {});
             }}
+            onConfirmedJob={(detail) => {
+              if (activeJobId.current !== job.id) return;
+              jobReader.invalidate();
+              setJob(mapJobDetailToAppJobItem(detail, session?.id));
+              void refetchStops();
+              if (canReadIssues) void refetchIssues();
+              void refreshJob().catch(() => {});
+              toast.success('Handover stop confirmed.');
+            }}
+            onReportContainerProblem={(category, containerId) => {
+              setIssueModalCategory(category);
+              setIssueModalContainerId(containerId);
+              setIsIssueOpen(true);
+            }}
             onRefresh={refetchStops}
           />
         ) : null}
 
         {/* Web parity: claim / give back / take over, confirm without scanning, confirm the whole stop at once. */}
-        {isWaiting && activeStep ? (
+        {isWaiting && activeStep && !activeStop?.claimedBy ? (
           <HandoverActionsCard
             key={activeStep.id}
             jobId={job.id}
@@ -676,6 +709,22 @@ export function JobDetailScreen() {
               setJob(mapJobDetailToAppJobItem(detail, session?.id));
               void refetchStops();
               void refreshJob().catch(() => {});
+            }}
+          />
+        ) : null}
+
+        {issuesQuery.data?.items?.length ? (
+          <JobIssuesCard
+            issues={issuesQuery.data.items}
+            containerLabel={id => job.containers.find(container => container.containerId === id)?.code || id}
+            canCreateIssue={canCreateIssues}
+            canManageIssues={canManageIssues}
+            onIssueUpdated={async () => {
+              await Promise.all([
+                refetchIssues(),
+                ...(canOperate ? [refetchStops()] : []),
+                refreshJob().catch(() => null),
+              ]);
             }}
           />
         ) : null}
@@ -836,12 +885,23 @@ export function JobDetailScreen() {
         robotCode={job.robot}
         jobId={job.id}
         containerCode={activeContainer?.code}
+        containers={job.containers
+          .filter((c): c is typeof c & { containerId: string } => Boolean(c.containerId))
+          .map(c => ({ containerId: c.containerId, code: c.code }))}
+        initialCategory={issueModalCategory}
+        initialContainerId={issueModalContainerId ?? activeContainerId}
         canPause={canPause}
-        onClose={() => setIsIssueOpen(false)}
+        onClose={() => {
+          setIsIssueOpen(false);
+          setIssueModalCategory(undefined);
+          setIssueModalContainerId(undefined);
+        }}
         onSubmit={handleIssueSubmit}
         onRefreshJob={async () => {
           await refreshJob();
           if (job.assignedRobotId) void stopStateQuery.refetch();
+          if (canOperate) void refetchStops();
+          if (canReadIssues) void refetchIssues();
         }}
       />
 
