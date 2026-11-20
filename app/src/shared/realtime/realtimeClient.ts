@@ -76,7 +76,7 @@ export function toLiveNotification(data: ServerNotificationEvent): LiveNotificat
   const category: LiveNotificationEvent['category'] =
     data.kind === 'ROBOT_BATTERY_LOW' ? 'BATTERY_LOW'
       : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' || data.kind.startsWith('HANDOVER_') ? 'JOB_ASSIGNED'
-        : data.kind === 'WAREHOUSE_HAZARD' || (data.kind.startsWith('ISSUE') && data.kind !== 'ISSUE_RESOLVED') ? 'HAZARD'
+        : data.kind === 'WAREHOUSE_HAZARD' || data.kind === 'JOB_RECOVERY_REQUIRED' || (data.kind.startsWith('ISSUE') && data.kind !== 'ISSUE_RESOLVED') ? 'HAZARD'
           : 'SYSTEM';
   return {
     id: data.id,

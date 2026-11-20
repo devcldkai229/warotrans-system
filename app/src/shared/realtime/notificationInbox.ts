@@ -67,5 +67,8 @@ export function notificationDestination(item: LiveNotificationEvent, session: Us
   if (item.entityType === 'ISSUE' && sessionCan(session, PERMISSIONS.issueRead)) {
     return { screen: 'block_path' as const, params: { issueId: item.entityId } };
   }
+  if (item.entityType === 'RECOVERY' && sessionCan(session, PERMISSIONS.jobRead)) {
+    return { screen: 'payload_recovery' as const, params: { jobId: item.entityId } };
+  }
   return null;
 }

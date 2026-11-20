@@ -29,7 +29,9 @@ import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import type { IssueStatus } from '../../shared/types/contracts';
 import type { IssueAndPauseOutcome, IssueReceipt } from '../jobs/jobData';
+import { IssuePhotoSection } from '../safety/IssuePhotoSection';
 
 export type IncidentCategory =
   | 'WRONG_CONTAINER'
@@ -330,15 +332,32 @@ export function IssueReportingModal({
             <View style={styles.evidenceHeader}>
               <Text style={styles.sectionLabel}>Photo evidence</Text>
               <View style={styles.evidenceBadge}>
-                <Text style={styles.evidenceBadgeText}>Unavailable</Text>
+                <Text style={styles.evidenceBadgeText}>Optional</Text>
               </View>
             </View>
-            <View style={styles.evidenceUnavailable}>
-              <Camera size={16} color={colors.textMuted} />
-              <Text style={styles.evidenceUnavailableText}>
-                Photo upload is not configured on this server yet. Submit the report without a photo.
-              </Text>
-            </View>
+            {createdIssue && typeof createdIssue.version === 'number' ? (
+              <IssuePhotoSection
+                issue={{
+                  id: createdIssue.id,
+                  version: createdIssue.version,
+                  status: createdIssue.status as IssueStatus,
+                  evidence: createdIssue.evidence ?? [],
+                }}
+                canUpload
+                onUploaded={(updated) => {
+                  setCreatedIssue(updated);
+                  void onRefreshJob?.();
+                }}
+                onRefreshIssue={onRefreshJob}
+              />
+            ) : (
+              <View style={styles.evidenceUnavailable}>
+                <Camera size={16} color={colors.textMuted} />
+                <Text style={styles.evidenceUnavailableText}>
+                  Attach up to 4 JPEG or PNG photos (max 2 MiB each) right after creating the ticket from Reported Issues on this Job.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* 3. Operator Notes */}

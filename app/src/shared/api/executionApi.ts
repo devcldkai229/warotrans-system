@@ -396,7 +396,13 @@ export function reportTaskProblem(
   const mapped = ISSUE_MAPPING[body.reason] ?? { issueType: 'OTHER', severity: 'MEDIUM' };
   const problemCode =
     mapped.problemCode && context.jobId && context.containerId ? mapped.problemCode : null;
-  return apiFetch<{ id: string; code: string; status: string }>('/api/operations/issues', {
+  return apiFetch<{
+    id: string;
+    code: string;
+    status: string;
+    version?: number;
+    evidence?: import('../types/contracts').IssueEvidenceDto[];
+  }>('/api/operations/issues', {
     method: 'POST',
     body: JSON.stringify({
       issueType: mapped.issueType,
@@ -630,6 +636,39 @@ export async function confirmRecoveryTransfer(
     callerToken(),
   );
   return (await hydrateJobs([response]))[0];
+}
+
+export async function armRecoveryTransferButton(
+  jobId: string,
+  caseId: string,
+  version: number,
+  robotId: string,
+  scans: HandoverStopScan[],
+  note?: string | null,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const trimmedRobotId = typeof robotId === 'string' ? robotId.trim() : '';
+  if (!trimmedRobotId) {
+    throw new ApiError(400, 'recovery_no_target', 'No rescue robot is assigned to this recovery case.');
+  }
+  const normalizedScans = normalizeManifestScans(scans, 'Scan each onboard container before arming the rescue robot button.');
+  const normalizedNote = normalizeRecoveryNote(note);
+  const data = await apiFetch<{ recovery?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/arm-button`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        caseId: trimmedCaseId,
+        version,
+        robotId: trimmedRobotId,
+        scans: normalizedScans,
+        note: normalizedNote,
+      }),
+    },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
 }
 
 export async function resumeRecoveryOnSameRobot(

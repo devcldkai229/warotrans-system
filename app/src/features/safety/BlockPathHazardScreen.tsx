@@ -54,6 +54,7 @@ import {
   hazardTypeLabel,
   type HazardLocationKind,
 } from './hazardReportData';
+import { IssuePhotoSection } from './IssuePhotoSection';
 
 const LOCATION_KIND_OPTIONS: ReadonlyArray<{ label: string; value: HazardLocationKind }> = [
   { label: 'Corridor / Aisle', value: 'edge' },
@@ -373,6 +374,18 @@ export function BlockPathHazardScreen() {
                     Reporting logs a safety ticket and notifies warehouse staff. Robot routes and traffic zones are only changed by authorized traffic control.
                   </Text>
                 </View>
+
+                <IssuePhotoSection
+                  issue={activeIssue}
+                  canUpload={canCreate}
+                  onUploaded={(updated) => {
+                    if (submittedTicket?.id === updated.id) {
+                      setSubmittedTicket(updated);
+                    }
+                    client.setQueryData(['hazard-issue-detail', session?.id, updated.id], updated);
+                  }}
+                  onRefreshIssue={canRead ? () => issueQuery.refetch() : undefined}
+                />
 
                 {canManage && activeIssue.allowedTransitions.length > 0 ? (
                   <View style={styles.transitionSection}>

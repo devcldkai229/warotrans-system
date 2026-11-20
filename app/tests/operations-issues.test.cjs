@@ -267,3 +267,73 @@ test('hazardReportData filters active map locations, builds payloads and keeps s
     },
   );
 });
+
+test('issuePhotoData validates JPEG/PNG magic bytes, 2 MiB ceiling and uploadIssuePhoto preserves photoId for retries', async () => {
+  const {
+    MAX_ISSUE_PHOTO_BYTES,
+    createIssuePhotoId,
+    decodeBase64ToBytes,
+    encodeBytesToBase64,
+    isIssuePhotoPath,
+    validatePhotoUploadBytes,
+  } = createLoader()('src/features/safety/issuePhotoData.ts');
+
+  assert.match(createIssuePhotoId(), /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+
+  assert.equal(isIssuePhotoPath('/api/operations/issues/iss-1/evidence/photos/ph-1'), true);
+  assert.equal(isIssuePhotoPath('https://evil.example/api/operations/issues/1/evidence/photos/2'), false);
+  assert.equal(isIssuePhotoPath('/api/operations/issues/1/other'), false);
+
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  const bad = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+
+  assert.equal(validatePhotoUploadBytes(jpeg).mimeType, 'image/jpeg');
+  assert.equal(validatePhotoUploadBytes(png).mimeType, 'image/png');
+  assert.equal(validatePhotoUploadBytes(bad).ok, false);
+  assert.equal(validatePhotoUploadBytes(new Uint8Array(MAX_ISSUE_PHOTO_BYTES + 1)).code, 'issue_photo_too_large');
+
+  const roundTrip = decodeBase64ToBytes(`data:image/jpeg;base64,${encodeBytesToBase64(jpeg)}`);
+  assert.deepEqual(Array.from(roundTrip), Array.from(jpeg));
+
+  let attempts = 0;
+  const seen = [];
+  const ops = loadOps(async (path, init = {}, token) => {
+    attempts += 1;
+    seen.push({ path, method: init.method, headers: init.headers, bodyLength: init.body?.byteLength, token });
+    if (attempts === 1) throw new Error('Network timeout');
+    return sampleIssue({
+      version: 2,
+      evidence: [{ kind: 'PHOTO', uri: '/api/operations/issues/iss-1/evidence/photos/photo-uuid-1', mimeType: 'image/jpeg', note: null, addedBy: 'staff-a', addedAt: '2026-11-20T12:00:00Z' }],
+    });
+  }, 'staff-token');
+
+  await assert.rejects(() => ops.uploadIssuePhoto('iss-1', 'photo-uuid-1', 1, jpeg, 'image/jpeg'), /Network timeout/);
+  const uploaded = await ops.uploadIssuePhoto('iss-1', 'photo-uuid-1', 1, jpeg, 'image/jpeg');
+  assert.equal(uploaded.version, 2);
+  assert.deepEqual(plain(seen), [
+    {
+      path: '/api/operations/issues/iss-1/evidence/photos?photoId=photo-uuid-1&expectedVersion=1',
+      method: 'POST',
+      headers: { 'Content-Type': 'image/jpeg' },
+      bodyLength: jpeg.byteLength,
+      token: 'staff-token',
+    },
+    {
+      path: '/api/operations/issues/iss-1/evidence/photos?photoId=photo-uuid-1&expectedVersion=1',
+      method: 'POST',
+      headers: { 'Content-Type': 'image/jpeg' },
+      bodyLength: jpeg.byteLength,
+      token: 'staff-token',
+    },
+  ]);
+
+  await assert.rejects(
+    () => ops.uploadIssuePhoto('iss-1', 'photo-uuid-1', 1, jpeg, 'image/png'),
+    error => error.code === 'issue_photo_invalid',
+  );
+  await assert.rejects(
+    () => ops.uploadIssuePhoto('iss-1', ' ', 1, jpeg),
+    error => error.code === 'issue_photo_request_invalid',
+  );
+});

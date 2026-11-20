@@ -162,3 +162,22 @@ export function isBlockingHandoverIssue(
     ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(issue.status)
   );
 }
+
+/**
+ * M2 canonical grouped handover stops must go through HandoverStopCard (or wait for the
+ * offer to open in the queue once activeHandoverStopId is set). Only non-grouped workflows
+ * with neither activeHandoverStopId nor an active HandoverStop fall back to per-step handover.
+ */
+export function shouldUseLegacyStepHandover(
+  job: { activeHandoverStopId?: string | null },
+  activeStop: Pick<HandoverStopResponse, 'id'> | null | undefined,
+): boolean {
+  return !job.activeHandoverStopId && !activeStop;
+}
+
+export function isWaitingForHandoverOffer(
+  job: { status?: JobStatus; activeHandoverStopId?: string | null },
+  activeStop: Pick<HandoverStopResponse, 'id'> | null | undefined,
+): boolean {
+  return job.status === 'RUNNING' && Boolean(job.activeHandoverStopId) && !activeStop;
+}

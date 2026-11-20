@@ -246,4 +246,13 @@ export const viServerErrors: Record<string, string> = {
   hazard_warehouse_out_of_scope: 'Hãy chọn vị trí thuộc phạm vi kho bạn đang vận hành.',
   hazard_request_invalid: 'Hãy chọn loại sự cố, mức độ và bản đồ kho đã xuất bản.',
   hazard_description_invalid: 'Hãy mô tả mối nguy hiểm từ 1 đến 2000 ký tự.',
+  issue_photo_request_invalid: 'Thiếu mã ảnh hoặc phiên bản sự cố hiện tại.',
+  issue_photo_forbidden: 'Chỉ người báo cáo, người được giao hoặc người có quyền mới được đính kèm ảnh.',
+  issue_photo_type_unsupported: 'Chỉ hỗ trợ tải ảnh JPEG hoặc PNG.',
+  issue_photo_invalid: 'Dữ liệu ảnh không khớp với định dạng JPEG/PNG.',
+  issue_photo_id_conflict: 'Mã ảnh này đã được dùng cho một tệp ảnh khác.',
+  issue_photo_too_large: 'Mỗi ảnh đính kèm tối đa 2 MiB.',
+  issue_photo_not_found: 'Không tìm thấy ảnh đính kèm của sự cố này.',
+  recovery_button_armed: 'Đã kích hoạt nút xác nhận trên robot cứu hộ; chờ bấm nút để chốt.',
+  recovery_button_unavailable: 'Robot cứu hộ hoặc cổng giao tiếp chưa bật xác nhận nút bấm cho khôi phục.',
 };

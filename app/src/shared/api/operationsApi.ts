@@ -1,4 +1,16 @@
-import { apiFetch, ApiError, getAccessToken } from './client';
+import {
+  apiFetch,
+  ApiError,
+  getAccessToken,
+  getApiBaseUrl,
+  getFreshAccessToken,
+} from './client';
+import {
+  encodeBytesToBase64,
+  isIssuePhotoPath,
+  type IssuePhotoMimeType,
+  validatePhotoUploadBytes,
+} from '../../features/safety/issuePhotoData';
 import type {
   HazardType,
   IssueReportResponse,
@@ -155,4 +167,70 @@ export async function reportWarehouseHazard(
     throw new ApiError(502, 'issue_invalid', 'Could not read hazard ticket details from the server.');
   }
   return created;
+}
+
+export async function uploadIssuePhoto(
+  issueId: string,
+  photoId: string,
+  expectedVersion: number,
+  bytes: Uint8Array,
+  mimeType?: IssuePhotoMimeType,
+): Promise<IssueReportResponse> {
+  const trimmedPhotoId = typeof photoId === 'string' ? photoId.trim() : '';
+  if (!trimmedPhotoId || !Number.isInteger(expectedVersion) || expectedVersion < 1) {
+    throw new ApiError(400, 'issue_photo_request_invalid', 'Provide a photo UUID and the current issue version.');
+  }
+  const checked = validatePhotoUploadBytes(bytes);
+  if (!checked.ok) {
+    throw new ApiError(checked.code === 'issue_photo_too_large' ? 413 : 400, checked.code, checked.message);
+  }
+  if (mimeType && mimeType !== checked.mimeType) {
+    throw new ApiError(400, 'issue_photo_invalid', 'The photo bytes do not match the content type.');
+  }
+  const query = new URLSearchParams({
+    photoId: trimmedPhotoId,
+    expectedVersion: String(expectedVersion),
+  });
+  const updated = await apiFetch<IssueReportResponse>(
+    `/api/operations/issues/${encodeURIComponent(issueId)}/evidence/photos?${query}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': checked.mimeType },
+      body: bytes as unknown as BodyInit,
+    },
+    callerToken(),
+  );
+  if (!updated || updated.id !== issueId) {
+    throw new ApiError(502, 'issue_invalid', 'Could not read issue details from the server.');
+  }
+  return updated;
+}
+
+export async function readAuthorizedIssuePhotoDataUrl(
+  uri: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!isIssuePhotoPath(uri)) {
+    throw new ApiError(400, 'issue_photo_not_found', 'Invalid issue photo path.');
+  }
+  const token = typeof getFreshAccessToken === 'function' ? await getFreshAccessToken(30) : callerToken();
+  if (!token) {
+    throw new ApiError(401, 'unauthenticated', 'Your session could not be verified. Please sign in again.');
+  }
+  const baseUrl = typeof getApiBaseUrl === 'function' ? getApiBaseUrl().replace(/\/+$/, '') : '';
+  const response = await fetch(`${baseUrl}${uri.trim()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'issue_photo_not_found', 'Could not load photo');
+  }
+  const rawType = response.headers.get('content-type')?.split(';', 2)[0].trim().toLowerCase();
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  const mime = rawType === 'image/jpeg' || rawType === 'image/png' ? rawType : validatePhotoUploadBytes(buffer);
+  const resolvedMime = typeof mime === 'string' ? mime : mime.ok ? mime.mimeType : null;
+  if (!resolvedMime) {
+    throw new ApiError(502, 'issue_photo_invalid', 'Could not load photo');
+  }
+  return `data:${resolvedMime};base64,${encodeBytesToBase64(buffer)}`;
 }

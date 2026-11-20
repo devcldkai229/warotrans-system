@@ -10,6 +10,7 @@ import { typography } from '../../shared/theme/typography';
 import type { IssueReportResponse } from '../../shared/types/contracts';
 import { Button, Card, StatusPill, Text, TextField } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { IssuePhotoSection } from '../safety/IssuePhotoSection';
 import { isBlockingHandoverIssue } from './handoverData';
 
 interface JobIssuesCardProps {
@@ -145,6 +146,13 @@ export function JobIssuesCard({
                 {t('Resolution: {text}', { text: issue.resolution })}
               </Text>
             ) : null}
+
+            <IssuePhotoSection
+              issue={issue}
+              canUpload={canCreateIssue}
+              onUploaded={onIssueUpdated}
+              onRefreshIssue={onIssueUpdated}
+            />
 
             {issueError ? (
               <Text variant="caption" color="dangerText">

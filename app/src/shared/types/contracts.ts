@@ -575,6 +575,7 @@ export interface JobDetailResponse {
   tasks: JobTaskResponse[];
   availableActions?: ActionAvailability[];
   operatorPause?: JobOperatorPause | null;
+  activeHandoverStopId?: string | null;
 }
 
 export type JobRecoveryStatus = 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT';
@@ -585,6 +586,7 @@ export type JobRecoveryAction =
   | 'ASSIGN'
   | 'UNASSIGN'
   | 'CONFIRM'
+  | 'ARM_BUTTON'
   | 'RESUME_SAME_ROBOT';
 
 export interface RecoveryContainerResponse {
@@ -611,6 +613,8 @@ export interface JobRecoveryResponse {
   version: number;
   containers: RecoveryContainerResponse[];
   availableActions: ActionAvailability[];
+  buttonArmed?: boolean;
+  confirmedByRobotId?: string | null;
 }
 
 export interface RecoveryRobotCandidateResponse {

@@ -184,6 +184,40 @@ test('recovery mutations send caseId/version, bind caller token, and validate sc
     () => api.assignRecoveryRobot('job-1', 'case-1', -1, 'rbt-2', 'ep-1'),
     error => error.code === 'recovery_case_changed',
   );
+
+  const armCalls = [];
+  const armApi = loadExecutionApi(async (url, init = {}, token) => {
+    armCalls.push({ url, method: init.method, body: JSON.parse(init.body), token });
+    return {
+      recovery: makeRecovery({
+        version: 5,
+        buttonArmed: true,
+        availableActions: [{ action: 'ARM_BUTTON', allowed: true, reason: null }],
+      }),
+    };
+  });
+  const armed = await armApi.armRecoveryTransferButton(
+    'job-1',
+    'case-1',
+    4,
+    'rbt-2',
+    [{ containerId: 'ctn-1', barcode: 'CTN-0001' }],
+    ' Ready on robot ',
+  );
+  assert.equal(armed.buttonArmed, true);
+  assert.equal(armApi.isRecoveryActionAllowed(armed, 'ARM_BUTTON'), true);
+  assert.deepEqual(armCalls[0], {
+    url: '/api/workflow-execution/jobs/job-1/recovery/arm-button',
+    method: 'POST',
+    body: {
+      caseId: 'case-1',
+      version: 4,
+      robotId: 'rbt-2',
+      scans: [{ containerId: 'ctn-1', barcode: 'CTN-0001' }],
+      note: 'Ready on robot',
+    },
+    token: 'staff-token',
+  });
 });
 
 test('payloadRecoveryData tracks manifest scans, phases, enabled map endpoints and error reasons', () => {

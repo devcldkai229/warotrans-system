@@ -58,6 +58,7 @@ import {
 import { VerifyModal } from './VerifyModal';
 import { HandoverActionsCard } from './HandoverActionsCard';
 import { HandoverStopCard } from './HandoverStopCard';
+import { isWaitingForHandoverOffer, shouldUseLegacyStepHandover } from './handoverData';
 import { JobIssuesCard } from './JobIssuesCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal, type IssueSubmitInput } from '../monitoring/IssueReportingModal';
@@ -164,6 +165,8 @@ export function JobDetailScreen() {
   });
   const { refetch: refetchStops } = stopsQuery;
   const activeStop = stopsQuery.data?.find(item => item.jobId === job.id);
+  const allowLegacyStepHandover = shouldUseLegacyStepHandover(job, activeStop);
+  const waitingForHandoverOffer = isWaitingForHandoverOffer(job, activeStop);
   const issuesQuery = useQuery({
     queryKey: ['job-issues', session?.id, job.id],
     queryFn: ({ signal }) => listIssues({ jobId: job.id }, signal),
@@ -325,7 +328,7 @@ export function JobDetailScreen() {
 
   const handleOpenVerify = (containerCode?: string) => {
     triggerHaptic('tap');
-    if (!job.activeStepId || !isWaiting) return;
+    if (!job.activeStepId || !isWaiting || !allowLegacyStepHandover) return;
     setVerificationStepId(job.activeStepId);
     if (containerCode) setTargetContainer(containerCode);
     setIsVerifyOpen(true);
@@ -701,8 +704,33 @@ export function JobDetailScreen() {
           />
         ) : null}
 
-        {/* Web parity: claim / give back / take over, confirm without scanning, confirm the whole stop at once. */}
-        {isWaiting && activeStep && !activeStop?.claimedBy ? (
+        {waitingForHandoverOffer ? (
+          <Card padding="md" gap={8}>
+            <View style={styles.cardHeaderRow}>
+              <Text variant="headline">{t('Waiting For Handover Offer')}</Text>
+              <StatusPill status="WAITING" size="sm" dot />
+            </View>
+            <Text variant="body" color={colors.textSecondary}>
+              {t('This stop uses the grouped handover queue. Wait for the offer to appear here or refresh the queue.')}
+            </Text>
+            {canOperate ? (
+              <Button
+                title="Refresh Queue"
+                variant="outline"
+                size="sm"
+                icon={RefreshCw}
+                loading={stopsQuery.isFetching}
+                onPress={() => {
+                  void refetchStops();
+                  void refreshJob().catch(() => {});
+                }}
+              />
+            ) : null}
+          </Card>
+        ) : null}
+
+        {/* Fallback per-step handover card only for non-grouped workflows (no activeHandoverStopId and no activeStop). */}
+        {isWaiting && activeStep && allowLegacyStepHandover ? (
           <HandoverActionsCard
             key={activeStep.id}
             jobId={job.id}
@@ -813,7 +841,7 @@ export function JobDetailScreen() {
               }
               accessibilityLabel="Initiate emergency cargo rescue"
             />
-          ) : isWaiting ? (
+          ) : isWaiting && allowLegacyStepHandover ? (
             <Button
               title="Verify Handover"
               variant="primary"
@@ -871,7 +899,7 @@ export function JobDetailScreen() {
 
       {/* Verification Modal Sheet */}
       <VerifyModal
-        visible={isVerifyOpen}
+        visible={isVerifyOpen && allowLegacyStepHandover}
         targetContainer={verificationContainer?.code || targetContainer}
         targetContainerId={verificationContainer?.containerId}
         jobStepId={verificationStepId || undefined}

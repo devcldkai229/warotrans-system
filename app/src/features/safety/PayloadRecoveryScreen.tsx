@@ -13,6 +13,7 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import {
+  armRecoveryTransferButton,
   assignRecoveryRobot,
   claimJobRecovery,
   confirmRecoveryTransfer,
@@ -70,6 +71,7 @@ type BusyAction =
   | 'release'
   | 'assign'
   | 'unassign'
+  | 'arm_button'
   | 'confirm'
   | 'same_robot'
   | null;
@@ -236,16 +238,16 @@ export function PayloadRecoveryScreen() {
       !appActive
       || !resolvedJobId
       || !recovery
-      || recovery.status !== 'TARGET_ASSIGNED'
-      || recovery.robotArrived
+      || (recovery.status !== 'TARGET_ASSIGNED' && !recovery.buttonArmed)
+      || (recovery.robotArrived && !recovery.buttonArmed)
     ) {
       return;
     }
     const timer = setInterval(() => {
       void loadRecoveryData({ quiet: true });
-    }, 5_000);
+    }, recovery.buttonArmed ? 3_000 : 5_000);
     return () => clearInterval(timer);
-  }, [appActive, resolvedJobId, recovery?.status, recovery?.robotArrived, loadRecoveryData]);
+  }, [appActive, resolvedJobId, recovery?.status, recovery?.robotArrived, recovery?.buttonArmed, loadRecoveryData]);
 
   const endpoints = useMemo(() => eligibleRecoveryEndpoints(map), [map]);
   const robotCodeFor = useCallback(
@@ -276,6 +278,7 @@ export function PayloadRecoveryScreen() {
   const canAssign = canOperate && isRecoveryActionAllowed(recovery, 'ASSIGN');
   const canUnassign = canOperate && isRecoveryActionAllowed(recovery, 'UNASSIGN');
   const canConfirm = canOperate && isRecoveryActionAllowed(recovery, 'CONFIRM');
+  const canArmButton = canOperate && isRecoveryActionAllowed(recovery, 'ARM_BUTTON');
   const canResumeSameRobot = canOperate && isRecoveryActionAllowed(recovery, 'RESUME_SAME_ROBOT');
 
   const requestInactiveReason = [
@@ -663,6 +666,11 @@ export function PayloadRecoveryScreen() {
                 <Text variant="body" color="textSecondary">
                   This job is currently {job.status}. Open Job Details to inspect or continue execution.
                 </Text>
+                {recovery.confirmedByRobotId ? (
+                  <Text variant="caption" color="successText">
+                    Confirmed via rescue robot button.
+                  </Text>
+                ) : null}
                 <Button
                   title="Open Job Details"
                   variant="primary"
@@ -966,6 +974,16 @@ export function PayloadRecoveryScreen() {
                           editable={!busy}
                         />
 
+                        {recovery.buttonArmed ? (
+                          <View style={styles.noticeInfo}>
+                            <Text variant="caption" color="infoText">
+                              {t('Rescue robot button armed — press the button on {robot} to finalize transfer (custody stays on source robot until confirmed).', {
+                                robot: rescueRobotCode,
+                              })}
+                            </Text>
+                          </View>
+                        ) : null}
+
                         <View style={styles.actionRow}>
                           <Button
                             title={scannerOpen ? 'Scanning…' : 'Scan Container'}
@@ -979,6 +997,33 @@ export function PayloadRecoveryScreen() {
                             }}
                             style={styles.flexBtn}
                           />
+                          {canArmButton ? (
+                            <Button
+                              title={t('Arm Rescue Robot Button ({done}/{total})', {
+                                done: scanProgress.done,
+                                total: scanProgress.total,
+                              })}
+                              variant="outline"
+                              size="md"
+                              loading={busy === 'arm_button'}
+                              disabled={!!busy || !scanProgress.complete || !recovery.toRobotId}
+                              onPress={() => {
+                                if (!recovery.toRobotId) return;
+                                const targetId = recovery.toRobotId;
+                                void runRecoveryMutation('arm_button', () =>
+                                  armRecoveryTransferButton(
+                                    job.id,
+                                    recovery.id,
+                                    recovery.version,
+                                    targetId,
+                                    scanProgress.scans,
+                                    note,
+                                  ),
+                                );
+                              }}
+                              style={styles.flexBtn}
+                            />
+                          ) : null}
                           <Button
                             title={t('Confirm Payload Transfer ({done}/{total})', {
                               done: scanProgress.done,

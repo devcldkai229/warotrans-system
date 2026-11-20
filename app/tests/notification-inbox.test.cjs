@@ -57,6 +57,7 @@ test('REST presentation preserves real read state/time/entity instead of resetti
   assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'HANDOVER_OFFER' }).category, 'JOB_ASSIGNED');
   assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'HANDOVER_OVERDUE' }).category, 'JOB_ASSIGNED');
   assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'WAREHOUSE_HAZARD' }).category, 'HAZARD');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'JOB_RECOVERY_REQUIRED' }).category, 'HAZARD');
 });
 
 test('notification links use verified entity IDs and current permissions; unknown/web-only routes are not guessed', () => {
@@ -71,10 +72,18 @@ test('notification links use verified entity IDs and current permissions; unknow
     plain(notificationDestination({ ...item, kind: 'WAREHOUSE_HAZARD', entityType: 'ISSUE', entityId: 'iss-1' }, issueSession)),
     { screen: 'block_path', params: { issueId: 'iss-1' } },
   );
-  for (const entityType of ['ROBOT', 'ISSUE', 'CONTAINER', 'RECOVERY', 'NEW_KIND']) {
+  assert.deepEqual(
+    plain(notificationDestination({ ...item, kind: 'JOB_RECOVERY_REQUIRED', entityType: 'RECOVERY', entityId: 'job-9' }, session)),
+    { screen: 'payload_recovery', params: { jobId: 'job-9' } },
+  );
+  for (const entityType of ['ROBOT', 'ISSUE', 'CONTAINER', 'NEW_KIND']) {
     assert.equal(notificationDestination({ ...item, entityType }, session), null);
   }
   assert.equal(notificationDestination(item, { permissions: [] }), null);
+  assert.equal(
+    notificationDestination({ ...item, kind: 'JOB_RECOVERY_REQUIRED', entityType: 'RECOVERY', entityId: 'job-9' }, { permissions: [] }),
+    null,
+  );
   assert.equal(notificationDestination({ ...item, entityId: null }, session), null);
 });
 

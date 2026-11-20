@@ -4,8 +4,9 @@ const createLoader = require('./load-module.cjs');
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const {
   humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, isBlockingHandoverIssue,
-  mergeMyJobIdsWithStops, recordStopScan, stopScanProgress,
+  isWaitingForHandoverOffer, mergeMyJobIdsWithStops, recordStopScan, shouldUseLegacyStepHandover, stopScanProgress,
 } = createLoader()('src/features/jobs/handoverData.ts');
+const { mapJobDetailToAppJobItem } = createLoader()('src/features/jobs/jobData.ts');
 const {
   computeHeartbeatIntervalMs, pickPreBeginHeartbeatTargets,
 } = createLoader()('src/features/jobs/handoverHeartbeat.ts');
@@ -361,4 +362,47 @@ test('handover work-zone selection, pre-begin heartbeat and post-begin extend fo
   );
   assert.deepEqual(targets.map(item => item.id), ['pre-begin']);
   assert.equal(computeHeartbeatIntervalMs(targets), 5000);
+});
+
+test('grouped handover stops never fall back to legacy per-step confirmation even before claim or MOVE +10s', () => {
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: null }, undefined), true);
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: 'stop-1' }, undefined), false);
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: null }, stopOffer({ claimedBy: null })), false);
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: 'stop-1' }, stopOffer({ claimedBy: 'staff-a' })), false);
+
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'RUNNING', activeHandoverStopId: 'stop-1' }, undefined),
+    true,
+  );
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'RUNNING', activeHandoverStopId: 'stop-1' }, stopOffer()),
+    false,
+  );
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'PAUSED', activeHandoverStopId: 'stop-1' }, undefined),
+    false,
+  );
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'RUNNING', activeHandoverStopId: null }, undefined),
+    false,
+  );
+
+  const mapped = mapJobDetailToAppJobItem(
+    {
+      id: 'job-grouped',
+      jobNo: 'JOB-100',
+      workflowId: 'wf-1',
+      mapVersionId: 'map-1',
+      provisioningKey: 'prov-1',
+      status: 'RUNNING',
+      createdAt: '2026-11-20T08:00:00Z',
+      containers: [],
+      tasks: [],
+      activeHandoverStopId: 'stop-early-1',
+    },
+    'staff-a',
+  );
+  assert.equal(mapped.activeHandoverStopId, 'stop-early-1');
+  assert.equal(shouldUseLegacyStepHandover(mapped, undefined), false);
+  assert.equal(isWaitingForHandoverOffer(mapped, undefined), true);
 });
