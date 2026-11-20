@@ -87,6 +87,7 @@ const TONE_BY_STATUS: Record<string, SemanticTone> = {
   PACKED: 'success',
   ISSUED: 'success',
   CONFIRMED: 'success',
+  POSTED: 'success',
   LOCALIZED: 'success',
   PUBLISHED: 'success',
 
@@ -104,6 +105,7 @@ const TONE_BY_STATUS: Record<string, SemanticTone> = {
   // Needs a human.
   ERROR: 'danger',
   FAILED: 'danger',
+  RETRYING: 'danger',
   LOST: 'danger',
   CANCELLED: 'danger',
   CANCELED: 'danger',

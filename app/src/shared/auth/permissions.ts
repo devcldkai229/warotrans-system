@@ -7,6 +7,7 @@ import type { UserSession } from '../types/contracts';
 export const PERMISSIONS = {
   mapRead: 'map.read',
   warehouseRead: 'warehouse.read',
+  productCreate: 'product.create',
   voucherWrite: 'voucher.write',
   containerCreate: 'container.create',
   containerRecover: 'container.recover',

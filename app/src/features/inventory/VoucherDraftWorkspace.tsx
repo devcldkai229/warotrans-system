@@ -8,7 +8,7 @@ import { Button, Card, Text, TextField } from '../../shared/ui';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { InboundBatchEditor } from './InboundBatchEditor';
 import { InboundBatchSummary } from './InboundBatchSummary';
-import { batchTotal, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
+import { applyBatchGroupProduct, applyDraftBatchGroupEdit, batchTotal, isPendingBatchForVoucher, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 import { useVoucherPreparation } from './useVoucherPreparation';
@@ -29,6 +29,8 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
   const ids = data.lines.map(line => line.containerId);
   const progress = inboundContentsProgress(ids, prep.value);
   const inbound = data.type === 'INBOUND';
+  const hasPendingBatch = inbound && data.status === 'DRAFT' && !data.lines.length
+    && isPendingBatchForVoucher(prep.value.pendingBatch, data.warehouseId, data.id);
   const hasServerBatchLines = inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
   const steps = inbound ? ['Barcodes', 'Contents', 'Review'] : ['Containers', 'Review', 'Confirm'];
   const currentStep = review ? inbound ? 2 : 1 : inbound && data.lines.length ? 1 : 0;
@@ -36,7 +38,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
     if (prep.ready && !prep.value.requestedCount && data.lines.length && inbound) prep.update(previous => ({ ...previous, requestedCount: String(data.lines.length) }));
   }, [prep.ready, data.lines.length, inbound]);
   useEffect(() => {
-    if (prep.ready && writable && inbound && !data.lines.length && !prep.value.groups?.length) {
+    if (prep.ready && writable && inbound && !data.lines.length && !hasPendingBatch && !prep.value.groups?.length) {
       const initialCount = prep.value.requestedCount || '1';
       prep.update(previous => ({
         ...previous,
@@ -44,10 +46,10 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
         groups: [newBatchGroup([], initialCount)],
       }));
     }
-  }, [prep.ready, writable, inbound, data.lines.length, prep.value.groups?.length]);
+  }, [prep.ready, writable, inbound, data.lines.length, hasPendingBatch, prep.value.groups?.length]);
   const editGroups = (next: InboundBatchGroup[]) => {
-    if (!writable) return;
-    prep.update(previous => ({ ...previous, requestId: undefined, groups: next, requestedCount: batchTotal(next) }));
+    if (!writable || hasPendingBatch) return;
+    prep.update(previous => applyDraftBatchGroupEdit(previous, next, data.warehouseId, data.id));
   };
   const editContent = (id: string, fields: Partial<PreparedContent>) => {
     if (!writable || !data.lines.some(line => line.containerId === id)) return;
@@ -72,7 +74,25 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
     {prep.error && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{prep.error}</Text><Button title="Retry Save" variant="outline" onPress={() => { void prep.persist().catch(() => {}); }} /></View>}
     {!writable && <Text variant="body" color="textSecondary">Preparation is read-only. Check access or refresh this voucher.</Text>}
     {inbound && !review && <>
-      {!data.lines.length && (
+      {!data.lines.length && hasPendingBatch && (
+        <Card gap={12} style={styles.reviewCard}>
+          <Text variant="headline">Pending Barcode Allocation</Text>
+          <Text variant="caption" color="warningText">
+            Editing is locked until the previous allocation result is confirmed on the server.
+          </Text>
+          <View style={styles.batchStatBar}>
+            <View style={styles.stat}>
+              <Text variant="title" style={styles.tabular}>{prep.value.pendingBatch!.body.containerCount}</Text>
+              <Text variant="bodyMedium" color="textSecondary">Containers</Text>
+            </View>
+            <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>
+              {t('{count} product groups', { count: prep.value.pendingBatch!.body.groups.length })}
+            </Text>
+          </View>
+          {!!prep.value.groups?.length && <InboundBatchSummary groups={prep.value.groups} />}
+        </Card>
+      )}
+      {!data.lines.length && !hasPendingBatch && (
         <InboundBatchEditor
           requestedCount={prep.value.requestedCount}
           groups={prep.value.groups?.length ? prep.value.groups : [newBatchGroup([], prep.value.requestedCount || '1')]}

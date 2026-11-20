@@ -16,7 +16,14 @@ import { addStockVoucherLines, cancelStockVoucher, confirmStockVoucher, createCo
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text } from '../../shared/ui';
-import { buildContainerBatchBody, createBatchRequestId, inboundBatchProblem } from './inboundBatch';
+import {
+  beginPendingBatch,
+  clearPendingBatch,
+  inboundBatchProblem,
+  isDefinitiveBatchRejection,
+  isPendingBatchForVoucher,
+  reconcilePendingBatchWithVoucher,
+} from './inboundBatch';
 import { preparationDeviceStore } from './preparationDeviceStore';
 import { canAllocateInboundBatch, canCreateVoucher, canReadVouchers, uncertainDraftWrite, voucherDate, voucherLineLocation } from './stockVoucherData';
 import { useVoucherPreparation } from './useVoucherPreparation';
@@ -54,6 +61,18 @@ export function StockVoucherDetailScreen() {
   useEffect(() => { if (data && data.status !== 'DRAFT') setConfirmingCancel(false); }, [data?.status]);
 
   const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
+  const hasPendingBatch = Boolean(
+    data && inbound && data.status === 'DRAFT' && !data.lines.length && prep.ready
+    && isPendingBatchForVoucher(prep.value.pendingBatch, data.warehouseId, data.id),
+  );
+  useEffect(() => {
+    if (!data || !prep.ready || !prep.value.pendingBatch) return;
+    if (data.lines.length > 0 || data.status !== 'DRAFT') {
+      const reconciled = reconcilePendingBatchWithVoucher(prep.value, data);
+      prep.reset(reconciled);
+      void preparationDeviceStore.write(prep.scope, reconciled).catch(() => {});
+    }
+  }, [data?.lines.length, data?.status, prep.ready, prep.value.pendingBatch]);
   const selectedIds = Object.keys(prep.value.selected);
   const needsEndpointLabels = Boolean(data?.warehouseId) && data!.lines.some(line => !line.currentStorageLocationCode && !!line.currentEndpointId);
   const mapEndpointsQuery = useQuery({
@@ -73,26 +92,35 @@ export function StockVoucherDetailScreen() {
   );
 
   const allocateBatch = async () => {
+    const canRetryPending = hasPendingBatch;
+    const canSubmitNew = !!prep.value.groups?.length && !inboundBatchProblem(prep.value.requestedCount, prep.value.groups);
     if (pending.current || acting || !data || !inbound || data.status !== 'DRAFT' || data.lines.length > 0
-      || !prep.ready || !prep.value.groups?.length || !canAllocateInboundBatch(session) || !mobileCapabilities.createContainer
-      || !!inboundBatchProblem(prep.value.requestedCount, prep.value.groups)) {
+      || !prep.ready || !canAllocateInboundBatch(session) || !mobileCapabilities.createContainer
+      || (!canRetryPending && !canSubmitNew)) {
       return;
     }
     pending.current = true; setActing(true); setActionError(null);
     const controller = new AbortController(); request.current = controller;
+    let nextPrep = prep.value;
     try {
-      const requestId = prep.value.requestId || createBatchRequestId();
-      if (!prep.value.requestId) {
-        const updated = { ...prep.value, requestId };
-        await preparationDeviceStore.write(prep.scope, updated);
+      const plan = beginPendingBatch(prep.value, data.warehouseId, data.id);
+      nextPrep = plan.nextPrep;
+      if (nextPrep !== prep.value) {
+        // Update slot state before persisting so an unmount flush cannot erase pendingBatch.
+        prep.reset(nextPrep);
+        try {
+          await preparationDeviceStore.write(prep.scope, nextPrep);
+        } catch {
+          if (alive.current) setActionError(t('Could not save the batch request on this device. Try again.'));
+          return;
+        }
         if (!alive.current || controller.signal.aborted) return;
-        prep.reset(updated);
       }
-      const batch = await createContainerBatch(
-        buildContainerBatchBody(data.warehouseId, requestId, prep.value.requestedCount, prep.value.groups, data.id),
-        controller.signal,
-      );
+      const batch = await createContainerBatch(plan.body, controller.signal);
       if (!alive.current || controller.signal.aborted) return;
+      const cleared = clearPendingBatch(nextPrep);
+      prep.reset(cleared);
+      void preparationDeviceStore.write(prep.scope, cleared).catch(() => {});
       if (batch.stockVoucher) {
         client.setQueryData(['stock-voucher', session?.id, data.id], batch.stockVoucher);
       } else {
@@ -102,7 +130,13 @@ export function StockVoucherDetailScreen() {
       void client.invalidateQueries({ queryKey: ['inventory-containers'] });
     } catch (failure) {
       if (!alive.current || controller.signal.aborted) return;
-      if (uncertainDraftWrite(failure)) void query.refetch();
+      if (isDefinitiveBatchRejection(failure)) {
+        const cleared = clearPendingBatch(nextPrep);
+        prep.reset(cleared);
+        void preparationDeviceStore.write(prep.scope, cleared).catch(() => {});
+      } else if (uncertainDraftWrite(failure) || (failure instanceof ApiError && failure.status === 409)) {
+        void query.refetch();
+      }
       setActionError(getUserErrorMessage(failure, 'Could not allocate container barcodes. Try again.'));
     } finally {
       pending.current = false;
@@ -277,7 +311,19 @@ export function StockVoucherDetailScreen() {
             const allocateProblem = canAllocateFromPlan ? inboundBatchProblem(prep.value.requestedCount, prep.value.groups!) : null;
             return <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               {actionError && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{actionError}</Text></View>}
-              {canAllocateFromPlan ? (() => {
+              {hasPendingBatch ? <>
+                <Text variant="caption" color="warningText">
+                  Previous barcode allocation could not be confirmed. Retry the same batch or refresh to load server results.
+                </Text>
+                <View style={styles.row}>
+                  <Button title="Refresh Voucher" variant="outline" style={styles.flex}
+                    loading={query.isRefetching} disabled={acting}
+                    onPress={() => { void query.refetch(); }} />
+                  <Button title="Retry Same Batch" style={styles.flex} loading={acting}
+                    disabled={!canAllocateInboundBatch(session) || !mobileCapabilities.createContainer || acting}
+                    onPress={() => { void allocateBatch(); }} />
+                </View>
+              </> : canAllocateFromPlan ? (() => {
                 const problemIndex = allocateProblem?.groupKey
                   ? (prep.value.groups ?? []).findIndex(group => group.key === allocateProblem.groupKey)
                   : -1;

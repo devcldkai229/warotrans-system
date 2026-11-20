@@ -1,5 +1,6 @@
+import { ApiError } from '../../shared/api/client';
 import type { CreateContainerBatchBody, CreateContainerBatchGroupInput, ProductItem } from '../../shared/api/warehouseApi';
-import { contentProblem, contentsQuantity, preparationCount } from './voucherPreparation';
+import { contentProblem, contentsQuantity, preparationCount, type PendingBatchSubmission, type VoucherPreparation } from './voucherPreparation';
 
 /** Local planning groups; keys are never Container IDs or barcodes. */
 export interface InboundBatchGroup {
@@ -103,4 +104,71 @@ export function buildContainerBatchBody(
     containerCount,
     groups: mappedGroups,
   };
+}
+
+export function isPendingBatchForVoucher(
+  pendingBatch: PendingBatchSubmission | undefined,
+  warehouseId: string,
+  voucherId: string,
+): boolean {
+  return Boolean(
+    pendingBatch
+    && pendingBatch.requestId.trim()
+    && pendingBatch.body.requestId === pendingBatch.requestId
+    && pendingBatch.body.warehouseId === warehouseId
+    && pendingBatch.body.stockVoucherId === voucherId,
+  );
+}
+
+/** Only 400 validation or 404 not-found proves no containers were persisted for this requestId. */
+export function isDefinitiveBatchRejection(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 400 || error.status === 404);
+}
+
+export function beginPendingBatch(
+  prep: VoucherPreparation,
+  warehouseId: string,
+  voucherId: string,
+): { nextPrep: VoucherPreparation; body: CreateContainerBatchBody } {
+  if (isPendingBatchForVoucher(prep.pendingBatch, warehouseId, voucherId)) {
+    return { nextPrep: prep, body: prep.pendingBatch!.body };
+  }
+  const requestId = prep.requestId || createBatchRequestId();
+  const body = buildContainerBatchBody(warehouseId, requestId, prep.requestedCount, prep.groups ?? [], voucherId);
+  return {
+    nextPrep: { ...prep, requestId, pendingBatch: { requestId, body } },
+    body,
+  };
+}
+
+export function applyDraftBatchGroupEdit(
+  prep: VoucherPreparation,
+  nextGroups: InboundBatchGroup[],
+  warehouseId: string,
+  voucherId: string,
+): VoucherPreparation {
+  if (isPendingBatchForVoucher(prep.pendingBatch, warehouseId, voucherId)) {
+    return prep;
+  }
+  return {
+    ...prep,
+    requestId: undefined,
+    pendingBatch: undefined,
+    groups: nextGroups,
+    requestedCount: batchTotal(nextGroups),
+  };
+}
+
+export function clearPendingBatch(prep: VoucherPreparation): VoucherPreparation {
+  return { ...prep, requestId: undefined, pendingBatch: undefined };
+}
+
+export function reconcilePendingBatchWithVoucher(
+  prep: VoucherPreparation,
+  voucher: { status: string; lines: ReadonlyArray<unknown> },
+): VoucherPreparation {
+  if (voucher.lines.length > 0 || voucher.status !== 'DRAFT') {
+    return clearPendingBatch(prep);
+  }
+  return prep;
 }

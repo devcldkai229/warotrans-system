@@ -1,18 +1,24 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { Box, Check, Search, X } from 'lucide-react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Box, Check, Plus, Search, X } from 'lucide-react-native';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { t } from '../../shared/i18n';
-import { listProductCategories, listProducts, type ProductItem } from '../../shared/api/warehouseApi';
+import { createProduct, listProductCategories, listProducts, type ProductItem } from '../../shared/api/warehouseApi';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { Button, EmptyState, Text, TextField } from '../../shared/ui';
-import { lookupReceivingProduct } from './productLookup';
+import {
+  buildCreateProductBody,
+  lookupReceivingProduct,
+  productCreationErrorField,
+  validateNewProductInput,
+  type NewProductDraft,
+} from './productLookup';
 
 interface Props {
   selectedProduct: ProductItem | null;
@@ -25,18 +31,44 @@ interface Props {
 export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSelect, onClose }: Props) {
   const { styles, colors } = useThemedStyles(createStyles);
   const { session } = useAuth();
+  const queryClient = useQueryClient();
   const scope = useId();
+  const [mode, setMode] = useState<'browse' | 'create'>('browse');
   const [search, setSearch] = useState(initialBarcode || '');
   const [serverSearch, setServerSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [lookup, setLookup] = useState(initialBarcode);
+  const [newCategoryId, setNewCategoryId] = useState('');
+  const [newSku, setNewSku] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newSupplierBarcode, setNewSupplierBarcode] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<{ field: keyof NewProductDraft; message: string } | null>(null);
+  const alive = useRef(true);
+  const createLock = useRef(false);
+  const createController = useRef<AbortController | null>(null);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      createController.current?.abort();
+    };
+  }, []);
+
   const canRead = sessionCan(session, PERMISSIONS.warehouseRead);
   const canResolve = canRead && (session?.role === 'STAFF' || session?.role === 'ADMIN');
-  const categories = useQuery({ queryKey: ['receiving-product-categories', session?.id], queryFn: ({ signal }) => listProductCategories(signal), enabled: canRead && !lookup });
+  const canCreateProduct = sessionCan(session, PERMISSIONS.productCreate);
+  const categories = useQuery({
+    queryKey: ['receiving-product-categories', session?.id],
+    queryFn: ({ signal }) => listProductCategories(signal),
+    enabled: canRead && (!lookup || mode === 'create'),
+  });
   const products = useQuery({
     queryKey: ['receiving-products', session?.id, serverSearch, categoryId],
     queryFn: ({ signal }) => listProducts({ isActive: true, take: 100, search: serverSearch || undefined, categoryId: categoryId || undefined }, signal),
-    enabled: canRead && !lookup,
+    enabled: canRead && !lookup && mode === 'browse',
     staleTime: 0,
     retry: false,
   });
@@ -44,7 +76,7 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
     // A fresh attempt must not auto-select a cached Product that has since become inactive.
     queryKey: ['receiving-product-lookup', session?.id, scope, lookup],
     queryFn: ({ signal }) => lookupReceivingProduct(lookup!, signal),
-    enabled: canResolve && !!lookup,
+    enabled: canResolve && !!lookup && mode === 'browse',
     retry: false,
     gcTime: 0,
     staleTime: 0,
@@ -54,11 +86,77 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
     return () => clearTimeout(timer);
   }, [search]);
   useEffect(() => {
-    if (lookup && resolved.isSuccess && !resolved.isFetching && resolved.data.kind === 'matched') onSelect(resolved.data.product);
-  }, [lookup, resolved.data, resolved.isSuccess, resolved.isFetching, onSelect]);
+    if (mode === 'browse' && lookup && resolved.isSuccess && !resolved.isFetching && resolved.data.kind === 'matched') {
+      onSelect(resolved.data.product);
+    }
+  }, [mode, lookup, resolved.data, resolved.isSuccess, resolved.isFetching, onSelect]);
+  useEffect(() => {
+    if (mode === 'create' && !newCategoryId && categories.data?.items.length === 1) {
+      setNewCategoryId(categories.data.items[0].id);
+    }
+  }, [mode, newCategoryId, categories.data]);
 
-  const browse = () => { setLookup(null); setSearch(''); setServerSearch(''); setCategoryId(''); };
+  const browse = () => {
+    createController.current?.abort();
+    setMode('browse');
+    setLookup(null);
+    setSearch('');
+    setServerSearch('');
+    setCategoryId('');
+  };
+  const openCreate = (prefillBarcode?: string | null) => {
+    const items = categories.data?.items ?? [];
+    const defaultCategory = categoryId || (items.length === 1 ? items[0].id : '');
+    setNewCategoryId(defaultCategory);
+    setNewSku('');
+    setNewName('');
+    setNewSupplierBarcode(prefillBarcode?.trim() || '');
+    setNewDescription('');
+    setCreateError(null);
+    setFieldError(null);
+    setMode('create');
+  };
   const retry = () => { if (lookup) void resolved.refetch(); else void products.refetch(); };
+  const submitCreate = async () => {
+    if (createLock.current || creating || !canCreateProduct) return;
+    const draft: NewProductDraft = {
+      categoryId: newCategoryId,
+      sku: newSku,
+      name: newName,
+      supplierBarcode: newSupplierBarcode,
+      description: newDescription,
+    };
+    const problem = validateNewProductInput(draft);
+    if (problem) {
+      setFieldError(problem);
+      setCreateError(null);
+      return;
+    }
+    createLock.current = true;
+    setCreating(true);
+    setFieldError(null);
+    setCreateError(null);
+    const controller = new AbortController();
+    createController.current = controller;
+    try {
+      const created = await createProduct(buildCreateProductBody(draft), controller.signal);
+      if (!alive.current || controller.signal.aborted) return;
+      void queryClient.invalidateQueries({ queryKey: ['receiving-products'] });
+      onSelect(created);
+    } catch (failure) {
+      if (!alive.current || controller.signal.aborted) return;
+      const target = productCreationErrorField(failure);
+      const message = getUserErrorMessage(failure, 'Product could not be created. Check the details and try again.');
+      if (target === 'form') {
+        setCreateError(message);
+      } else {
+        setFieldError({ field: target, message });
+      }
+    } finally {
+      createLock.current = false;
+      if (alive.current) setCreating(false);
+    }
+  };
   const error = lookup ? resolved.error : products.error;
   const denied = error instanceof ApiError && [401, 403].includes(error.status);
   const choices = denied ? [] : lookup ? resolved.data?.kind === 'choose' ? resolved.data.products : [] : products.data?.items ?? [];
@@ -67,71 +165,152 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
   const multiple = lookup && resolved.data?.kind === 'choose' && resolved.data.reason === 'multiple';
 
   return <BottomSheet onClose={onClose} accessibilityLabel="product catalog">
-    <View style={styles.sheetHeader}>
-      <Text variant="headline">Choose Product</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('Close product catalog')} onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
-        <View style={styles.closeCircle}><X size={16} strokeWidth={2.2} color={colors.textSecondary} /></View>
-      </Pressable>
-    </View>
-    <View style={styles.sheetSearch}>
-      <TextField accessibilityLabel="Search product catalog" value={search}
-        onChangeText={value => { setSearch(value); setLookup(null); if (!value.trim()) setServerSearch(''); }} placeholder="Search by name or SKU"
-        fieldStyle={styles.searchField} inputStyle={styles.searchInput}
-        autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={17} color={colors.textMuted} />}
-        onSubmitEditing={() => setServerSearch(search.trim())} />
-    </View>
-    {!lookup && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryRow}>
-      {[{ id: '', name: 'All Products' }, ...(categories.data?.items ?? [])].map(category => {
-        const selected = categoryId === category.id;
-        return <Pressable key={category.id} accessibilityRole="button" accessibilityState={{ selected }} hitSlop={{ top: 6, bottom: 6 }} onPress={() => setCategoryId(category.id)} style={({ pressed }) => [styles.categoryChip, selected && styles.categorySelected, pressed && styles.pressed]}>
-          <Text variant="caption" color={selected ? colors.primaryText : colors.textSecondary} style={selected ? styles.categorySelectedText : undefined}>{category.name}</Text>
-        </Pressable>;
-      })}
-    </ScrollView>}
-    {!canRead ? <EmptyState compact title="Catalog Unavailable" message="Your account cannot access products." />
-      : lookup && !canResolve ? <EmptyState compact title="Lookup Unavailable" message="Your account cannot look up product codes." actionTitle="Browse Catalog" onAction={browse} />
-      : <FlatList style={styles.catalogList} contentContainerStyle={styles.catalogContent} keyboardShouldPersistTaps="handled" data={choices} keyExtractor={item => item.id}
-        ListHeaderComponent={error && choices.length ? <EmptyState compact title="Could Not Refresh Products" actionTitle="Retry" onAction={retry} />
-          : lookup && resolved.data?.kind === 'choose' ? <View style={styles.lookupNotice}>
-            <Text variant="bodyMedium">{multiple ? 'Multiple Products Match This Code' : 'Confirm The Product'}</Text>
-            <Text variant="caption">{multiple ? 'Select the correct product.' : 'Choose a product or refine your search.'}</Text>
-            <Button title="Browse Catalog" variant="outline" size="sm" onPress={browse} />
-          </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel={t('Refreshing products')} /> : undefined}
-        renderItem={({ item, index }) => {
-          const isSelected = selectedProduct?.id === item.id;
-          const isFirst = index === 0;
-          const isLast = index === choices.length - 1;
-          const isDisabled = busy || !!error || !item.isActive;
-          return <Pressable accessibilityRole="radio" accessibilityState={{ checked: isSelected, disabled: isDisabled }}
-            accessibilityLabel={`${item.name}, ${item.sku}`} disabled={isDisabled}
-            onPress={() => onSelect(item)} style={({ pressed }) => [
-              styles.catalogRow,
-              isFirst && styles.catalogRowFirst,
-              isLast && styles.catalogRowLast,
-              !isLast && styles.catalogRowDivider,
-              isSelected && styles.catalogSelected,
-              pressed && !isDisabled && styles.catalogPressed,
-              isDisabled && styles.disabled,
-            ]}>
-            <View style={[styles.rowIcon, isSelected && styles.rowIconSelected]}>
-              <Box size={18} strokeWidth={1.8} color={isSelected ? colors.primaryText : colors.textSecondary} />
+    {mode === 'create' ? <>
+      <View style={styles.sheetHeader}>
+        <View style={styles.headerLeft}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('Back to product catalog')} disabled={creating}
+            onPress={() => { createController.current?.abort(); setMode('browse'); }}
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+            <ArrowLeft size={20} color={colors.textPrimary} />
+          </Pressable>
+          <Text variant="headline">New Product</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('Close product catalog')} onPress={onClose}
+          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
+          <View style={styles.closeCircle}><X size={16} strokeWidth={2.2} color={colors.textSecondary} /></View>
+        </Pressable>
+      </View>
+      <ScrollView style={styles.catalogList} contentContainerStyle={styles.createContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.fieldGroup}>
+          <Text variant="label" color="textSecondary">Category</Text>
+          {categories.isPending ? (
+            <View style={styles.inlineLoading}><ActivityIndicator size="small" color={colors.primary} /><Text variant="caption" color="textSecondary">Loading Categories…</Text></View>
+          ) : categories.isError ? (
+            <View style={styles.inlineErrorBox}>
+              <Text variant="caption" color="dangerText" accessibilityRole="alert">{getUserErrorMessage(categories.error, 'Categories could not be loaded.')}</Text>
+              <Button title="Retry" variant="outline" size="sm" onPress={() => { void categories.refetch(); }} />
             </View>
-            <View style={styles.flex}><Text variant="bodyMedium" numberOfLines={1}>{item.name}</Text><Text variant="code" color={colors.textSecondary} numberOfLines={1}>{item.sku}</Text></View>
-            {isSelected ? <Check size={18} strokeWidth={2.4} color={colors.primaryText} /> : null}
+          ) : !categories.data?.items.length ? (
+            <Text variant="caption" color="dangerText" accessibilityRole="alert">No product categories are available. Ask an admin to create one first.</Text>
+          ) : (
+            <View style={styles.categoryWrap}>
+              {categories.data.items.map(category => {
+                const selected = newCategoryId === category.id;
+                return <Pressable key={category.id} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: creating }}
+                  disabled={creating} onPress={() => { setNewCategoryId(category.id); if (fieldError?.field === 'categoryId') setFieldError(null); }}
+                  style={({ pressed }) => [styles.createCategoryChip, selected && styles.categorySelected, pressed && styles.pressed]}>
+                  <Text variant="caption" color={selected ? colors.primaryText : colors.textSecondary} style={selected ? styles.categorySelectedText : undefined}>{category.name}</Text>
+                </Pressable>;
+              })}
+            </View>
+          )}
+          {fieldError?.field === 'categoryId' && <Text variant="caption" color="dangerText" accessibilityRole="alert">{t(fieldError.message)}</Text>}
+        </View>
+        <TextField label="SKU" value={newSku} onChangeText={value => { setNewSku(value); if (fieldError?.field === 'sku') setFieldError(null); setCreateError(null); }}
+          placeholder="e.g. SKU-101" autoCapitalize="characters" autoCorrect={false} maxLength={100} editable={!creating}
+          error={fieldError?.field === 'sku' ? t(fieldError.message) : undefined} />
+        <TextField label="Product Name" value={newName} onChangeText={value => { setNewName(value); if (fieldError?.field === 'name') setFieldError(null); setCreateError(null); }}
+          placeholder="e.g. Optical Sensor" maxLength={200} editable={!creating}
+          error={fieldError?.field === 'name' ? t(fieldError.message) : undefined} />
+        <TextField label="Supplier Barcode (Optional)" value={newSupplierBarcode}
+          onChangeText={value => { setNewSupplierBarcode(value); if (fieldError?.field === 'supplierBarcode') setFieldError(null); setCreateError(null); }}
+          placeholder="Scan or enter supplier barcode" autoCapitalize="none" autoCorrect={false} maxLength={128} editable={!creating}
+          error={fieldError?.field === 'supplierBarcode' ? t(fieldError.message) : undefined} />
+        <TextField label="Description (Optional)" value={newDescription}
+          onChangeText={value => { setNewDescription(value); if (fieldError?.field === 'description') setFieldError(null); setCreateError(null); }}
+          placeholder="Optional product notes" maxLength={500} editable={!creating}
+          error={fieldError?.field === 'description' ? t(fieldError.message) : undefined} />
+        {createError && <View style={styles.inlineErrorBox}><Text variant="body" color="dangerText" accessibilityRole="alert">{createError}</Text></View>}
+        <Button title="Create & Select Product" fullWidth loading={creating}
+          disabled={creating || categories.isPending || !(categories.data?.items.length)}
+          onPress={() => { void submitCreate(); }} />
+      </ScrollView>
+    </> : <>
+      <View style={styles.sheetHeader}>
+        <Text variant="headline">Choose Product</Text>
+        <View style={styles.headerActions}>
+          {canCreateProduct && (
+            <Pressable accessibilityRole="button" accessibilityLabel={t('Create new product')} onPress={() => openCreate(lookup)}
+              style={({ pressed }) => [styles.newProductButton, pressed && styles.pressed]}>
+              <Plus size={15} strokeWidth={2.2} color={colors.primaryText} />
+              <Text variant="caption" color="primaryText" style={styles.newProductText}>New Product</Text>
+            </Pressable>
+          )}
+          <Pressable accessibilityRole="button" accessibilityLabel={t('Close product catalog')} onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
+            <View style={styles.closeCircle}><X size={16} strokeWidth={2.2} color={colors.textSecondary} /></View>
+          </Pressable>
+        </View>
+      </View>
+      <View style={styles.sheetSearch}>
+        <TextField accessibilityLabel="Search product catalog" value={search}
+          onChangeText={value => { setSearch(value); setLookup(null); if (!value.trim()) setServerSearch(''); }} placeholder="Search by name or SKU"
+          fieldStyle={styles.searchField} inputStyle={styles.searchInput}
+          autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={17} color={colors.textMuted} />}
+          onSubmitEditing={() => setServerSearch(search.trim())} />
+      </View>
+      {!lookup && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryRow}>
+        {[{ id: '', name: 'All Products' }, ...(categories.data?.items ?? [])].map(category => {
+          const selected = categoryId === category.id;
+          return <Pressable key={category.id} accessibilityRole="button" accessibilityState={{ selected }} hitSlop={{ top: 6, bottom: 6 }} onPress={() => setCategoryId(category.id)} style={({ pressed }) => [styles.categoryChip, selected && styles.categorySelected, pressed && styles.pressed]}>
+            <Text variant="caption" color={selected ? colors.primaryText : colors.textSecondary} style={selected ? styles.categorySelectedText : undefined}>{category.name}</Text>
           </Pressable>;
-        }}
-        ListEmptyComponent={busy ? <View style={styles.lookupNotice}><ActivityIndicator color={colors.primary} /><Text variant="body" textAlign="center">{lookup ? 'Looking Up Product…' : 'Loading Products…'}</Text></View>
-          : <EmptyState compact title={notFound ? 'No Active Product Found' : error ? lookup ? 'Lookup Unavailable' : 'Catalog Unavailable' : lookup ? 'Refine Your Search' : 'No Products Found'}
-            message={notFound ? 'Check the barcode or choose from the catalog.' : error ? getUserErrorMessage(error, 'Products could not be loaded.') : undefined}
-            actionTitle={notFound || lookup && !error ? 'Browse Catalog' : error ? 'Retry' : undefined}
-            onAction={notFound || lookup && !error ? browse : retry} />}
-        ListFooterComponent={!lookup && products.data && products.data.total > products.data.items.length ? <Text variant="caption" color="textSecondary">Refine your search to see more products.</Text> : undefined} />}
+        })}
+      </ScrollView>}
+      {!canRead ? <EmptyState compact title="Catalog Unavailable" message="Your account cannot access products." />
+        : lookup && !canResolve ? <EmptyState compact title="Lookup Unavailable" message="Your account cannot look up product codes." actionTitle="Browse Catalog" onAction={browse} />
+        : <FlatList style={styles.catalogList} contentContainerStyle={styles.catalogContent} keyboardShouldPersistTaps="handled" data={choices} keyExtractor={item => item.id}
+          ListHeaderComponent={error && choices.length ? <EmptyState compact title="Could Not Refresh Products" actionTitle="Retry" onAction={retry} />
+            : lookup && resolved.data?.kind === 'choose' ? <View style={styles.lookupNotice}>
+              <Text variant="bodyMedium">{multiple ? 'Multiple Products Match This Code' : 'Confirm The Product'}</Text>
+              <Text variant="caption">{multiple ? 'Select the correct product.' : 'Choose a product or refine your search.'}</Text>
+              <Button title="Browse Catalog" variant="outline" size="sm" onPress={browse} />
+            </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel={t('Refreshing products')} /> : undefined}
+          renderItem={({ item, index }) => {
+            const isSelected = selectedProduct?.id === item.id;
+            const isFirst = index === 0;
+            const isLast = index === choices.length - 1;
+            const isDisabled = busy || !!error || !item.isActive;
+            return <Pressable accessibilityRole="radio" accessibilityState={{ checked: isSelected, disabled: isDisabled }}
+              accessibilityLabel={`${item.name}, ${item.sku}`} disabled={isDisabled}
+              onPress={() => onSelect(item)} style={({ pressed }) => [
+                styles.catalogRow,
+                isFirst && styles.catalogRowFirst,
+                isLast && styles.catalogRowLast,
+                !isLast && styles.catalogRowDivider,
+                isSelected && styles.catalogSelected,
+                pressed && !isDisabled && styles.catalogPressed,
+                isDisabled && styles.disabled,
+              ]}>
+              <View style={[styles.rowIcon, isSelected && styles.rowIconSelected]}>
+                <Box size={18} strokeWidth={1.8} color={isSelected ? colors.primaryText : colors.textSecondary} />
+              </View>
+              <View style={styles.flex}><Text variant="bodyMedium" numberOfLines={1}>{item.name}</Text><Text variant="code" color={colors.textSecondary} numberOfLines={1}>{item.sku}</Text></View>
+              {isSelected ? <Check size={18} strokeWidth={2.4} color={colors.primaryText} /> : null}
+            </Pressable>;
+          }}
+          ListEmptyComponent={busy ? <View style={styles.lookupNotice}><ActivityIndicator color={colors.primary} /><Text variant="body" textAlign="center">{lookup ? 'Looking Up Product…' : 'Loading Products…'}</Text></View>
+            : <View style={styles.emptyWrap}>
+              <EmptyState compact title={notFound ? 'No Active Product Found' : error ? lookup ? 'Lookup Unavailable' : 'Catalog Unavailable' : lookup ? 'Refine Your Search' : 'No Products Found'}
+                message={notFound ? 'Check the barcode or choose from the catalog.' : error ? getUserErrorMessage(error, 'Products could not be loaded.') : undefined}
+                actionTitle={notFound || lookup && !error ? 'Browse Catalog' : error ? 'Retry' : undefined}
+                onAction={notFound || lookup && !error ? browse : retry} />
+              {canCreateProduct && (!error || notFound) && (
+                <Button title="Create New Product" icon={Plus} variant="outline" size="sm" onPress={() => openCreate(lookup)} />
+              )}
+            </View>}
+          ListFooterComponent={!lookup && products.data && products.data.total > products.data.items.length ? <Text variant="caption" color="textSecondary">Refine your search to see more products.</Text> : undefined} />}
+    </>}
   </BottomSheet>;
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   flex: { flex: 1, minWidth: 0, gap: 2 },
-  sheetHeader: { paddingHorizontal: 18, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetHeader: { paddingHorizontal: 18, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  backButton: { minHeight: 44, minWidth: 44, marginLeft: -10, alignItems: 'center', justifyContent: 'center' },
+  newProductButton: { minHeight: 44, paddingHorizontal: 12, borderRadius: radii.pill, backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primaryBorder, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  newProductText: { fontWeight: '600' },
   closeButton: { minHeight: 44, minWidth: 44, marginRight: -7, alignItems: 'center', justifyContent: 'center' },
   closeCircle: { width: 30, height: 30, borderRadius: radii.full, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.72 },
@@ -141,10 +320,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   categoryScroll: { flexGrow: 0 },
   categoryRow: { paddingHorizontal: 18, gap: 8, paddingBottom: 12 },
   categoryChip: { minHeight: 32, paddingHorizontal: 13, paddingVertical: 5, justifyContent: 'center', borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  createCategoryChip: { minHeight: 40, paddingHorizontal: 14, paddingVertical: 8, justifyContent: 'center', borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categorySelected: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
   categorySelectedText: { fontWeight: '600' },
   catalogList: { flex: 1, minHeight: 0 },
   catalogContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 32 },
+  createContent: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 32, gap: 14 },
+  fieldGroup: { gap: 8 },
+  inlineLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40 },
+  inlineErrorBox: { padding: 12, gap: 8, borderRadius: radii.md, backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.dangerBorder },
+  emptyWrap: { gap: 10, alignItems: 'center', paddingBottom: 8 },
   catalogRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surface, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
   catalogRowFirst: { borderTopWidth: 1, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg, borderCurve: 'continuous' },
   catalogRowLast: { borderBottomWidth: 1, borderBottomLeftRadius: radii.lg, borderBottomRightRadius: radii.lg, borderCurve: 'continuous' },

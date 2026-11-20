@@ -4,7 +4,15 @@ const createLoader = require('./load-module.cjs');
 const plain = value => JSON.parse(JSON.stringify(value));
 class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
 const loadApi = apiFetch => createLoader({ 'src/shared/api/client.ts': { apiFetch, ApiError } });
-const { transportRequestProgress, transportRouteSummary } = createLoader()('src/features/transport/transportRequestData.ts');
+const {
+  detailWarehouseSyncEntries,
+  hasPendingWarehouseSync,
+  summarizeWarehouseSync,
+  transportRequestProgress,
+  transportRouteSummary,
+  warehouseSyncLabel,
+  warehouseSyncTone,
+} = createLoader()('src/features/transport/transportRequestData.ts');
 
 test('request progress follows movement outcomes, including failed and cancelled lines', () => {
   const details = ['COMPLETED', 'FAILED', 'CANCELLED', 'IN_PROGRESS'].map(status => ({ status }));
@@ -57,4 +65,64 @@ test('history lists transport requests without looking up a first job or dependi
   const result = await load('src/shared/api/transportApi.ts').listTransportRequests();
   assert.equal(result.items[0].id, 'request');
   assert.equal(calls.some(url => url.startsWith('/api/workflow-execution/jobs')), false);
+});
+
+test('transport request detail preserves warehouseSync and keeps polling when a completed request has pending or retrying sync', async () => {
+  const response = {
+    id: 'tr-1',
+    status: 'COMPLETED',
+    details: [
+      {
+        id: 'd-1',
+        sequenceNo: 1,
+        containerId: 'c-1',
+        status: 'COMPLETED',
+        warehouseSync: {
+          pickup: { jobId: 'job-1', status: 'POSTED', recordedAt: '2026-11-20T07:00:00Z', postedAt: '2026-11-20T07:00:02Z', nextAttemptAt: null },
+          delivery: { jobId: 'job-1', status: 'PENDING', recordedAt: '2026-11-20T07:05:00Z', postedAt: null, nextAttemptAt: '2026-11-20T07:05:15Z' },
+        },
+      },
+      {
+        id: 'd-2',
+        sequenceNo: 2,
+        containerId: 'c-2',
+        status: 'COMPLETED',
+        warehouseSync: {
+          pickup: { jobId: 'job-1', status: 'POSTED', recordedAt: '2026-11-20T07:00:00Z', postedAt: '2026-11-20T07:00:02Z', nextAttemptAt: null },
+          delivery: { jobId: 'job-1', status: 'RETRYING', recordedAt: '2026-11-20T07:05:00Z', postedAt: null, nextAttemptAt: '2026-11-20T07:06:00Z' },
+        },
+      },
+    ],
+  };
+  const api = loadApi(async () => response)('src/shared/api/transportApi.ts');
+  const detail = await api.getTransportRequest('tr-1');
+  assert.equal(detail.status, 'COMPLETED');
+  assert.equal(detail.details[0].warehouseSync.delivery.status, 'PENDING');
+  assert.equal(detail.details[1].warehouseSync.delivery.status, 'RETRYING');
+
+  assert.deepEqual(plain(summarizeWarehouseSync(detail.details)), {
+    pending: 1,
+    retrying: 1,
+    posted: 2,
+    total: 4,
+    needsRefresh: true,
+  });
+  assert.equal(hasPendingWarehouseSync(detail.details), true);
+  assert.equal(detailWarehouseSyncEntries(detail.details[0]).length, 2);
+  assert.equal(detailWarehouseSyncEntries({ warehouseSync: null }).length, 0);
+
+  const settled = detail.details.map(item => ({
+    ...item,
+    warehouseSync: {
+      pickup: item.warehouseSync.pickup,
+      delivery: { ...item.warehouseSync.delivery, status: 'POSTED', postedAt: '2026-11-20T07:07:00Z', nextAttemptAt: null },
+    },
+  }));
+  assert.equal(hasPendingWarehouseSync(settled), false);
+  assert.equal(warehouseSyncTone('PENDING'), 'warning');
+  assert.equal(warehouseSyncTone('RETRYING'), 'danger');
+  assert.equal(warehouseSyncTone('POSTED'), 'success');
+  assert.equal(warehouseSyncLabel('PENDING'), 'Sync Pending');
+  assert.equal(warehouseSyncLabel('RETRYING'), 'Sync Retrying');
+  assert.equal(warehouseSyncLabel('POSTED'), 'Synced');
 });

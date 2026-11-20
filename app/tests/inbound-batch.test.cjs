@@ -3,7 +3,22 @@ const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
 class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
 const load = createLoader({ 'src/shared/api/client.ts': { ApiError } });
-const { applyBatchGroupProduct, batchCounts, buildContainerBatchBody, createBatchRequestId, DEFAULT_QUANTITY, DEFAULT_UNIT, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
+const {
+  applyBatchGroupProduct,
+  applyDraftBatchGroupEdit,
+  batchCounts,
+  beginPendingBatch,
+  buildContainerBatchBody,
+  clearPendingBatch,
+  createBatchRequestId,
+  DEFAULT_QUANTITY,
+  DEFAULT_UNIT,
+  inboundBatchProblem,
+  isDefinitiveBatchRejection,
+  isPendingBatchForVoucher,
+  newBatchGroup,
+  reconcilePendingBatchWithVoucher,
+} = load('src/features/inventory/inboundBatch.ts');
 const { emptyPreparation, validPreparation } = load('src/features/inventory/voucherPreparation.ts');
 const { createPreparationStorage } = load('src/features/inventory/preparationStorage.ts');
 const { canAllocateInboundBatch } = load('src/features/inventory/stockVoucherData.ts');
@@ -150,4 +165,70 @@ test('missing local preparation on an existing draft inbound voucher can be re-e
   assert.deepEqual(body.groups, [
     { groupKey: 'group-1', productId: 'p-1', containerCount: 2, quantityPerContainer: 24, unit: 'chai' },
   ]);
+});
+
+test('pendingBatch preserves exact requestId and payload on lost response and slow refetch, blocking edits until reconciled', async () => {
+  const memory = new Map();
+  const store = createPreparationStorage({
+    get: async key => memory.get(key) ?? null,
+    set: async (key, value) => { memory.set(key, value); },
+    remove: async key => { memory.delete(key); },
+  });
+  const scope = { accountId: 'staff', warehouseId: 'wh-1', documentKey: 'draft-1' };
+  const initialGroups = [group('group-1', { containerCount: '6', quantity: '24', unit: 'pcs' })];
+  const initialPrep = { ...emptyPreparation('INBOUND'), requestedCount: '6', groups: initialGroups };
+
+  // 1. Staff starts allocation: exact requestId + payload are persisted before POST.
+  const firstPlan = beginPendingBatch(initialPrep, 'wh-1', 'draft-1');
+  await store.write(scope, firstPlan.nextPrep);
+  assert.equal(isPendingBatchForVoucher(firstPlan.nextPrep.pendingBatch, 'wh-1', 'draft-1'), true);
+  assert.equal(validPreparation(firstPlan.nextPrep, 'INBOUND'), true);
+
+  // 2. BE saves lot, response is lost (network/502/409/401) or user leaves screen; slow refetch returns empty DRAFT.
+  for (const status of [0, 401, 403, 409, 500, 502]) {
+    assert.equal(isDefinitiveBatchRejection(new ApiError(status, 'err', 'Uncertain')), false);
+  }
+  const restored = await store.read(scope);
+  const afterSlowRefetch = reconcilePendingBatchWithVoucher(restored, { status: 'DRAFT', lines: [] });
+  assert.equal(isPendingBatchForVoucher(afterSlowRefetch.pendingBatch, 'wh-1', 'draft-1'), true);
+
+  // 3. Regression guard: Staff tries to change box count while outcome is unresolved -> blocked, key & payload preserved.
+  const editedGroups = [group('group-1', { containerCount: '8', quantity: '24', unit: 'pcs' })];
+  const afterEditAttempt = applyDraftBatchGroupEdit(afterSlowRefetch, editedGroups, 'wh-1', 'draft-1');
+  assert.equal(afterEditAttempt.requestedCount, '6');
+  assert.equal(afterEditAttempt.requestId, firstPlan.nextPrep.requestId);
+  assert.deepEqual(plain(afterEditAttempt.pendingBatch), plain(firstPlan.nextPrep.pendingBatch));
+
+  // 4. Retrying reuses exact same requestId and payload.
+  const retryPlan = beginPendingBatch(afterEditAttempt, 'wh-1', 'draft-1');
+  assert.equal(retryPlan.body.requestId, firstPlan.body.requestId);
+  assert.deepEqual(plain(retryPlan.body), plain(firstPlan.body));
+
+  // 5. Reconciliation clears pendingBatch once server voucher has lines (or leaves DRAFT), and 400/404 unlocks editing.
+  assert.equal(isDefinitiveBatchRejection(new ApiError(400, 'bad', 'Invalid')), true);
+  assert.equal(isDefinitiveBatchRejection(new ApiError(404, 'missing', 'Missing')), true);
+  const reconciled = reconcilePendingBatchWithVoucher(afterEditAttempt, { status: 'DRAFT', lines: [{ id: 'l-1' }] });
+  assert.equal(reconciled.pendingBatch, undefined);
+  assert.equal(reconciled.requestId, undefined);
+  assert.equal(clearPendingBatch(afterEditAttempt).pendingBatch, undefined);
+});
+
+test('empty DRAFT with no pendingBatch remains editable and rejects malformed pendingBatch caches', () => {
+  const fresh = { ...emptyPreparation('INBOUND'), requestedCount: '6', groups: [group('group-1')] };
+  const edited = applyDraftBatchGroupEdit(fresh, [group('group-1', { containerCount: '10' })], 'wh-1', 'draft-1');
+  assert.equal(edited.requestedCount, '10');
+  assert.equal(edited.pendingBatch, undefined);
+
+  const validBody = buildContainerBatchBody('wh-1', 'req-1', '6', [group('group-1')], 'draft-1');
+  assert.equal(validPreparation({ ...fresh, requestId: 'req-1', pendingBatch: { requestId: 'req-1', body: validBody } }, 'INBOUND'), true);
+  for (const bad of [
+    null,
+    {},
+    { requestId: 'req-1', body: { ...validBody, requestId: 'req-2' } },
+    { requestId: 'req-1', body: { ...validBody, containerCount: 5 } },
+    { requestId: 'req-1', body: { ...validBody, groups: [] } },
+    { requestId: 'req-1', body: { ...validBody, warehouseId: ' ' } },
+  ]) {
+    assert.equal(validPreparation({ ...fresh, pendingBatch: bad }, 'INBOUND'), false);
+  }
 });

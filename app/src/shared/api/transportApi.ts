@@ -88,6 +88,21 @@ export interface CreateTransportRequestResponse {
   details: TransportRequestDetailResponse[];
 }
 
+export type WarehouseStockPostingStatus = 'PENDING' | 'RETRYING' | 'POSTED';
+
+export interface WarehouseStockPostingResponse {
+  jobId: string;
+  status: WarehouseStockPostingStatus | string;
+  recordedAt: string;
+  postedAt: string | null;
+  nextAttemptAt: string | null;
+}
+
+export interface WarehouseHandoverSyncResponse {
+  pickup: WarehouseStockPostingResponse | null;
+  delivery: WarehouseStockPostingResponse | null;
+}
+
 export interface TransportRequestDetailItem extends TransportRequestDetailResponse {
   containerBarcode: string | null;
   sourceStorageLocationCode: string | null;
@@ -96,6 +111,7 @@ export interface TransportRequestDetailItem extends TransportRequestDetailRespon
   destinationStorageLocationCode: string | null;
   destinationEndpointCode: string | null;
   destinationEndpointName: string | null;
+  warehouseSync?: WarehouseHandoverSyncResponse | null;
 }
 /** BOTH-04: what the server allows on this request now, for this user (the same list the web console reads). */
 export type TransportRequestAction = 'QUEUE' | 'CANCEL' | 'REJECT';
