@@ -9,6 +9,10 @@ public interface INavigationModule
 {
     Task<MapVersionSnapshot?> GetMapVersionAsync(Guid mapVersionId, CancellationToken cancellationToken = default);
 
+    /// <summary>Published maps in descending publication order for selecting the operating warehouse.</summary>
+    Task<IReadOnlyList<MapVersionSnapshot>> GetPublishedMapsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MapVersionSnapshot>>([]);
+
     Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(
         IReadOnlyCollection<Guid> endpointIds,
         CancellationToken cancellationToken = default);

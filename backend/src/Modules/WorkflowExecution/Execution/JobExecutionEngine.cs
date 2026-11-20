@@ -238,7 +238,9 @@ public sealed class JobExecutionEngine(
     /// Completed steps are kept. The robot must be localized with fresh telemetry: it may have come back somewhere
     /// else (rebooted, pushed by hand), so a stop it already reached is driven to again before Staff confirm there.
     /// </summary>
-    public async Task<Job> ResumeAsync(Guid jobId, Guid? robotId, CancellationToken cancellationToken = default)
+    public async Task<Job> ResumeAsync(
+        Guid jobId, Guid? robotId, CancellationToken cancellationToken = default,
+        Guid? actor = null, bool isAdministrator = false)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
         if (JobActionPolicy.StateReason(JobActionPolicy.Resume, job.Status) is { } notResumable)
@@ -248,23 +250,22 @@ public sealed class JobExecutionEngine(
                 notResumable);
         }
 
+        if (JobActionPolicy.ResumeOwnershipReason(job, actor, isAdministrator) is { } ownershipDenial)
+        {
+            throw new AppException("Only the operator who paused this Job or an Administrator can resume it.", 403, ownershipDenial);
+        }
+
         var previousRobot = AssignedRobot(job);
         var targetRobotId = robotId ?? previousRobot
             ?? throw new DomainValidationException($"Job {job.JobNo} has no robot; pass robotId.", "robot_required");
         var robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{targetRobotId}' was not found.", "robot_not_found");
 
-        // WFX-03: the operator's pause held the robot; resuming the job releases that hold first.
-        // A request cancelled with cargo on board held the robot the same way; resuming delivers that cargo.
-        if (robot.MotionHeld && job.FailureCode is OperatorPausedCode or CargoOnboardCancelCode && robot.Id == previousRobot)
-        {
-            await fleet.ResumeRobotAsync(robot.Id, cancellationToken);
-            robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken) ?? robot;
-        }
-
+        var releaseJobHold = robot.MotionHeld && job.FailureCode is OperatorPausedCode or CargoOnboardCancelCode
+            && robot.Id == previousRobot;
         var busyForResume = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
-        EnsureRobotCanTakeJob(robot, job, busyForResume,
-            (await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(robot.Id));
+        var returningToPark = (await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(robot.Id);
+        EnsureRobotCanTakeJob(releaseJobHold ? robot with { MotionHeld = false } : robot, job, busyForResume, returningToPark);
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
         // A robot whose battery is known to be low takes no more work; an unknown battery does not block a resume
         // (the robot was already on this job), it is recorded in the decision.
@@ -291,6 +292,14 @@ public sealed class JobExecutionEngine(
             throw new ConflictException(
                 $"Job {job.JobNo} has containers on its previous robot; transfer them first (payload recovery).",
                 "payload_recovery_required");
+        }
+
+        if (releaseJobHold)
+        {
+            await fleet.ResumeRobotAsync(robot.Id, cancellationToken);
+            robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken) ?? robot;
+            EnsureRobotCanTakeJob(robot, job, busyForResume, returningToPark);
+            EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
         }
 
         await fleet.RecordDispatchDecisionAsync(
@@ -322,6 +331,8 @@ public sealed class JobExecutionEngine(
         job.Status = JobStatus.RUNNING;
         job.FailureCode = null;
         job.FailureMessage = null;
+        job.OperatorPausedBy = null;
+        job.OperatorPausedAt = null;
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robot.Id, null));
         await SaveAndPublishAsync(cancellationToken);
         logger.LogInformation("Job {JobNo} resumed on robot {RobotCode}", job.JobNo, robot.Code);
@@ -2950,9 +2961,11 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException("This robot was just given to another Job.", "robot_assigned_to_other_job");
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateConcurrencyException ex)
         {
             _pendingEvents.Clear();
+            if (ex.Entries.Any(entry => entry.Entity is Job))
+                throw new ConflictException("This Job's operator pause has changed. Refresh it and try again.", "job_operator_pause_changed");
             throw new ConflictException("Someone else is handling this step.", HumanTaskClaimedCode);
         }
 
@@ -3309,13 +3322,19 @@ public sealed class JobExecutionEngine(
     /// Resume sends a NEW move. Traffic reservations are kept: the robot is still where it stopped.
     /// The stop itself is followed through GET /api/fleet/robots/{id}/stop-state (requested / accepted / verified).
     /// </summary>
-    public async Task<Job> PauseAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
+    public async Task<Job> PauseAsync(Guid jobId, string? reason, Guid actor, CancellationToken cancellationToken = default)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
         if (JobActionPolicy.StateReason(JobActionPolicy.Pause, job.Status) is { } notPausable)
         {
             throw new ConflictException($"Job {job.JobNo} is {job.Status}; only a RUNNING job can be paused.", notPausable);
         }
+
+        reason = reason?.Trim();
+        if (string.IsNullOrEmpty(reason))
+            throw new DomainValidationException("Enter a reason for pausing this Job.", "job_pause_reason_required");
+        if (reason.Length > 500)
+            throw new DomainValidationException("The pause reason must be 500 characters or fewer.", "job_pause_reason_too_long");
 
         var workflowSteps = await db.WorkflowSteps.AsNoTracking()
             .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
@@ -3329,14 +3348,14 @@ public sealed class JobExecutionEngine(
 
         var robotId = AssignedRobot(job);
         Guid? stopCommand = robotId is { } rid
-            ? await fleet.StopRobotAsync(rid, "PAUSE", string.IsNullOrWhiteSpace(reason) ? $"Job {job.JobNo} paused" : reason, cancellationToken)
+            ? await fleet.StopRobotAsync(rid, "PAUSE", reason, cancellationToken)
             : null;
 
         job.Status = JobStatus.PAUSED;
         job.FailureCode = OperatorPausedCode;
-        job.FailureMessage = string.IsNullOrWhiteSpace(reason)
-            ? (stopCommand is null ? "Paused by an operator; the robot could not be reached (state unknown)." : "Paused by an operator.")
-            : reason.Trim();
+        job.FailureMessage = reason;
+        job.OperatorPausedBy = actor;
+        job.OperatorPausedAt = now;
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
         await SaveAndPublishAsync(cancellationToken);
         logger.LogInformation("Job {JobNo} paused by operator; STOP command {CommandId}", job.JobNo, stopCommand);

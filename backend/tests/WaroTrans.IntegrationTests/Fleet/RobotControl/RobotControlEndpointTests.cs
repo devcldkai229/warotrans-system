@@ -8,6 +8,10 @@ using WaroTrans.Fleet.Persistence;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.WorkflowExecution.Entities;
+using WaroTrans.WorkflowExecution.Enums;
+using WaroTrans.WorkflowExecution.Execution;
+using WaroTrans.WorkflowExecution.Persistence;
 
 namespace WaroTrans.IntegrationTests.Fleet.RobotControl;
 
@@ -79,6 +83,36 @@ public sealed class RobotControlEndpointTests(WaroTransWebApplicationFactory fac
 
         Assert.Equal(HttpStatusCode.Conflict, navigate.StatusCode);
         Assert.Equal("robot_motion_held", await navigate.ReadErrorCodeAsync());
+    }
+
+    [Fact]
+    public async Task Robot_resume_and_manual_lease_cannot_override_an_operator_paused_job()
+    {
+        var robotId = await SeedRobotAsync(change: robot => robot.MotionHeld = true);
+        var (client, admin) = await SignInAsync("pause-control-admin", AccountRole.ADMIN);
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var job = new Job
+        {
+            Id = Guid.NewGuid(), JobNo = "JOB-PAUSE-HOLD", ProvisioningKey = "JOB-PAUSE-HOLD",
+            WorkflowId = Guid.NewGuid(), MapVersionId = Guid.NewGuid(), Status = JobStatus.PAUSED,
+            CreatedAt = now, OperatorPausedAt = now, FailureCode = JobExecutionEngine.OperatorPausedCode
+        };
+        execution.Jobs.Add(job);
+        execution.JobRobotAssignments.Add(new JobRobotAssignment
+        {
+            Id = Guid.NewGuid(), JobId = job.Id, RobotId = robotId, StartedAt = now
+        });
+        await execution.SaveChangesAsync();
+
+        var robot = $"/api/fleet/robots/{robotId}";
+        using var resume = await client.SendWithTokenAsync(HttpMethod.Post, $"{robot}/commands/resume", admin.AccessToken);
+        using var lease = await client.SendWithTokenAsync(HttpMethod.Post, $"{robot}/manual/lease", admin.AccessToken, new { });
+        Assert.Equal(HttpStatusCode.Conflict, resume.StatusCode);
+        Assert.Equal("job_paused_robot_held", await resume.ReadErrorCodeAsync());
+        Assert.Equal(HttpStatusCode.Conflict, lease.StatusCode);
+        Assert.Equal("job_paused_robot_held", await lease.ReadErrorCodeAsync());
     }
 
     [Fact]

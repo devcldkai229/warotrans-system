@@ -237,7 +237,7 @@ public sealed class FleetModuleApi(
     {
         try
         {
-            return (await robotControl.ResumeAsync(robotId, cancellationToken)).CommandId;
+            return (await robotControl.ResumeAsync(robotId, cancellationToken, fromJobResume: true)).CommandId;
         }
         catch (AppException ex)
         {

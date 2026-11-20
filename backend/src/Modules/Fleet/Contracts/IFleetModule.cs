@@ -161,6 +161,9 @@ public sealed record RobotSnapshot(
 public interface IRobotWorkQuery
 {
     Task<bool> HasActiveJobAsync(Guid robotId, CancellationToken cancellationToken = default);
+
+    Task<bool> HasOperatorPausedJobAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }
 
 public sealed record IdleRobot(RobotSnapshot Robot, DateTimeOffset? LastCommandAt);

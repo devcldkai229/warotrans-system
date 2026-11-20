@@ -84,6 +84,7 @@ public static class WorkflowExecutionModule
         // Job execution (GĐ 3)
         services.AddScoped<JobExecutionEngine>();
         services.AddScoped<JobQueries>();
+        services.AddScoped<StaffWarehouseScope>();
         services.AddScoped<ITransportRequestJobControl, Services.TransportRequestJobControl>();
         services.AddScoped<IJobEvidenceQuery, Services.JobEvidenceQuery>();
         services.AddScoped<StartJobHandler>();

@@ -24,6 +24,7 @@ public static class ResumeJobEndpoint
         .WithName("ResumeJob")
         .WithSummary("Continue a PAUSED / REASSIGNING Job from the step that stopped it")
         .WithDescription("Re-opens the failed step on the same robot (default) or another AVAILABLE robot on the Job's map. " +
+                         "After an operator pause, only the operator or an Administrator can resume. " +
                          "The robot must be localized with fresh telemetry. If it is no longer at the current stop, it drives " +
                          "back there before Staff confirm. Completed steps are kept. 409 job_not_resumable, robot_not_available, " +
                          "robot_not_localized, robot_telemetry_stale, payload_recovery_required.");

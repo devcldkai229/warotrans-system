@@ -139,6 +139,15 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("map_version_id");
 
+                    b.Property<DateTimeOffset?>("OperatorPausedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("operator_paused_at");
+
+                    b.Property<Guid?>("OperatorPausedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operator_paused_by");
+
                     b.Property<int>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");

@@ -153,6 +153,12 @@ One `ContainerId` per TransportRequest (DB unique + validator).
 
 JobTask.ContextValues use **dotted** catalog paths (`source.endpointId`, …) so `StepInputResolver` works. Snapshot DTO properties stay PascalCase/flat C# names.
 
+## Operator Pause and Resume
+
+`POST /api/workflow-execution/jobs/{id}/pause` requires a reason of up to 500 characters. For Staff, the Job must belong to the active warehouse whose map was most recently published. Jobs on an earlier map of that warehouse are included. The Job detail returns `operatorPause` with `pausedBy`, `pausedAt` and `reason` for an operator pause. Read the Fleet `stop-state` for the result of the robot stop request.
+
+Only the operator recorded on the pause or an Admin may resume an operator-paused Job. `availableActions` reflects this restriction. A direct robot Resume or manual lease request for an operator-paused Job returns `job_paused_robot_held`. Apply WorkflowExecution migration `20261120081415_RecordOperatorPause` before running the updated service.
+
 ## Non-goals (this foundation)
 
 Robot selection, JobAssignment, MQTT, Job execution loop, CreateTransportRequest HTTP endpoint itself.

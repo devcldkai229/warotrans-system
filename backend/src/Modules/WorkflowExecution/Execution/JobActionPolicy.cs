@@ -1,5 +1,6 @@
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 
 namespace WaroTrans.WorkflowExecution.Execution;
@@ -35,6 +36,19 @@ public static class JobActionPolicy
         _ => Permissions.JobOperate
     };
 
-    public static IReadOnlyList<ActionAvailability> Evaluate(JobStatus status, Func<string, bool> can) =>
-        All.Select(action => ActionAvailability.Of(action, StateReason(action, status), can(PermissionOf(action)))).ToList();
+    public static string? ResumeOwnershipReason(Job job, Guid? actor, bool isAdministrator) =>
+        job.Status == JobStatus.PAUSED && job.FailureCode == JobExecutionEngine.OperatorPausedCode
+        && !isAdministrator && (actor is null || actor != job.OperatorPausedBy)
+            ? "job_pause_owner_required"
+            : null;
+
+    public static IReadOnlyList<ActionAvailability> Evaluate(
+        JobStatus status,
+        Func<string, bool> can,
+        string? pauseDenial = null,
+        string? resumeDenial = null) =>
+        All.Select(action => ActionAvailability.Of(
+            action,
+            StateReason(action, status) ?? (action == Pause ? pauseDenial : action == Resume ? resumeDenial : null),
+            can(PermissionOf(action)))).ToList();
 }
