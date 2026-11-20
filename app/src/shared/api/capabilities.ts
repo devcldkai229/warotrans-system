@@ -14,7 +14,8 @@ export const mobileCapabilities = {
   reportIssue: true,
   pauseJob: true,
   resumeJob: true,
-  payloadRecovery: false,
+  // M4 payload recovery endpoints verified against BE d43f0a6.
+  payloadRecovery: true,
   // M5 teleop & lease acquisition stay gated until BE lease-epoch/freshness and robot Semantic Mode authority/mux pass.
   manualDriveTeleop: false,
 } as const;

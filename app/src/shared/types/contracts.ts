@@ -574,6 +574,50 @@ export interface JobDetailResponse {
   operatorPause?: JobOperatorPause | null;
 }
 
+export type JobRecoveryStatus = 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT';
+
+export type JobRecoveryAction =
+  | 'CLAIM'
+  | 'RELEASE'
+  | 'ASSIGN'
+  | 'UNASSIGN'
+  | 'CONFIRM'
+  | 'RESUME_SAME_ROBOT';
+
+export interface RecoveryContainerResponse {
+  containerId: string;
+  barcode: string | null;
+}
+
+export interface JobRecoveryResponse {
+  id: string;
+  jobId: string;
+  status: JobRecoveryStatus | string;
+  reason: string;
+  fromRobotId: string | null;
+  toRobotId: string | null;
+  recoveryEndpointId: string | null;
+  containerIds: string[];
+  robotArrived: boolean;
+  confirmedBy: string | null;
+  confirmedAt: UtcDateTime | null;
+  note: string | null;
+  createdAt: UtcDateTime;
+  resolvedAt: UtcDateTime | null;
+  claimedBy: string | null;
+  version: number;
+  containers: RecoveryContainerResponse[];
+  availableActions: ActionAvailability[];
+}
+
+export interface RecoveryRobotCandidateResponse {
+  robotId: string;
+  robotCode: string;
+  maxContainers: number;
+  eligible: boolean;
+  reasons: string[];
+}
+
 export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE' | 'CONFIRM';
 
 export interface HandoverStopScan {

@@ -6,8 +6,9 @@ import { listRobots } from './fleetApi';
 import { requireMobileCapability } from './capabilities';
 import type {
   ActionAvailability, HandoverProblemCode, HandoverStopAction, HandoverStopResponse, HandoverStopScan,
-  JobContainerResponse, JobDetailResponse, JobStatus, JobStepResponse, JobTaskResponse,
-  HandoverConfirmationBody, HandoverConfirmationResponse, ReportTaskProblemBody,
+  JobContainerResponse, JobDetailResponse, JobRecoveryAction, JobRecoveryResponse, JobStatus, JobStepResponse,
+  JobTaskResponse, HandoverConfirmationBody, HandoverConfirmationResponse, RecoveryRobotCandidateResponse,
+  ReportTaskProblemBody,
 } from '../types/contracts';
 
 export type JobAction = 'START' | 'PAUSE' | 'RESUME' | 'CANCEL';
@@ -42,6 +43,20 @@ export function isHandoverStopActionAllowed(
   action: HandoverStopAction,
 ): boolean {
   return Boolean(getHandoverStopAction(stop, action)?.allowed);
+}
+
+export function getRecoveryAction(
+  recovery: Pick<JobRecoveryResponse, 'availableActions'> | null | undefined,
+  action: JobRecoveryAction,
+): ActionAvailability | undefined {
+  return recovery?.availableActions?.find(item => item.action === action);
+}
+
+export function isRecoveryActionAllowed(
+  recovery: Pick<JobRecoveryResponse, 'availableActions'> | null | undefined,
+  action: JobRecoveryAction,
+): boolean {
+  return Boolean(getRecoveryAction(recovery, action)?.allowed);
 }
 
 interface RuntimeStep extends JobStepResponse { stepKey?: string; name?: string }
@@ -348,8 +363,26 @@ export function reportTaskProblem(
     }),
   }, callerToken());
 }
-export function completePayloadRecoveryJob(_jobId: string, _robotCode: string): never {
-  throw new ApiError(501, 'recovery_not_supported', 'Payload recovery execution is not available on this server.');
+
+function normalizeManifestScans(
+  scans: HandoverStopScan[],
+  emptyMessage = 'Scan each container once before confirming.',
+): HandoverStopScan[] {
+  if (!Array.isArray(scans) || !scans.length) {
+    throw new ApiError(400, 'handover_scan_manifest_mismatch', emptyMessage);
+  }
+  const seen = new Set<string>();
+  const normalized: HandoverStopScan[] = [];
+  for (const item of scans) {
+    const containerId = typeof item?.containerId === 'string' ? item.containerId.trim() : '';
+    const barcode = typeof item?.barcode === 'string' ? item.barcode.trim() : '';
+    if (!containerId || !barcode || seen.has(containerId)) {
+      throw new ApiError(400, 'handover_scan_manifest_mismatch', emptyMessage);
+    }
+    seen.add(containerId);
+    normalized.push({ containerId, barcode });
+  }
+  return normalized;
 }
 
 export async function confirmHandoverStop(
@@ -363,25 +396,213 @@ export async function confirmHandoverStop(
   if (typeof moveId !== 'string' || !moveId.trim() || !Number.isInteger(version) || version < 0) {
     throw new ApiError(400, 'handover_stop_invalid', 'Invalid handover turn reference. Refresh the queue.');
   }
-  if (!Array.isArray(scans) || !scans.length) {
-    throw new ApiError(400, 'handover_scan_manifest_mismatch', 'Scan each container of this handover once.');
-  }
-  const seen = new Set<string>();
-  const normalizedScans: HandoverStopScan[] = [];
-  for (const item of scans) {
-    const containerId = typeof item?.containerId === 'string' ? item.containerId.trim() : '';
-    const barcode = typeof item?.barcode === 'string' ? item.barcode.trim() : '';
-    if (!containerId || !barcode || seen.has(containerId)) {
-      throw new ApiError(400, 'handover_scan_manifest_mismatch', 'Scan each container of this handover once.');
-    }
-    seen.add(containerId);
-    normalizedScans.push({ containerId, barcode });
-  }
+  const normalizedScans = normalizeManifestScans(scans, 'Scan each container of this handover once.');
   const response = await apiFetch<RuntimeJob>(
     `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/handover-stops/${encodeURIComponent(stopId)}/confirm`,
     {
       method: 'POST',
       body: JSON.stringify({ moveId: moveId.trim(), version, scans: normalizedScans }),
+    },
+    callerToken(),
+  );
+  return (await hydrateJobs([response]))[0];
+}
+
+function validateRecoveryCaseResponse(jobId: string, data: unknown): JobRecoveryResponse {
+  if (!data || typeof data !== 'object' || !('recovery' in data)) {
+    throw new ApiError(502, 'recovery_invalid', 'The payload recovery response could not be read.');
+  }
+  const recovery = (data as { recovery?: unknown }).recovery as JobRecoveryResponse | null | undefined;
+  if (
+    !recovery
+    || typeof recovery !== 'object'
+    || typeof recovery.id !== 'string'
+    || recovery.jobId !== jobId
+    || !Number.isInteger(recovery.version)
+    || !Array.isArray(recovery.containers)
+    || !Array.isArray(recovery.availableActions)
+  ) {
+    throw new ApiError(502, 'recovery_invalid', 'The payload recovery response could not be read.');
+  }
+  return recovery;
+}
+
+function requireRecoveryCaseVersion(caseId: string, version: number): string {
+  const trimmedCaseId = typeof caseId === 'string' ? caseId.trim() : '';
+  if (!trimmedCaseId || !Number.isInteger(version) || version < 0) {
+    throw new ApiError(400, 'recovery_case_changed', 'This recovery case changed. Refresh it and try again.');
+  }
+  return trimmedCaseId;
+}
+
+function normalizeRecoveryNote(note?: string | null): string | null {
+  const trimmed = note?.trim() || '';
+  if (trimmed.length > 500) {
+    throw new ApiError(400, 'recovery_note_too_long', 'Keep the recovery note to 500 characters or fewer.');
+  }
+  return trimmed || null;
+}
+
+export async function getJobRecovery(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<JobRecoveryResponse | null> {
+  const data = await apiFetch<{ recovery?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery`,
+    { signal },
+  );
+  if (!data || typeof data !== 'object' || !('recovery' in data)) {
+    throw new ApiError(502, 'recovery_invalid', 'The payload recovery response could not be read.');
+  }
+  if (data.recovery === null || data.recovery === undefined) {
+    return null;
+  }
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+export async function listRecoveryCandidates(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<RecoveryRobotCandidateResponse[]> {
+  const data = await apiFetch<{ items?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/candidates`,
+    { signal },
+  );
+  if (!data || !Array.isArray(data.items)) {
+    throw new ApiError(502, 'recovery_candidates_invalid', 'Could not read rescue robot candidates from the server.');
+  }
+  return data.items as RecoveryRobotCandidateResponse[];
+}
+
+export async function claimJobRecovery(
+  jobId: string,
+  caseId: string,
+  version: number,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const data = await apiFetch<{ recovery?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/claim`,
+    { method: 'POST', body: JSON.stringify({ caseId: trimmedCaseId, version }) },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+export async function releaseJobRecovery(
+  jobId: string,
+  caseId: string,
+  version: number,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const data = await apiFetch<{ recovery?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/release`,
+    { method: 'POST', body: JSON.stringify({ caseId: trimmedCaseId, version }) },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+export async function assignRecoveryRobot(
+  jobId: string,
+  caseId: string,
+  version: number,
+  robotId: string,
+  endpointId: string,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const trimmedRobotId = typeof robotId === 'string' ? robotId.trim() : '';
+  const trimmedEndpointId = typeof endpointId === 'string' ? endpointId.trim() : '';
+  if (!trimmedRobotId) {
+    throw new ApiError(400, 'robot_required', 'Select an eligible rescue robot.');
+  }
+  if (!trimmedEndpointId) {
+    throw new ApiError(400, 'recovery_no_target', 'Select an enabled transfer endpoint.');
+  }
+  const data = await apiFetch<{ recovery?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/assign`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        caseId: trimmedCaseId,
+        version,
+        robotId: trimmedRobotId,
+        endpointId: trimmedEndpointId,
+      }),
+    },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+export async function unassignRecoveryRobot(
+  jobId: string,
+  caseId: string,
+  version: number,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const data = await apiFetch<{ recovery?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/unassign`,
+    { method: 'POST', body: JSON.stringify({ caseId: trimmedCaseId, version }) },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+export async function confirmRecoveryTransfer(
+  jobId: string,
+  caseId: string,
+  version: number,
+  robotId: string,
+  scans: HandoverStopScan[],
+  note?: string | null,
+): Promise<JobDetailResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const trimmedRobotId = typeof robotId === 'string' ? robotId.trim() : '';
+  if (!trimmedRobotId) {
+    throw new ApiError(400, 'recovery_no_target', 'No rescue robot is assigned to this recovery case.');
+  }
+  const normalizedScans = normalizeManifestScans(scans, 'Scan each onboard container before confirming the transfer.');
+  const normalizedNote = normalizeRecoveryNote(note);
+  const response = await apiFetch<RuntimeJob>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/transfer-confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        caseId: trimmedCaseId,
+        version,
+        robotId: trimmedRobotId,
+        scans: normalizedScans,
+        note: normalizedNote,
+      }),
+    },
+    callerToken(),
+  );
+  return (await hydrateJobs([response]))[0];
+}
+
+export async function resumeRecoveryOnSameRobot(
+  jobId: string,
+  caseId: string,
+  version: number,
+  note?: string | null,
+): Promise<JobDetailResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const normalizedNote = normalizeRecoveryNote(note);
+  const response = await apiFetch<RuntimeJob>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/resume-same-robot`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        caseId: trimmedCaseId,
+        version,
+        note: normalizedNote,
+      }),
     },
     callerToken(),
   );

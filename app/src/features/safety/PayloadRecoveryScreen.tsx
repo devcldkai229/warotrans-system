@@ -1,791 +1,1220 @@
-import { getContainer, type ContainerListItem } from '../../shared/api';
-import { toast } from '../../shared/context/ToastContext';
-import React, { useEffect, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { RawText as Text } from '../../shared/ui/Text';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   AlertTriangle,
+  Bot,
   Box,
-  Check,
   CheckCircle2,
   LifeBuoy,
-  Navigation,
+  MapPin,
   RefreshCw,
   ScanLine,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { Button } from '../../shared/components/Button';
+import { useAuth } from '../auth/authContext';
+import {
+  assignRecoveryRobot,
+  claimJobRecovery,
+  confirmRecoveryTransfer,
+  getJobDetail,
+  getJobRecovery,
+  getMapVersionDetail,
+  getRecoveryAction,
+  getUserErrorMessage,
+  isRecoveryActionAllowed,
+  listJobs,
+  listRecoveryCandidates,
+  listRobots,
+  releaseJobRecovery,
+  resumeRecoveryOnSameRobot,
+  unassignRecoveryRobot,
+  type MapVersionDetailDto,
+} from '../../shared/api';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { ThemeColors } from '../../shared/theme/colors';
+import { t } from '../../shared/i18n';
+import { useRealtime } from '../../shared/realtime';
+import { Scanner, type ScanFeedback } from '../../shared/scan/Scanner';
+import type { ThemeColors } from '../../shared/theme/colors';
+import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
+import type {
+  JobDetailResponse,
+  JobRecoveryResponse,
+  RecoveryRobotCandidateResponse,
+  RobotResponse,
+} from '../../shared/types/contracts';
+import {
+  Button,
+  Card,
+  EmptyState,
+  StatusPill,
+  Text,
+  TextField,
+} from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { completePayloadRecoveryJob, getJobDetail, listJobs, listRobots, listContainers, getMapVersionDetail } from '../../shared/api';
+import {
+  candidateReasonLabel,
+  eligibleRecoveryEndpoints,
+  recoveryActionReasonLabel,
+  recoveryPhaseFromCase,
+  recoveryScanProgress,
+  recordRecoveryScan,
+} from './payloadRecoveryData';
 
-type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
+type BusyAction =
+  | 'load'
+  | 'claim'
+  | 'release'
+  | 'assign'
+  | 'unassign'
+  | 'confirm'
+  | 'same_robot'
+  | null;
+
+interface CompletedRecoveryReceipt {
+  mode: 'transfer' | 'same_robot';
+  job: JobDetailResponse;
+  carrierCode: string;
+  endpointCode: string;
+  count: number;
+}
 
 export function PayloadRecoveryScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
-  const { goBack, navigate, params } = useNavigation();
-  const [phase, setPhase] = useState<RescuePhase>('briefing');
-  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [isLoadingContext, setIsLoadingContext] = useState(true);
-  const [hasRecoveryJob, setHasRecoveryJob] = useState(false);
-  const [contextError, setContextError] = useState(false);
-  const [failureDetail, setFailureDetail] = useState('Failure details unavailable');
-  const [productName, setProductName] = useState('Product unavailable');
+  const { session } = useAuth();
+  const { goBack, navigate, params, dockHeight } = useNavigation();
+  const { lastJobUpdate } = useRealtime();
 
-  const jobId = params?.jobId || '';
-  const robotId = params?.robotId || params?.robot || 'Unassigned';
-  const [displayJobNo, setDisplayJobNo] = useState(jobId);
-  const [displayRobotId, setDisplayRobotId] = useState(robotId);
-  const [displayContainer, setDisplayContainer] = useState('Unknown Container');
-  const [displayLocation, setDisplayLocation] = useState('Unknown Location');
-  const [displayTarget, setDisplayTarget] = useState('Unknown Destination');
-  const [resolvedJobId, setResolvedJobId] = useState(jobId);
-  const faultedRobot = displayRobotId;
-  const rescueRobot = 'Not Assigned';
-  const targetContainer = displayContainer;
+  const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
+  const requestedJobId = typeof params?.jobId === 'string' ? params.jobId : '';
+
+  const [appActive, setAppActive] = useState(
+    AppState.currentState !== 'background' && AppState.currentState !== 'inactive',
+  );
+  const [resolvedJobId, setResolvedJobId] = useState(requestedJobId);
+  const [job, setJob] = useState<JobDetailResponse | null>(null);
+  const [recovery, setRecovery] = useState<JobRecoveryResponse | null>(null);
+  const [candidates, setCandidates] = useState<RecoveryRobotCandidateResponse[]>([]);
+  const [robots, setRobots] = useState<RobotResponse[]>([]);
+  const [map, setMap] = useState<MapVersionDetailDto | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<BusyAction>(null);
+
+  const [selectedRobotId, setSelectedRobotId] = useState<string>('');
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string>('');
+  const [note, setNote] = useState('');
+
+  const [scannedByContainerId, setScannedByContainerId] = useState<Record<string, string>>({});
+  const scansRef = useRef<Record<string, string>>({});
+  const [manualCode, setManualCode] = useState('');
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const [completed, setCompleted] = useState<CompletedRecoveryReceipt | null>(null);
+
+  const lastCaseKeyRef = useRef<string>('');
+  const loadRequestRef = useRef(0);
 
   useEffect(() => {
-    let mounted = true;
-    setIsLoadingContext(true); setHasRecoveryJob(false); setContextError(false); setFeedback(null);
-    const loadRecoveryContext = async () => {
-      const loadJob = async () => {
-        if (jobId) return getJobDetail(jobId);
-        const jobs = await listJobs({ status: 'RECOVERY_REQUIRED', take: 50 });
-        return jobs[0] || null;
-      };
-      const [jobResult, robotResult, containerResult] = await Promise.allSettled([
-        loadJob(),
-        listRobots(),
-        Promise.resolve<{ items: ContainerListItem[] }>({ items: [] }),
-      ]);
-      for (const result of [jobResult, robotResult, containerResult]) {
-        if (result.status === 'rejected') console.warn('Recovery context lookup unavailable:', result.reason);
-      }
-      const job = jobResult.status === 'fulfilled' ? jobResult.value : null;
-      const robots = robotResult.status === 'fulfilled' ? robotResult.value.items : [];
-      const containers = containerResult.status === 'fulfilled' ? containerResult.value.items : [];
-      const map = job ? await getMapVersionDetail(job.mapVersionId).catch(() => null) : null;
-      if (!mounted) return;
-      const context = job?.contextValues || {};
-      const textValue = (value: unknown) => typeof value === 'string' && value.trim() ? value : undefined;
-      const assignedRobot = robots.find((robot) => robot.id === context.assignedRobotId)
-        || robots.find((robot) => robot.code === context.assignedRobotCode)
-        || robots.find((robot) => robot.id === robotId || robot.code === robotId);
-      if (assignedRobot) setDisplayRobotId(assignedRobot.code);
-      if (jobResult.status === 'rejected') throw jobResult.reason;
-      if (!job) { setFeedback('No job currently requires recovery.'); return; }
-      if (job.status !== 'RECOVERY_REQUIRED') { setFeedback('This job does not currently require recovery. Open Job Details to inspect its status.'); return; }
-      setResolvedJobId(job.id);
-      setDisplayJobNo(job.jobNo);
-      const container = job.containers[0] ? await getContainer(job.containers[0].containerId).catch(() => null) : null;
-      if (!mounted) return;
-      setHasRecoveryJob(true);
-      setFailureDetail(job.failureMessage || job.failureCode || 'Failure details unavailable');
-      if (container) { setDisplayContainer(container.barcode); setProductName(container.productName || 'Product unavailable'); }
-      const resolveEndpoint = (value: unknown) => {
-        const code = map?.endpoints.find((endpoint) => endpoint.id === value || endpoint.code === value)?.code;
-        const text = textValue(value);
-        return code || (text && !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(text) ? text : undefined);
-      };
-      const dropoff = job.tasks.find((task) => task.contextValues?.stopAction === 'DROPOFF');
-      const pickup = job.tasks.find((task) => task.contextValues?.stopAction === 'PICKUP');
-      const target = resolveEndpoint(dropoff?.contextValues?.stopEndpointId)
-        || resolveEndpoint(context.destinationEndpointCode)
-        || resolveEndpoint(context.targetEndpointCode)
-        || resolveEndpoint(dropoff?.steps.find((step) => step.targetEndpointId)?.targetEndpointId)
-        || resolveEndpoint(job.tasks.flatMap((task) => task.steps).reverse().find((step) => step.targetEndpointId)?.targetEndpointId);
-      if (target) setDisplayTarget(target);
-      const source = resolveEndpoint(pickup?.contextValues?.stopEndpointId) || resolveEndpoint(context.sourceEndpointCode);
-      const location = container?.currentEndpointCode || resolveEndpoint(container?.currentEndpointId)
-        || container?.currentStorageLocationCode || textValue(context.currentStop)
-        || (source && target ? `${source} ➔ ${target} (Active Corridor)` : undefined);
-      if (location) setDisplayLocation(location);
-    };
-    loadRecoveryContext().catch((err) => { if (mounted) { setContextError(true); setFeedback(err instanceof Error ? err.message : 'Recovery context could not be loaded.'); } })
-      .finally(() => { if (mounted) setIsLoadingContext(false); });
-    return () => { mounted = false; };
-  }, [jobId, robotId]);
+    const subscription = AppState.addEventListener('change', (state) => {
+      setAppActive(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
 
-  const recoveryUnavailable = () => toast.warning('Recovery execution is not supported by this server. Contact the supervisor; no robot command has been sent.');
-  const handleDispatchRescue = recoveryUnavailable;
-  const handleConfirmArrival = recoveryUnavailable;
-  const handleScanStrandedTote = recoveryUnavailable;
-  const handleResumeMission = recoveryUnavailable;
+  const loadRecoveryData = useCallback(async (options: { quiet?: boolean } = {}) => {
+    const reqId = ++loadRequestRef.current;
+    if (!options.quiet) {
+      setLoading(true);
+      setLoadError(null);
+    }
+    try {
+      let targetJobId = requestedJobId;
+      let loadedJob: JobDetailResponse | null = null;
+      if (targetJobId) {
+        loadedJob = await getJobDetail(targetJobId);
+      } else {
+        const recoveryJobs = await listJobs({ status: 'RECOVERY_REQUIRED', take: 20 });
+        loadedJob = recoveryJobs[0] ?? null;
+        targetJobId = loadedJob?.id ?? '';
+      }
+
+      if (loadRequestRef.current !== reqId) return;
+      setResolvedJobId(targetJobId);
+      setJob(loadedJob);
+
+      if (!loadedJob) {
+        setRecovery(null);
+        setCandidates([]);
+        setMap(null);
+        return;
+      }
+
+      const [recoveryResult, robotsResult, mapResult, candidatesResult] = await Promise.allSettled([
+        getJobRecovery(loadedJob.id),
+        listRobots(),
+        getMapVersionDetail(loadedJob.mapVersionId),
+        canOperate && loadedJob.status === 'RECOVERY_REQUIRED'
+          ? listRecoveryCandidates(loadedJob.id)
+          : Promise.resolve<RecoveryRobotCandidateResponse[]>([]),
+      ]);
+
+      if (loadRequestRef.current !== reqId) return;
+      if (recoveryResult.status === 'rejected') {
+        throw recoveryResult.reason;
+      }
+
+      const loadedRecovery = recoveryResult.value;
+      const loadedRobots = robotsResult.status === 'fulfilled' ? robotsResult.value.items : [];
+      const loadedMap = mapResult.status === 'fulfilled' ? mapResult.value : null;
+      const loadedCandidates = candidatesResult.status === 'fulfilled' ? candidatesResult.value : [];
+
+      setRecovery(loadedRecovery);
+      setRobots(loadedRobots);
+      setMap(loadedMap);
+      setCandidates(loadedCandidates);
+      setLoadError(null);
+
+      const nextCaseKey = loadedRecovery
+        ? `${loadedRecovery.id}:${loadedRecovery.status}:${loadedRecovery.toRobotId || ''}`
+        : '';
+      if (lastCaseKeyRef.current && lastCaseKeyRef.current !== nextCaseKey) {
+        scansRef.current = {};
+        setScannedByContainerId({});
+        setScanError(null);
+        setManualCode('');
+        setScannerOpen(false);
+      }
+      lastCaseKeyRef.current = nextCaseKey;
+
+      const eligibleRobots = loadedCandidates.filter(c => c.eligible);
+      setSelectedRobotId((prev) =>
+        eligibleRobots.some(c => c.robotId === prev) ? prev : (eligibleRobots[0]?.robotId ?? ''),
+      );
+
+      const endpoints = eligibleRecoveryEndpoints(loadedMap);
+      setSelectedEndpointId((prev) =>
+        endpoints.some(ep => ep.id === prev) ? prev : (endpoints[0]?.id ?? ''),
+      );
+    } catch (failure) {
+      if (loadRequestRef.current !== reqId) return;
+      const msg = getUserErrorMessage(failure, 'Recovery context could not be loaded.');
+      if (options.quiet) {
+        setActionError(msg);
+      } else {
+        setLoadError(msg);
+      }
+    } finally {
+      if (loadRequestRef.current === reqId && !options.quiet) {
+        setLoading(false);
+      }
+    }
+  }, [requestedJobId, canOperate]);
+
+  useEffect(() => {
+    scansRef.current = {};
+    setScannedByContainerId({});
+    setManualCode('');
+    setScanError(null);
+    setActionError(null);
+    setCompleted(null);
+    void loadRecoveryData();
+  }, [loadRecoveryData]);
+
+  useEffect(() => {
+    if (!lastJobUpdate || !resolvedJobId || lastJobUpdate.jobId !== resolvedJobId) return;
+    void loadRecoveryData({ quiet: true });
+  }, [lastJobUpdate, resolvedJobId, loadRecoveryData]);
+
+  useEffect(() => {
+    if (
+      !appActive
+      || !resolvedJobId
+      || !recovery
+      || recovery.status !== 'TARGET_ASSIGNED'
+      || recovery.robotArrived
+    ) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void loadRecoveryData({ quiet: true });
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [appActive, resolvedJobId, recovery?.status, recovery?.robotArrived, loadRecoveryData]);
+
+  const endpoints = useMemo(() => eligibleRecoveryEndpoints(map), [map]);
+  const robotCodeFor = useCallback(
+    (id: string | null | undefined, fallback = '—') => {
+      if (!id) return fallback;
+      return (
+        robots.find(r => r.id === id)?.code
+        || candidates.find(c => c.robotId === id)?.robotCode
+        || fallback
+      );
+    },
+    [robots, candidates],
+  );
+  const endpointLabelFor = useCallback(
+    (id: string | null | undefined, fallback = '—') => {
+      if (!id) return fallback;
+      const ep = map?.endpoints.find(item => item.id === id);
+      return ep ? `${ep.code} · ${ep.name}` : fallback;
+    },
+    [map],
+  );
+
+  const phase = recoveryPhaseFromCase(recovery, session?.id);
+  const scanProgress = recoveryScanProgress(recovery, scannedByContainerId);
+
+  const canClaim = canOperate && isRecoveryActionAllowed(recovery, 'CLAIM');
+  const canRelease = canOperate && isRecoveryActionAllowed(recovery, 'RELEASE');
+  const canAssign = canOperate && isRecoveryActionAllowed(recovery, 'ASSIGN');
+  const canUnassign = canOperate && isRecoveryActionAllowed(recovery, 'UNASSIGN');
+  const canConfirm = canOperate && isRecoveryActionAllowed(recovery, 'CONFIRM');
+  const canResumeSameRobot = canOperate && isRecoveryActionAllowed(recovery, 'RESUME_SAME_ROBOT');
+
+  const requestInactiveReason = [
+    getRecoveryAction(recovery, 'ASSIGN')?.reason,
+    getRecoveryAction(recovery, 'CONFIRM')?.reason,
+    getRecoveryAction(recovery, 'RESUME_SAME_ROBOT')?.reason,
+  ].find(reason => reason === 'recovery_request_inactive');
+
+  const blockingReasonText =
+    recoveryActionReasonLabel(requestInactiveReason)
+    || (phase === 'claim' ? recoveryActionReasonLabel(getRecoveryAction(recovery, 'CLAIM')?.reason) : null)
+    || (phase === 'en_route' ? recoveryActionReasonLabel(getRecoveryAction(recovery, 'CONFIRM')?.reason) : null);
+
+  const runRecoveryMutation = async (
+    kind: BusyAction,
+    fn: () => Promise<JobRecoveryResponse>,
+  ) => {
+    if (busy) return;
+    triggerHaptic('tap');
+    setBusy(kind);
+    setActionError(null);
+    try {
+      const updated = await fn();
+      triggerHaptic('success');
+      setRecovery(updated);
+      if (kind === 'assign' || kind === 'unassign') {
+        scansRef.current = {};
+        setScannedByContainerId({});
+        setScanError(null);
+        setManualCode('');
+        setScannerOpen(false);
+      }
+      void loadRecoveryData({ quiet: true });
+    } catch (failure) {
+      setActionError(getUserErrorMessage(failure, 'The recovery action failed. Refresh and try again.'));
+      void loadRecoveryData({ quiet: true });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const applyRecoveryScan = (rawCode: string): ScanFeedback => {
+    const outcome = recordRecoveryScan(recovery, scansRef.current, rawCode);
+    if (!outcome.ok || !outcome.containerId) {
+      const msg = outcome.message || 'This barcode is not part of the recovery manifest.';
+      setScanError(msg);
+      return { ok: false, message: msg };
+    }
+    scansRef.current = outcome.nextScanned;
+    setScannedByContainerId(outcome.nextScanned);
+    setManualCode('');
+    setScanError(null);
+    const nextProgress = recoveryScanProgress(recovery, outcome.nextScanned);
+    if (nextProgress.complete) {
+      setScannerOpen(false);
+    }
+    triggerHaptic('success');
+    const codeLabel = outcome.barcode || outcome.containerId;
+    return {
+      ok: true,
+      message: outcome.alreadyScanned
+        ? t('Already scanned: {code}', { code: codeLabel })
+        : t('Verified: {code}', { code: codeLabel }),
+    };
+  };
+
+  const handleConfirmTransfer = async () => {
+    if (!recovery || !job || busy || !canConfirm || !scanProgress.complete || !recovery.toRobotId) return;
+    triggerHaptic('tap');
+    setBusy('confirm');
+    setActionError(null);
+    try {
+      const updatedJob = await confirmRecoveryTransfer(
+        job.id,
+        recovery.id,
+        recovery.version,
+        recovery.toRobotId,
+        scanProgress.scans,
+        note,
+      );
+      triggerHaptic('success');
+      setCompleted({
+        mode: 'transfer',
+        job: updatedJob,
+        carrierCode: robotCodeFor(recovery.toRobotId, 'Rescue Robot'),
+        endpointCode: endpointLabelFor(recovery.recoveryEndpointId, 'Transfer Point'),
+        count: scanProgress.total,
+      });
+    } catch (failure) {
+      setActionError(getUserErrorMessage(failure, 'Payload transfer confirmation failed. Refresh and try again.'));
+      void loadRecoveryData({ quiet: true });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleResumeSameRobot = async () => {
+    if (!recovery || !job || busy || !canResumeSameRobot) return;
+    triggerHaptic('tap');
+    setBusy('same_robot');
+    setActionError(null);
+    try {
+      const updatedJob = await resumeRecoveryOnSameRobot(
+        job.id,
+        recovery.id,
+        recovery.version,
+        note,
+      );
+      triggerHaptic('success');
+      setCompleted({
+        mode: 'same_robot',
+        job: updatedJob,
+        carrierCode: robotCodeFor(recovery.fromRobotId, 'Faulted Robot'),
+        endpointCode: '—',
+        count: recovery.containers.length,
+      });
+    } catch (failure) {
+      setActionError(getUserErrorMessage(failure, 'Could not resume the Job on the same robot. Refresh and try again.'));
+      void loadRecoveryData({ quiet: true });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const faultedRobotCode = robotCodeFor(
+    recovery?.fromRobotId || (typeof job?.contextValues?.assignedRobotId === 'string' ? job.contextValues.assignedRobotId : null),
+    typeof params?.robot === 'string' ? params.robot : 'Unknown Robot',
+  );
+  const rescueRobotCode = robotCodeFor(recovery?.toRobotId, 'Not Assigned');
+  const destinationLabel =
+    (typeof job?.contextValues?.destinationEndpointCode === 'string' && job.contextValues.destinationEndpointCode)
+    || '—';
+  const containerMeta = Array.isArray(job?.contextValues?.containerMeta)
+    ? (job.contextValues.containerMeta as { containerId: string; code?: string; product?: string; location?: string }[])
+    : [];
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Recovery Inspection · Read Only"
+        label={job ? `${job.jobNo} · Payload Recovery` : 'Payload Recovery'}
         title="Emergency Cargo Rescue"
         onBack={goBack}
+        rightAction={
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              void loadRecoveryData();
+            }}
+            style={({ pressed }) => [styles.refreshBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={t('Refresh')}
+          >
+            <RefreshCw size={18} color={colors.textPrimary} />
+          </Pressable>
+        }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {feedback && (
-          <View style={styles.feedbackToast}>
-            <Text style={styles.feedbackText}>{feedback}</Text>
-          </View>
-        )}
-
-        <View style={styles.actionCard}><Text style={styles.actionTitle}>Recovery Execution Unavailable</Text><Text style={styles.actionDesc}>Inspect the Job here. Contact the supervisor to arrange recovery; this app cannot dispatch a rescue robot or confirm a payload transfer.</Text></View>
-        {isLoadingContext || !hasRecoveryJob ? <View style={styles.actionCard}>
-          <Text style={styles.actionTitle}>{isLoadingContext ? 'Loading Recovery Context…' : contextError ? 'Recovery Context Unavailable' : 'No Recovery Job To Display'}</Text>
-          <Button label="Back To Jobs" onPress={() => navigate('jobs')} variant="outline" />
-        </View> : phase === 'completed' ? (
-          <View style={styles.completedCard}>
-            <View style={styles.completedIconBadge}>
-              <Check size={24} color="#16a34a" />
-            </View>
-            <Text style={styles.completedTitle}>Cargo rescue succeeded</Text>
-            <Text style={styles.completedSub}>
-              {rescueRobot} has assumed mission execution and is en route to target shelf.
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: dockReservedSpace(dockHeight) + 28 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {loading ? (
+          <Card padding="md" gap={8}>
+            <Text variant="headline">Loading Recovery Context…</Text>
+            <Text variant="body" color="textSecondary">
+              Fetching recovery case, onboard container manifest, and eligible rescue robots.
             </Text>
+          </Card>
+        ) : loadError ? (
+          <EmptyState
+            icon={AlertTriangle}
+            tone="danger"
+            title="Recovery Context Unavailable"
+            message={loadError}
+            actionTitle="Retry"
+            onAction={() => {
+              void loadRecoveryData();
+            }}
+          />
+        ) : completed ? (
+          <Card padding="md" gap={14}>
+            <View style={styles.completedHeader}>
+              <View style={styles.completedBadge}>
+                <CheckCircle2 size={24} color={colors.successText} />
+              </View>
+              <View style={styles.flexText}>
+                <Text variant="title">
+                  {completed.mode === 'transfer'
+                    ? 'Payload Transferred to Rescue Robot'
+                    : 'Job Resumed on Original Robot'}
+                </Text>
+                <Text variant="body" color="textSecondary">
+                  {completed.mode === 'transfer'
+                    ? t('Ownership of {count} container(s) moved to {robot}. The Job is currently PAUSED for a final safety check before resuming.', {
+                      count: completed.count,
+                      robot: completed.carrierCode,
+                    })
+                    : t('{robot} has retained cargo custody and the Job was updated.', {
+                      robot: completed.carrierCode,
+                    })}
+                </Text>
+              </View>
+            </View>
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Original mission</Text>
-                <Text style={styles.receiptVal}>{displayJobNo}</Text>
+                <Text variant="caption" color="textSecondary">Job</Text>
+                <Text variant="bodyMedium" style={styles.monoText}>{completed.job.jobNo}</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Rescued container</Text>
-                <Text style={styles.receiptHighlight}>{targetContainer} (1 Container)</Text>
+                <Text variant="caption" color="textSecondary">Job Status</Text>
+                <StatusPill status={completed.job.status} size="sm" dot />
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Active carrier</Text>
-                <Text style={styles.receiptSuccess}>{rescueRobot} (Healthy)</Text>
+                <Text variant="caption" color="textSecondary">Active Carrier</Text>
+                <Text variant="bodyMedium" color="successText" style={styles.monoText}>
+                  {completed.carrierCode}
+                </Text>
               </View>
+              {completed.mode === 'transfer' ? (
+                <View style={styles.receiptRow}>
+                  <Text variant="caption" color="textSecondary">Transfer Point</Text>
+                  <Text variant="bodyMedium">{completed.endpointCode}</Text>
+                </View>
+              ) : null}
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Target destination</Text>
-                <Text style={styles.receiptVal}>{displayTarget}</Text>
-              </View>
-              <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text style={styles.receiptLabel}>Faulted unit</Text>
-                <Text style={styles.receiptDanger}>{faultedRobot} (Flagged for towing)</Text>
+                <Text variant="caption" color="textSecondary">Containers</Text>
+                <Text variant="bodyMedium">{t('{count} Container(s)', { count: completed.count })}</Text>
               </View>
             </View>
 
-            <View style={{ gap: 10, marginTop: 18 }}>
+            {completed.job.status === 'PAUSED' ? (
+              <View style={styles.noticeInfo}>
+                <Text variant="caption" color="infoText">
+                  Transfer completed. Open Job Details to verify readiness and tap Resume Job explicitly when ready.
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.actionStack}>
               <Button
-                label="Track Resumed Mission on Map"
-                onPress={() => navigate('live_map', { jobId: resolvedJobId, robotId: rescueRobot })}
+                title="Open Job Details"
                 variant="primary"
                 size="lg"
-                style={{ width: '100%' }}
+                fullWidth
+                onPress={() => navigate('job_detail', { jobId: completed.job.id })}
               />
               <Button
-                label="Back to Fleet Jobs"
-                onPress={() => navigate('jobs')}
+                title="Back to Jobs"
                 variant="outline"
                 size="md"
-                style={{ width: '100%' }}
+                fullWidth
+                onPress={() => navigate('jobs')}
               />
             </View>
-          </View>
+          </Card>
+        ) : !job || !recovery ? (
+          <EmptyState
+            icon={LifeBuoy}
+            tone="neutral"
+            title="No Recovery Job To Display"
+            message="No active recovery case was found for this job. Open Jobs to inspect active missions."
+            actionTitle="Back to Jobs"
+            onAction={() => navigate('jobs')}
+          />
         ) : (
-          <View style={{ gap: 16 }}>
-            {/* Critical Alert Banner */}
-            <View style={styles.alertCard}>
-              <View style={styles.alertIconBox}>
-                <LifeBuoy size={22} color="#dc2626" />
+          <View style={styles.stack}>
+            {/* Incident Banner */}
+            <Card padding="md" gap={10}>
+              <View style={styles.rowBetween}>
+                <View style={styles.iconRow}>
+                  <LifeBuoy size={20} color={colors.dangerText} />
+                  <Text variant="headline">{t('{robot} · Needs Recovery', { robot: faultedRobotCode })}</Text>
+                </View>
+                <StatusPill
+                  status={recovery.status}
+                  tone={
+                    recovery.status === 'TRANSFERRED' || recovery.status === 'RESUMED_SAME_ROBOT'
+                      ? 'success'
+                      : recovery.status === 'TARGET_ASSIGNED'
+                        ? 'info'
+                        : 'warning'
+                  }
+                  size="sm"
+                  dot
+                />
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.alertBadgeRow}>
-                  <View style={styles.alertBadge}>
-                    <Text style={styles.alertBadgeText}>Fleet incident</Text>
+
+              <Text variant="body" color="textSecondary">
+                {job.jobNo} · {recovery.reason || job.failureMessage || job.failureCode || 'Recovery requested'}
+              </Text>
+
+              <View style={styles.diagRow}>
+                <View style={styles.diagCard}>
+                  <Text variant="caption" color="textSecondary">Faulted Robot</Text>
+                  <Text variant="bodyMedium" style={styles.monoText}>{faultedRobotCode}</Text>
+                </View>
+                <View style={styles.diagCard}>
+                  <Text variant="caption" color="textSecondary">Rescue Robot</Text>
+                  <Text
+                    variant="bodyMedium"
+                    color={recovery.toRobotId ? 'successText' : 'textSecondary'}
+                    style={styles.monoText}
+                  >
+                    {rescueRobotCode}
+                  </Text>
+                </View>
+              </View>
+
+              {recovery.recoveryEndpointId ? (
+                <View style={styles.endpointSummary}>
+                  <MapPin size={15} color={colors.primaryText} />
+                  <Text variant="caption" color="textPrimary">
+                    {t('Transfer Point: {point}', { point: endpointLabelFor(recovery.recoveryEndpointId) })}
+                  </Text>
+                </View>
+              ) : null}
+            </Card>
+
+            {actionError ? (
+              <View style={styles.noticeDanger}>
+                <Text variant="caption" color="dangerText">{actionError}</Text>
+              </View>
+            ) : null}
+
+            {requestInactiveReason && blockingReasonText ? (
+              <View style={styles.noticeDanger}>
+                <Text variant="caption" color="dangerText">{blockingReasonText}</Text>
+              </View>
+            ) : !canOperate ? (
+              <View style={styles.noticeWarn}>
+                <Text variant="caption" color="warningText">
+                  You can inspect this recovery case, but job.operate permission is required to execute recovery steps.
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Onboard Manifest */}
+            <Card padding="md" gap={10}>
+              <View style={styles.rowBetween}>
+                <Text variant="headline">
+                  {t('Onboard Cargo Manifest ({count})', { count: recovery.containers.length })}
+                </Text>
+                <Text variant="caption" color="textSecondary">
+                  {t('Target: {dest}', { dest: destinationLabel })}
+                </Text>
+              </View>
+
+              {recovery.containers.map((item) => {
+                const meta = containerMeta.find(m => m.containerId === item.containerId);
+                const barcode = item.barcode || meta?.code || item.containerId;
+                const scanned = Boolean(scannedByContainerId[item.containerId]);
+                return (
+                  <View key={item.containerId} style={styles.manifestRow}>
+                    <View style={styles.manifestLeft}>
+                      <Box size={16} color={colors.textSecondary} />
+                      <View style={styles.flexText}>
+                        <Text variant="bodyMedium" style={styles.monoText}>{barcode}</Text>
+                        {meta?.product ? (
+                          <Text variant="caption" color="textSecondary">{meta.product}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {recovery.status === 'TARGET_ASSIGNED' ? (
+                      <StatusPill
+                        status={scanned ? 'CONFIRMED' : 'WAITING'}
+                        label={scanned ? t('Scanned') : t('Scan Required')}
+                        tone={scanned ? 'success' : 'neutral'}
+                        size="sm"
+                        dot
+                      />
+                    ) : null}
                   </View>
-                  <Text style={styles.alertRobotText}>{faultedRobot} · Needs Recovery</Text>
-                </View>
-              </View>
-            </View>
+                );
+              })}
+            </Card>
 
-            {/* Stepper Progress */}
-            <View style={styles.stepperBox}>
-              <View style={styles.stepItem}>
-                <View
-                  style={[
-                    styles.stepNum,
-                    (phase === 'briefing' || phase === 'rendezvous') && styles.stepNumActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.stepNumText,
-                      (phase === 'briefing' || phase === 'rendezvous') && styles.stepNumTextActive,
-                    ]}
-                  >
-                    1
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.stepText,
-                    (phase === 'briefing' || phase === 'rendezvous') && styles.stepTextActive,
-                  ]}
-                >
-                  Rendezvous
-                </Text>
-              </View>
-              <Text style={styles.stepArrow}>➔</Text>
-              <View style={styles.stepItem}>
-                <View
-                  style={[
-                    styles.stepNum,
-                    phase === 'transfer' && styles.stepNumActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.stepNumText,
-                      phase === 'transfer' && styles.stepNumTextActive,
-                    ]}
-                  >
-                    2
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.stepText,
-                    phase === 'transfer' && styles.stepTextActive,
-                  ]}
-                >
-                  Transfer & scan
-                </Text>
-              </View>
-              <Text style={styles.stepArrow}>➔</Text>
-              <View style={styles.stepItem}>
-                <View
-                  style={[
-                    styles.stepNum,
-                    phase === 'resuming' && styles.stepNumActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.stepNumText,
-                      phase === 'resuming' && styles.stepNumTextActive,
-                    ]}
-                  >
-                    3
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.stepText,
-                    phase === 'resuming' && styles.stepTextActive,
-                  ]}
-                >
-                  Resume
-                </Text>
-              </View>
-            </View>
-
-            {/* Diagnostics Cards */}
-            <View style={styles.diagRow}>
-              <View style={styles.diagFaulted}>
-                <Text style={styles.diagLabel}>Unit & Mission</Text>
-                <Text style={styles.diagRobotId}>{faultedRobot}</Text>
-                <Text style={styles.diagDetail}>{displayJobNo} · {failureDetail}</Text>
-                <View style={styles.diagPillFaulted}>
-                  <Text style={styles.diagPillTextFaulted}>Reported Location: {displayLocation}</Text>
-                </View>
-              </View>
-
-              <View style={styles.diagRescue}>
-                <Text style={styles.diagLabel}>Rescue robot</Text>
-                <Text style={styles.diagRobotId}>{rescueRobot}</Text>
-                <Text style={styles.diagDetail}>Battery and payload unavailable</Text>
-                <View style={styles.diagPillRescue}>
-                  <Text style={styles.diagPillTextRescue}>Status: Not Assigned</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Stranded Cargo Info */}
-            <View style={styles.cargoCard}>
-              <Text style={styles.cargoTitle}>Job Container</Text>
-              <View style={styles.cargoStack}>
-                <View style={styles.cargoTopLine}>
-                  <Box size={16} color={colors.textSecondary} />
-                  <Text style={styles.cargoCode}>{targetContainer}</Text>
-                  <Text style={styles.cargoDesc}>
-                    {productName} · <Text style={styles.boldUnits}>1 Container</Text>
-                  </Text>
-                </View>
-                <View style={styles.cargoDestLine}>
-                  <Text style={styles.cargoDestLabel}>Original Target:</Text>
-                  <Text style={styles.cargoDestVal}>{displayTarget}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Phase Actions with Warm Dark Gray CTAs */}
-            {phase === 'briefing' && (
-              <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Step 1: Dispatch rendezvous</Text>
-                <Text style={styles.actionDesc}>
-                  Dispatch {rescueRobot} to stage 1.0m from {faultedRobot} for tote transfer.
+            {/* Step 1: Claim / Ownership */}
+            {phase === 'resolved' || job.status !== 'RECOVERY_REQUIRED' ? (
+              <Card padding="md" gap={10}>
+                <Text variant="headline">Recovery Case Closed</Text>
+                <Text variant="body" color="textSecondary">
+                  This job is currently {job.status}. Open Job Details to inspect or continue execution.
                 </Text>
                 <Button
-                  label={`Dispatch Rescue (${rescueRobot})`}
-                  icon={<Navigation size={18} color="#ffffff" />}
-                  onPress={handleDispatchRescue}
-                  disabled={true}
+                  title="Open Job Details"
                   variant="primary"
-                  size="lg"
-                  style={{ marginTop: 12 }}
+                  size="md"
+                  fullWidth
+                  onPress={() => navigate('job_detail', { jobId: job.id })}
                 />
-              </View>
-            )}
-
-            {phase === 'rendezvous' && (
-              <View style={styles.actionCard}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <RefreshCw size={16} color={colors.primary} />
-                  <Text style={styles.actionTitle}>{rescueRobot} en route to scene</Text>
-                </View>
-                <Text style={styles.actionDesc}>
-                  Navigating transit corridor. ETA 15 seconds. Please set up perimeter safety cones.
+              </Card>
+            ) : phase === 'claimed_other' ? (
+              <Card padding="md" gap={10}>
+                <Text variant="headline">Held by Another Operator</Text>
+                <Text variant="body" color="textSecondary">
+                  Another operator has claimed this recovery case and must complete or release it before you can modify assignments.
                 </Text>
-                <Button
-                  label={`Confirm ${rescueRobot} Arrived & Parked`}
-                  icon={<Check size={18} color="#ffffff" />}
-                  onPress={handleConfirmArrival}
-                  disabled={true}
-                  variant="primary"
-                  size="lg"
-                  style={{ marginTop: 12 }}
-                />
-              </View>
-            )}
-
-            {phase === 'transfer' && (
-              <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Step 2: Transfer stranded tote & scan barcode</Text>
-                <Text style={styles.actionDesc}>
-                  Physically move container {targetContainer} from {faultedRobot} Bay 1 to {rescueRobot} Bay 1, then scan barcode to verify.
-                </Text>
-
-                {scannedBarcode ? (
-                  <View style={styles.verifiedBox}>
-                    <CheckCircle2 size={18} color="#16a34a" />
-                    <Text style={styles.verifiedText}>Barcode verified: {scannedBarcode}</Text>
+              </Card>
+            ) : (
+              <>
+                <Card padding="md" gap={10}>
+                  <View style={styles.rowBetween}>
+                    <Text variant="headline">Step 1 · Case Ownership</Text>
+                    <StatusPill
+                      status={recovery.claimedBy === session?.id ? 'ACTIVE' : 'PENDING'}
+                      label={recovery.claimedBy === session?.id ? t('Claimed by You') : t('Unclaimed')}
+                      tone={recovery.claimedBy === session?.id ? 'success' : 'neutral'}
+                      size="sm"
+                      dot
+                    />
                   </View>
-                ) : (
-                  <Button
-                    label={`Simulate scan barcode (${targetContainer})`}
-                    icon={<ScanLine size={16} color={colors.textPrimary} />}
-                    onPress={handleScanStrandedTote}
-                  disabled={true}
-                    variant="outline"
-                    size="md"
-                    style={{ marginTop: 10 }}
-                  />
-                )}
 
-                <Button
-                  label="Confirm Transfer & Resume Mission"
-                  icon={<Check size={18} color="#ffffff" />}
-                  onPress={handleResumeMission}
-                  disabled={true}
-                  variant="primary"
-                  size="lg"
-                  style={{ marginTop: 12 }}
-                />
-              </View>
-            )}
+                  {phase === 'claim' ? (
+                    <>
+                      <Text variant="body" color="textSecondary">
+                        Claim this recovery case to lock operator ownership before selecting a rescue robot or resuming.
+                      </Text>
+                      {canClaim ? (
+                        <Button
+                          title="Claim Recovery Case"
+                          variant="primary"
+                          size="lg"
+                          loading={busy === 'claim'}
+                          disabled={!!busy || !canClaim}
+                          fullWidth
+                          onPress={() => {
+                            void runRecoveryMutation('claim', () =>
+                              claimJobRecovery(job.id, recovery.id, recovery.version),
+                            );
+                          }}
+                        />
+                      ) : blockingReasonText ? (
+                        <Text variant="caption" color="warningText">{blockingReasonText}</Text>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <Text variant="caption" color="textSecondary">
+                        {t('Case v{version} claimed by you.', { version: recovery.version })}
+                      </Text>
+                      {canRelease ? (
+                        <Button
+                          title="Release Case"
+                          variant="outline"
+                          size="sm"
+                          loading={busy === 'release'}
+                          disabled={!!busy}
+                          onPress={() => {
+                            void runRecoveryMutation('release', () =>
+                              releaseJobRecovery(job.id, recovery.id, recovery.version),
+                            );
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </Card>
 
-            {phase === 'resuming' && (
-              <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Re-assigning mission to {rescueRobot}...</Text>
-                <Text style={styles.actionDesc}>
-                  Updating Central FMS dispatch records and Nav2 dropoff route.
-                </Text>
-              </View>
+                {/* Step 2A: Assign Rescue Robot or Resume on Same Robot */}
+                {phase === 'assign' ? (
+                  <>
+                    <Card padding="md" gap={12}>
+                      <Text variant="headline">Step 2 · Dispatch Rescue Robot</Text>
+                      <Text variant="body" color="textSecondary">
+                        Select an eligible rescue robot with sufficient container capacity and an enabled transfer endpoint on this map.
+                      </Text>
+
+                      <Text variant="label" color="textSecondary">Candidate Rescue Robots</Text>
+                      {candidates.length === 0 ? (
+                        <View style={styles.noticeWarn}>
+                          <Text variant="caption" color="warningText">
+                            No candidate rescue robots are currently listed. Keep this case open until an eligible robot is available or resume on the original robot.
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.pickerList}>
+                          {candidates.map((candidate) => {
+                            const selected = candidate.robotId === selectedRobotId;
+                            return (
+                              <Pressable
+                                key={candidate.robotId}
+                                disabled={!candidate.eligible || !canAssign || !!busy}
+                                onPress={() => {
+                                  triggerHaptic('tap');
+                                  setSelectedRobotId(candidate.robotId);
+                                }}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected, disabled: !candidate.eligible || !canAssign }}
+                                style={({ pressed }) => [
+                                  styles.pickerOption,
+                                  selected && candidate.eligible && styles.pickerOptionSelected,
+                                  !candidate.eligible && styles.pickerOptionDisabled,
+                                  pressed && candidate.eligible && styles.pressed,
+                                ]}
+                              >
+                                <View style={styles.rowBetween}>
+                                  <View style={styles.iconRow}>
+                                    <Bot
+                                      size={16}
+                                      color={candidate.eligible ? colors.primaryText : colors.textMuted}
+                                    />
+                                    <Text variant="bodyMedium" style={styles.monoText}>
+                                      {candidate.robotCode}
+                                    </Text>
+                                  </View>
+                                  <StatusPill
+                                    status={candidate.eligible ? 'READY' : 'ERROR'}
+                                    label={candidate.eligible ? t('Eligible') : t('Ineligible')}
+                                    tone={candidate.eligible ? 'success' : 'neutral'}
+                                    size="sm"
+                                  />
+                                </View>
+                                <Text variant="caption" color="textSecondary">
+                                  {t('Max {count} containers', { count: candidate.maxContainers })}
+                                </Text>
+                                {!candidate.eligible && candidate.reasons.length > 0 ? (
+                                  <Text variant="caption" color="dangerText">
+                                    {candidate.reasons.map(r => t(candidateReasonLabel(r))).join(' · ')}
+                                  </Text>
+                                ) : null}
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      <Text variant="label" color="textSecondary">Transfer Point (Map Endpoint)</Text>
+                      {endpoints.length === 0 ? (
+                        <View style={styles.noticeWarn}>
+                          <Text variant="caption" color="warningText">
+                            No enabled endpoints found on this map version.
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.endpointGrid}>
+                          {endpoints.map((ep) => {
+                            const selected = ep.id === selectedEndpointId;
+                            return (
+                              <Pressable
+                                key={ep.id}
+                                disabled={!canAssign || !!busy}
+                                onPress={() => {
+                                  triggerHaptic('tap');
+                                  setSelectedEndpointId(ep.id);
+                                }}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected }}
+                                style={({ pressed }) => [
+                                  styles.endpointChip,
+                                  selected && styles.pickerOptionSelected,
+                                  pressed && styles.pressed,
+                                ]}
+                              >
+                                <Text variant="label" color={selected ? 'primaryText' : 'textPrimary'} style={styles.monoText}>
+                                  {ep.code}
+                                </Text>
+                                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                                  {ep.name}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      <Button
+                        title="Assign Rescue Robot"
+                        variant="primary"
+                        size="lg"
+                        loading={busy === 'assign'}
+                        disabled={!!busy || !canAssign || !selectedRobotId || !selectedEndpointId}
+                        fullWidth
+                        onPress={() => {
+                          void runRecoveryMutation('assign', () =>
+                            assignRecoveryRobot(
+                              job.id,
+                              recovery.id,
+                              recovery.version,
+                              selectedRobotId,
+                              selectedEndpointId,
+                            ),
+                          );
+                        }}
+                      />
+                    </Card>
+
+                    {/* Alternate: Resume on same robot */}
+                    <Card padding="md" gap={10}>
+                      <Text variant="headline">Or Continue with Original Robot</Text>
+                      <Text variant="body" color="textSecondary">
+                        {t('If {robot} recovered and still holds all cargo, you can resume the Job on it instead of transferring.', {
+                          robot: faultedRobotCode,
+                        })}
+                      </Text>
+                      <TextField
+                        label="Recovery Note (Optional)"
+                        value={note}
+                        onChangeText={setNote}
+                        placeholder="Explain fault clearance or condition"
+                        maxLength={500}
+                        editable={!busy}
+                      />
+                      <Button
+                        title={t('Resume on {robot}', { robot: faultedRobotCode })}
+                        variant="outline"
+                        size="md"
+                        loading={busy === 'same_robot'}
+                        disabled={!!busy || !canResumeSameRobot}
+                        fullWidth
+                        onPress={() => {
+                          void handleResumeSameRobot();
+                        }}
+                      />
+                    </Card>
+                  </>
+                ) : null}
+
+                {/* Step 2B/3: En route or Confirm Transfer */}
+                {(phase === 'en_route' || phase === 'confirm') ? (
+                  <Card padding="md" gap={12}>
+                    <View style={styles.rowBetween}>
+                      <Text variant="headline">
+                        {phase === 'confirm'
+                          ? 'Step 3 · Verify & Confirm Transfer'
+                          : 'Step 2 · Rescue Robot En Route'}
+                      </Text>
+                      <StatusPill
+                        status={recovery.robotArrived ? 'READY' : 'EN_ROUTE'}
+                        label={recovery.robotArrived ? t('Arrived at Point') : t('En Route')}
+                        tone={recovery.robotArrived ? 'success' : 'info'}
+                        size="sm"
+                        dot
+                      />
+                    </View>
+
+                    <Text variant="body" color="textSecondary">
+                      {recovery.robotArrived
+                        ? t('Move all {count} container(s) onto {robot}, scan every container barcode below, then confirm the transfer.', {
+                          count: recovery.containers.length,
+                          robot: rescueRobotCode,
+                        })
+                        : t('{robot} is moving to {point}. Wait for arrival before transferring and confirming the payload.', {
+                          robot: rescueRobotCode,
+                          point: endpointLabelFor(recovery.recoveryEndpointId),
+                        })}
+                    </Text>
+
+                    {recovery.robotArrived ? (
+                      <>
+                        <View style={styles.scanRow}>
+                          <View style={styles.flexText}>
+                            <TextField
+                              value={manualCode}
+                              onChangeText={setManualCode}
+                              placeholder={t('Scan or type container barcode')}
+                              autoCapitalize="characters"
+                              autoCorrect={false}
+                              editable={!busy}
+                              accessibilityLabel={t('Container Barcode')}
+                            />
+                          </View>
+                          <Button
+                            title="Verify"
+                            variant="outline"
+                            size="sm"
+                            disabled={!!busy || !manualCode.trim()}
+                            onPress={() => {
+                              triggerHaptic('tap');
+                              applyRecoveryScan(manualCode);
+                            }}
+                          />
+                        </View>
+
+                        {scanError ? (
+                          <Text variant="caption" color="dangerText">{scanError}</Text>
+                        ) : null}
+
+                        <TextField
+                          label="Transfer Note (Optional)"
+                          value={note}
+                          onChangeText={setNote}
+                          placeholder="Record physical transfer details if needed"
+                          maxLength={500}
+                          editable={!busy}
+                        />
+
+                        <View style={styles.actionRow}>
+                          <Button
+                            title={scannerOpen ? 'Scanning…' : 'Scan Container'}
+                            icon={ScanLine}
+                            variant="outline"
+                            size="md"
+                            disabled={!!busy}
+                            onPress={() => {
+                              triggerHaptic('tap');
+                              setScannerOpen(true);
+                            }}
+                            style={styles.flexBtn}
+                          />
+                          <Button
+                            title={t('Confirm Payload Transfer ({done}/{total})', {
+                              done: scanProgress.done,
+                              total: scanProgress.total,
+                            })}
+                            variant="primary"
+                            size="md"
+                            loading={busy === 'confirm'}
+                            disabled={!!busy || !canConfirm || !scanProgress.complete}
+                            onPress={() => {
+                              void handleConfirmTransfer();
+                            }}
+                            style={styles.flexBtn}
+                          />
+                        </View>
+                      </>
+                    ) : null}
+
+                    {canUnassign ? (
+                      <Button
+                        title="Call Back Rescue Robot"
+                        variant="outline"
+                        size="md"
+                        loading={busy === 'unassign'}
+                        disabled={!!busy}
+                        fullWidth
+                        onPress={() => {
+                          void runRecoveryMutation('unassign', () =>
+                            unassignRecoveryRobot(job.id, recovery.id, recovery.version),
+                          );
+                        }}
+                      />
+                    ) : null}
+                  </Card>
+                ) : null}
+              </>
             )}
           </View>
         )}
       </ScrollView>
+
+      <Scanner
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        expect={['CONTAINER']}
+        continuous={!scanProgress.complete}
+        title="Scan Recovery Containers"
+        manualLabel="Container Barcode"
+        onScanResult={(barcode) => applyRecoveryScan(barcode)}
+      />
     </View>
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 48,
-  },
-  feedbackToast: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: 12,
-    marginBottom: 14,
-  },
-  feedbackText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  completedCard: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 18,
-    ...shadows.panel,
-  },
-  completedIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  completedTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  completedSub: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 4,
-    marginBottom: 16,
-    fontFamily: typography.fontSans,
-  },
-  receiptBox: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 10,
-  },
-  receiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  receiptLabel: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  receiptVal: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  receiptHighlight: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  receiptSuccess: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#16a34a',
-    fontFamily: typography.fontMono,
-  },
-  receiptDanger: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#dc2626',
-    fontFamily: typography.fontMono,
-  },
-  receiptBorderTop: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 10,
-    marginTop: 2,
-  },
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.25)',
-    borderRadius: radii.lg,
-    padding: 16,
-    ...shadows.panel,
-  },
-  alertIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.sm,
-    backgroundColor: 'rgba(220, 38, 38, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  alertBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  alertBadge: {
-    backgroundColor: 'rgba(220, 38, 38, 0.12)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  alertBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#dc2626',
-    fontFamily: typography.fontSans,
-  },
-  alertRobotText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  alertTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  stepperBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  stepItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  stepNum: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumActive: {
-    backgroundColor: colors.darkAction,
-    borderColor: colors.darkAction,
-  },
-  stepNumText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: typography.fontMono,
-  },
-  stepNumTextActive: {
-    color: '#ffffff',
-  },
-  stepText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  stepTextActive: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  stepArrow: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  diagRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  diagFaulted: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.25)',
-    padding: 14,
-    ...shadows.panel,
-  },
-  diagRescue: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: 'rgba(22, 163, 74, 0.25)',
-    padding: 14,
-    ...shadows.panel,
-  },
-  diagLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  diagRobotId: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginTop: 4,
-    fontFamily: typography.fontMono,
-  },
-  diagDetail: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginVertical: 6,
-    fontFamily: typography.fontSans,
-  },
-  diagPillFaulted: {
-    backgroundColor: 'rgba(220, 38, 38, 0.08)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  diagPillTextFaulted: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#dc2626',
-    fontFamily: typography.fontMono,
-  },
-  diagPillRescue: {
-    backgroundColor: 'rgba(22, 163, 74, 0.08)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  diagPillTextRescue: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#16a34a',
-    fontFamily: typography.fontSans,
-  },
-  cargoCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    ...shadows.panel,
-  },
-  cargoTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 10,
-    fontFamily: typography.fontSans,
-  },
-  cargoStack: {
-    gap: 8,
-  },
-  cargoTopLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  cargoCode: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  cargoDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  boldUnits: {
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  cargoDestLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  cargoDestLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  cargoDestVal: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  actionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    ...shadows.panel,
-  },
-  actionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  actionDesc: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  verifiedBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(22, 163, 74, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(22, 163, 74, 0.25)',
-    padding: 12,
-    borderRadius: radii.md,
-    marginTop: 10,
-  },
-  verifiedText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#16a34a',
-    fontFamily: typography.fontMono,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    refreshBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: radii.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pressed: {
+      opacity: 0.72,
+    },
+    scrollContent: {
+      padding: 16,
+      gap: 14,
+    },
+    stack: {
+      gap: 14,
+    },
+    rowBetween: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    iconRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexShrink: 1,
+    },
+    flexText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    monoText: {
+      fontFamily: typography.fontMono,
+      fontWeight: '700',
+    },
+    diagRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    diagCard: {
+      flex: 1,
+      padding: 10,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      gap: 4,
+    },
+    endpointSummary: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingTop: 4,
+    },
+    noticeDanger: {
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.dangerBorder,
+      backgroundColor: colors.dangerBg,
+    },
+    noticeWarn: {
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.warningBorder,
+      backgroundColor: colors.warningBg,
+    },
+    noticeInfo: {
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.infoBorder,
+      backgroundColor: colors.infoBg,
+    },
+    manifestRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    manifestLeft: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    pickerList: {
+      gap: 8,
+    },
+    pickerOption: {
+      minHeight: 48,
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      gap: 4,
+    },
+    pickerOptionSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryLight,
+    },
+    pickerOptionDisabled: {
+      opacity: 0.65,
+    },
+    endpointGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    endpointChip: {
+      minHeight: 44,
+      minWidth: 108,
+      flexGrow: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      justifyContent: 'center',
+      gap: 2,
+    },
+    scanRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 8,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    flexBtn: {
+      flexGrow: 1,
+      minWidth: 132,
+    },
+    actionStack: {
+      gap: 10,
+    },
+    completedHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+    },
+    completedBadge: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.successBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    receiptBox: {
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      gap: 8,
+    },
+    receiptRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+  });
