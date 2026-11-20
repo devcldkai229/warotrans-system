@@ -112,6 +112,7 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 
 /** fetch with the caller's signal and a timeout; a timeout throws a network error, a caller's abort stays an abort. */
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  if (typeof AbortController === 'undefined') return fetch(url, init);
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
   const caller = init.signal;
