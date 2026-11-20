@@ -52,4 +52,52 @@ public sealed class TransportRequestJobControl(WorkflowExecutionDbContext db, Jo
 
         return outcomes;
     }
+
+    public Task<IReadOnlyList<RequestJobCancellationView>> GetCancellationViewAsync(
+        Guid transportRequestId,
+        CancellationToken cancellationToken = default) =>
+        engine.GetCancellationViewAsync(transportRequestId, cancellationToken);
+
+    public async Task<IReadOnlyList<ContainerCancelOutcome>> CancelContainersBeforePickupAsync(
+        Guid transportRequestId,
+        IReadOnlyCollection<Guid> containerIds,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var jobIds = await db.JobContainers.AsNoTracking()
+            .Where(c => c.TransportRequestId == transportRequestId && containerIds.Contains(c.ContainerId))
+            .Select(c => c.JobId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var outcomes = new List<ContainerCancelOutcome>();
+        foreach (var jobId in jobIds)
+        {
+            outcomes.AddRange(await engine.CancelContainersBeforePickupAsync(jobId, transportRequestId, containerIds, reason, cancellationToken));
+        }
+
+        return outcomes;
+    }
+
+    public Task<CancelHandoverResult> HandOverCancelledCargoAsync(
+        Guid jobId,
+        Guid transportRequestId,
+        Guid containerId,
+        string? scannedBarcode,
+        Guid actor,
+        string? note,
+        CancellationToken cancellationToken = default) =>
+        engine.HandOverCancelledCargoAsync(jobId, transportRequestId, containerId, scannedBarcode, actor, note, cancellationToken);
+
+    public async Task DeliverCancelledCargoAsync(Guid jobId, Guid actor, CancellationToken cancellationToken = default)
+    {
+        var job = await db.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken)
+            ?? throw new WaroTrans.BuildingBlocks.Exceptions.NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
+        if (job.Status == Enums.JobStatus.RUNNING)
+        {
+            return; // already delivering
+        }
+
+        await engine.ResumeAsync(jobId, null, cancellationToken, actor);
+    }
 }

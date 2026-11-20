@@ -9,7 +9,21 @@ public interface IContainerMovementRecorder
     Task RecordPickedUpAsync(ContainerPickup pickup, CancellationToken cancellationToken = default);
 
     Task RecordDeliveredAsync(ContainerDelivery delivery, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// TRN-03: after a request was cancelled a person took this container off the robot and put it on a shelf. It is
+    /// RECOVERED there (IN_TRANSIT → STORED). Safe to call twice: one Job hands a container over once.
+    /// </summary>
+    Task RecordCancelHandoverAsync(ContainerCancelHandover handover, CancellationToken cancellationToken = default);
 }
+
+public sealed record ContainerCancelHandover(
+    Guid ContainerId,
+    Guid JobId,
+    Guid StorageLocationId,
+    short LevelNo,
+    Guid? ActorAccountId,
+    string? Note);
 
 public sealed record ContainerPickup(
     Guid ContainerId,

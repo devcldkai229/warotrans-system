@@ -9,6 +9,32 @@ public sealed record RequestJobState(Guid JobId, string JobNo, string Status, Gu
     public bool Terminal => Status is "COMPLETED" or "FAILED" or "CANCELLED";
 }
 
+/// <summary>TRN-03: one Job of a request as the cancellation follows it (robot, hold, each container).</summary>
+public sealed record RequestJobCancellationView(
+    Guid JobId,
+    string JobNo,
+    string Status,
+    string? FailureCode,
+    Guid? RobotId,
+    string? RobotCode,
+    bool RobotOnline,
+    bool RobotMotionHeld,
+    IReadOnlyList<RequestJobContainerView> Containers)
+{
+    public bool Terminal => Status is "COMPLETED" or "FAILED" or "CANCELLED";
+}
+
+public sealed record RequestJobContainerView(
+    Guid ContainerId,
+    Guid TransportRequestId,
+    string Status,
+    string? FailureCode,
+    DateTimeOffset? LoadedAt,
+    DateTimeOffset? DeliveredAt);
+
+/// <summary>Result of taking one container off a held robot by hand (TRN-03).</summary>
+public sealed record CancelHandoverResult(Guid JobId, Guid ContainerId, bool AlreadyHandedOver, bool JobCancelled);
+
 /// <summary>What cancelling a request did to one of its containers (WH-04).</summary>
 public sealed record ContainerCancelOutcome(Guid ContainerId, Guid JobId, string Outcome)
 {
@@ -42,4 +68,32 @@ public interface ITransportRequestJobControl
         Guid transportRequestId,
         string reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>TRN-03: each Job of the request with its robot and containers, for the cancellation progress.</summary>
+    Task<IReadOnlyList<RequestJobCancellationView>> GetCancellationViewAsync(
+        Guid transportRequestId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// TRN-03: cancels these containers of the request before they are picked up; the rest of their Jobs go on.
+    /// 409 <c>detail_already_picked_up</c> when one is on a robot or delivered.
+    /// </summary>
+    Task<IReadOnlyList<ContainerCancelOutcome>> CancelContainersBeforePickupAsync(
+        Guid transportRequestId,
+        IReadOnlyCollection<Guid> containerIds,
+        string reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>TRN-03: a person took this container off its held robot and scanned it.</summary>
+    Task<CancelHandoverResult> HandOverCancelledCargoAsync(
+        Guid jobId,
+        Guid transportRequestId,
+        Guid containerId,
+        string? scannedBarcode,
+        Guid actor,
+        string? note,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>TRN-03: deliver the cargo anyway: resumes the held Job, which now only drops off what is on board.</summary>
+    Task DeliverCancelledCargoAsync(Guid jobId, Guid actor, CancellationToken cancellationToken = default);
 }

@@ -13,14 +13,24 @@ public static class CloseTransportRequestEndpoints
         endpoints.MapPost("/transport-requests/{id:guid}/cancel", async (
                 Guid id,
                 CloseTransportRequestRequest? body,
+                HttpRequest http,
                 CloseTransportRequestHandler handler,
                 CancellationToken cancellationToken) =>
-            Results.Ok(await handler.CancelAsync(id, body ?? new CloseTransportRequestRequest(null), cancellationToken)))
+            {
+                body ??= new CloseTransportRequestRequest(null);
+                // The Idempotency-Key header wins over the body field, as for any retried HTTP call.
+                if (http.Headers.TryGetValue("Idempotency-Key", out var header) && !string.IsNullOrWhiteSpace(header))
+                {
+                    body = body with { IdempotencyKey = header.ToString() };
+                }
+
+                return Results.Ok(await handler.CancelAsync(id, body, cancellationToken));
+            })
             .RequirePermission(Permissions.TransportCancel)
             .Audited("transport_request.cancelled", "REQUEST", "id")
             .WithName("CancelTransportRequest")
             .WithSummary("Cancel a TransportRequest and its Jobs")
-            .WithDescription("Idempotent. Containers not picked up yet are cancelled (warehouse unchanged). A Job with containers on the robot is paused for recovery and the request stays CANCELLING until that cargo is unloaded or delivered. Delivered containers stay delivered.");
+            .WithDescription("Idempotent (Idempotency-Key header or idempotencyKey). Starts a cancellation (GET .../cancellation follows it). Containers not picked up yet are cancelled (warehouse unchanged). A Job with containers on the robot is stopped and held; the request stays CANCELLING until that cargo is delivered or unloaded by scan. Delivered containers stay delivered. detailIds cancels only those details, before pickup (409 detail_already_picked_up).");
 
         endpoints.MapPost("/transport-requests/{id:guid}/reject", async (
                 Guid id,

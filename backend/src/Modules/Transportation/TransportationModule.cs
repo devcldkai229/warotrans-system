@@ -38,6 +38,10 @@ public static class TransportationModule
 
         services.AddHostedService<Services.StockPostingHostedService>();
 
+        // TRN-03: cancellations followed until every robot and container is accounted for.
+        services.AddScoped<Features.Cancellation.TransportCancellationService>();
+        services.AddHostedService<Services.TransportCancellationHostedService>();
+
         // Job execution feedback (WorkflowExecution → Transportation)
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestActivityQuery, Services.TransportRequestActivityQuery>();
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.IWorkflowUsageQuery, Services.WorkflowUsageQuery>();
@@ -61,6 +65,7 @@ public static class TransportationModule
         GetTransportRequestEndpoint.Map(group);
         QueueTransportRequestEndpoint.Map(group);
         Features.CloseTransportRequest.CloseTransportRequestEndpoints.Map(group);
+        Features.Cancellation.TransportCancellationEndpoints.Map(group);
         group.MapGetRequestStatistics();
 
         return endpoints;

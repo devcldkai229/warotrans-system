@@ -3506,10 +3506,24 @@ public sealed partial class JobExecutionEngine(
 
     /// <summary>
     /// Operator cancel: job → CANCELLED; traffic CancelRequest (quarantine if occupied — no silent release).
+    /// Cancelling a Job that is already CANCELLED answers with it (idempotent); a COMPLETED / FAILED Job is refused.
+    /// Serialized with handover confirmations on the Job's row lock, so a drop-off confirmed first stays DELIVERED.
     /// </summary>
     public async Task<Job> CancelJobAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status == JobStatus.CANCELLED)
+        {
+            return job;
+        }
+
+        return await CancelLoadedJobAsync(job, reason, transaction, cancellationToken);
+    }
+
+    private async Task<Job> CancelLoadedJobAsync(
+        Job job, string? reason, IDbContextTransaction? transaction, CancellationToken cancellationToken)
+    {
         if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is { } terminal)
         {
             throw new ConflictException($"Job {job.JobNo} is already terminal ({job.Status}).", terminal);
@@ -3542,10 +3556,10 @@ public sealed partial class JobExecutionEngine(
                 segmentedTraffic.Epoch, null, reason ?? "OPERATOR_CANCEL"));
         }
 
-        // Active mode stops the robot through its traffic authority; every other mode needs an explicit CANCEL of
-        // the running NAVIGATE, otherwise the robot keeps driving to the goal of a cancelled Job.
-        if (robotId is Guid cancelRobotId
-            && (trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) != TrafficCoordinatorMode.Active)
+        // Every mode sends an explicit CANCEL of the running NAVIGATE, otherwise the robot keeps driving to the goal of
+        // a cancelled Job. Active mode also lost its traffic authority above; the CANCEL makes the robot drop the goal
+        // instead of waiting at the next stop point for an authority that never comes.
+        if (robotId is Guid cancelRobotId)
         {
             foreach (var running in OrderedSteps(job).Select(x => x.Step)
                          .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING))
@@ -3562,8 +3576,10 @@ public sealed partial class JobExecutionEngine(
             .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
             .ToDictionaryAsync(s => s.Id, cancellationToken);
 
+        // Only what has not finished: COMPLETED / SKIPPED / FAILED steps keep their result (history is not rewritten).
         foreach (var (task, step) in OrderedSteps(job)
-                     .Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.EXECUTING or JobStepStatus.WAITING))
+                     .Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.READY or JobStepStatus.EXECUTING
+                         or JobStepStatus.WAITING or JobStepStatus.PAUSED))
         {
             step.ErrorCode = "job_cancelled";
             step.ErrorMessage = reason ?? "Cancelled by operator.";
@@ -3571,7 +3587,8 @@ public sealed partial class JobExecutionEngine(
             SetStepStatus(job, task, step, stepKey, JobStepStatus.CANCELLED, now);
         }
 
-        foreach (var task in job.JobTasks.Where(t => t.Status is JobTaskStatus.PENDING or JobTaskStatus.RUNNING))
+        foreach (var task in job.JobTasks.Where(t => t.Status is JobTaskStatus.PENDING or JobTaskStatus.READY
+                     or JobTaskStatus.RUNNING or JobTaskStatus.PAUSED))
         {
             task.Status = JobTaskStatus.CANCELLED;
             task.CompletedAt ??= now;
@@ -3590,7 +3607,7 @@ public sealed partial class JobExecutionEngine(
         job.FailureCode = "job_cancelled";
         job.FailureMessage = reason ?? "Cancelled by operator.";
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
-        await SaveAndPublishAsync(cancellationToken);
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return job;
     }
 
@@ -3609,6 +3626,9 @@ public sealed partial class JobExecutionEngine(
         string reason,
         CancellationToken cancellationToken = default)
     {
+        // The row lock orders this cancel with a handover being confirmed at the same moment: whichever commits first
+        // wins, and this one then sees the container DELIVERED / ONBOARD and decides on that, not on what it read before.
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var job = await LoadJobAsync(jobId, cancellationToken);
         var mine = job.JobContainers.Where(c => c.TransportRequestId == transportRequestId).ToList();
 
@@ -3621,7 +3641,7 @@ public sealed partial class JobExecutionEngine(
         if (onboard.Count == 0)
         {
             var finishedBefore = mine.Where(c => c.Status is JobContainerStatus.DELIVERED or JobContainerStatus.FAILED).Select(c => c.Id).ToHashSet();
-            await CancelJobAsync(jobId, $"Transport request cancelled: {reason}", cancellationToken);
+            await CancelLoadedJobAsync(job, $"Transport request cancelled: {reason}", transaction, cancellationToken);
             return Outcomes(mine, c => finishedBefore.Contains(c.Id) ? ContainerCancelOutcome.AlreadyFinished : ContainerCancelOutcome.Cancelled);
         }
 
@@ -3629,11 +3649,11 @@ public sealed partial class JobExecutionEngine(
         if (job.FailureCode != CargoOnboardCancelCode)
         {
             var now = DateTimeOffset.UtcNow;
+            var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+                .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                .ToDictionaryAsync(s => s.Id, cancellationToken);
             if (job.Status == JobStatus.RUNNING)
             {
-                var workflowSteps = await db.WorkflowSteps.AsNoTracking()
-                    .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
-                    .ToDictionaryAsync(s => s.Id, cancellationToken);
                 foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
                 {
                     ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
@@ -3647,13 +3667,19 @@ public sealed partial class JobExecutionEngine(
                 job.Status = JobStatus.PAUSED;
             }
 
+            // TRN-03: no new work after a cancel. Resuming this Job (deliver anyway) must only deliver what is on board.
+            SkipNotPickedUp(job, workflowSteps.ToDictionary(x => x.Key, x => x.Value.StepKey), $"Transport request cancelled: {reason}", now);
             job.FailureCode = CargoOnboardCancelCode;
             job.FailureMessage =
                 $"The transport request was cancelled while {onboard.Count} container(s) were on the robot. "
                 + "Resume it to deliver them, or unload them, cancel this Job and recover each container to the shelf it is on.";
             _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
-            await SaveAndPublishAsync(cancellationToken);
+            await SaveAndPublishAsync(cancellationToken, transaction);
             logger.LogWarning("Job {JobNo}: request cancelled with {Count} container(s) on board; held for recovery", job.JobNo, onboard.Count);
+        }
+        else if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
         }
 
         if (issueReporter is not null)
@@ -3673,9 +3699,12 @@ public sealed partial class JobExecutionEngine(
                 cancellationToken);
         }
 
-        return Outcomes(mine, c => c.Status is JobContainerStatus.DELIVERED or JobContainerStatus.FAILED or JobContainerStatus.CANCELLED
-            ? ContainerCancelOutcome.AlreadyFinished
-            : ContainerCancelOutcome.RecoveryRequired);
+        return Outcomes(mine, c => c.Status switch
+        {
+            JobContainerStatus.ONBOARD => ContainerCancelOutcome.RecoveryRequired,
+            JobContainerStatus.CANCELLED when c.FailureCode == DetailCancelledCode => ContainerCancelOutcome.Cancelled,
+            _ => ContainerCancelOutcome.AlreadyFinished
+        });
 
         static IReadOnlyList<ContainerCancelOutcome> Outcomes(IEnumerable<JobContainer> containers, Func<JobContainer, string> outcome) =>
             containers.Select(c => new ContainerCancelOutcome(c.ContainerId, c.JobId, outcome(c))).ToList();

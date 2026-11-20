@@ -39,3 +39,31 @@ public sealed record TransportRequestClosedByOperator(
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>TRN-03: a cancellation of a request was requested or moved on (STOPPING, WAITING_ROBOT, ..., FINALIZED).</summary>
+public sealed record TransportCancellationProgressed(
+    Guid CancellationId,
+    Guid RequestId,
+    string RequestCode,
+    string Scope,
+    string Status,
+    string ReasonCode,
+    Guid? RequestedBy) : IIntegrationEvent
+{
+    public Guid EventId { get; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>TRN-03: a person took a container off a held robot after the cancel, scanned it and put it on this shelf.</summary>
+public sealed record TransportCancellationCargoHandedOver(
+    Guid CancellationId,
+    Guid RequestId,
+    Guid JobId,
+    Guid ContainerId,
+    Guid StorageLocationId,
+    short LevelNo,
+    Guid ActorId) : IIntegrationEvent
+{
+    public Guid EventId { get; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+}
