@@ -1870,6 +1870,58 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task Claimed_recovery_keeps_the_manifest_together_and_refuses_a_cancelled_request()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await RobotOfflineAsync();
+        var destination = RecoveryEndpoint();
+        var second = _fleet.AddRobot(_mapVersionId);
+        _fleet.Robots[second] = _fleet.Robots[second] with { MaxContainers = 1 };
+        var recovery = await _db.JobRecoveryCases.SingleAsync(item => item.JobId == jobId);
+        var engine = Engine();
+        var claim = new RecoveryCaseAccess(recovery.Id, recovery.Version, _staff);
+        await engine.SetRecoveryClaimAsync(jobId, claim, false, default);
+        var access = claim with { Version = recovery.Version };
+        var other = access with { Actor = Guid.NewGuid() };
+        var alreadyClaimed = await Assert.ThrowsAsync<ConflictException>(() => engine.SetRecoveryClaimAsync(jobId, other, false, default));
+        Assert.Equal("recovery_claimed", alreadyClaimed.Code);
+        var insufficient = Assert.Single(await engine.ListRecoveryCandidatesAsync(jobId, default));
+        Assert.False(insufficient.Eligible);
+        Assert.Contains(DispatchReasons.ContainerLimitExceeded, insufficient.Reasons);
+        var tooSmall = await Assert.ThrowsAsync<ConflictException>(() => engine.AssignRecoveryRobotAsync(jobId, second, destination, access: access));
+        Assert.Equal(DispatchReasons.ContainerLimitExceeded, tooSmall.Code);
+
+        _fleet.Robots[second] = _fleet.Robots[second] with { MaxContainers = 2 };
+        await engine.AssignRecoveryRobotAsync(jobId, second, destination, access: access);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        _fleet.Robots[second] = _fleet.Robots[second] with { PoseX = 5, PoseY = 5, LastTelemetryAt = DateTimeOffset.UtcNow };
+        _warehouse.Set(C1, ContainerStatus.IN_TRANSIT);
+        _warehouse.Set(C2, ContainerStatus.IN_TRANSIT);
+        var scans = new[] { new HandoverStopScan(C1, _warehouse.Containers[C1].Barcode), new(C2, _warehouse.Containers[C2].Barcode) };
+
+        var version = access with { Version = recovery.Version };
+        Task<JobRecoveryCase> Confirm(IReadOnlyList<HandoverStopScan> values) =>
+            engine.ConfirmRecoveryTransferAsync(jobId, [], _staff, null, access: version, expectedRobotId: second, scans: values);
+
+        var missing = await Assert.ThrowsAsync<DomainValidationException>(() => Confirm(scans[..1]));
+        Assert.Equal("handover_scan_manifest_mismatch", missing.Code);
+        _requests.Status = "CANCELLING";
+        var cancelled = await Assert.ThrowsAsync<ConflictException>(() => Confirm(scans));
+        Assert.Equal("recovery_request_inactive", cancelled.Code);
+        Assert.Equal(_fleet.RobotId, (await _db.JobRobotAssignments.SingleAsync(item => item.JobId == jobId && item.EndedAt == null)).RobotId);
+
+        _requests.Status = "IN_PROGRESS";
+        var closed = await Confirm(scans);
+        Assert.Equal(JobRecoveryStatuses.Transferred, closed.Status);
+        Assert.Equal(closed.Id, (await Confirm(scans)).Id);
+        Assert.Equal(second, (await _db.JobRobotAssignments.SingleAsync(item => item.JobId == jobId && item.EndedAt == null)).RobotId);
+
+        _requests.Status = "CANCELLING";
+        var resume = await Assert.ThrowsAsync<ConflictException>(() => engine.ResumeAsync(jobId, null));
+        Assert.Equal("recovery_request_inactive", resume.Code);
+    }
+
+    [Fact]
     public async Task A_robot_going_to_fetch_cargo_cannot_be_given_other_work()
     {
         var jobId = await JobOnTheWayWithCargoAsync();

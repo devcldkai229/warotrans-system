@@ -171,6 +171,14 @@ Only the operator recorded on the pause or an Admin may resume an operator-pause
 
 Staff who reported a classified handover issue can call `POST /api/operations/issues/{id}/resolve-handover` with `{ expectedVersion, scannedBarcode, resolution }`. The server verifies the expected container's barcode and records the actor and scan. The Issue response includes `problemCode` and actor-specific `allowedTransitions`. Admin and Technician use their scoped transition route and supply `scannedBarcode` when resolving a wrong or missing container issue. Resolution does not advance the Job.
 
+## Payload recovery
+
+Under `/api/workflow-execution/jobs/{jobId}/recovery`, GET returns `{ recovery }` with the case ID, version, `claimedBy`, manifest barcodes, robot IDs, `robotArrived` and `availableActions`. GET `/candidates` returns `{ items }` with each robot's effective `maxContainers`, eligibility and reasons for the full cargo currently on board.
+
+POST `/claim` and `/release` take `{ caseId, version }`. The case owner can POST `/assign` with that pair plus `robotId` and `endpointId`, or POST `/unassign` to call the target back. These actions return the updated recovery. Use its latest version after any change.
+
+POST `/transfer-confirm` takes `{ caseId, version, robotId, scans: [{ containerId, barcode }], note? }`. It checks the manifest, the selected robot and its current pose, the request status, and blocking handover issues. On success it returns the Job detail, switches custody to the target robot, and leaves the Job paused for a separate Resume. Repeating the confirmed case, version and target as the original confirmer returns the current Job. POST `/resume-same-robot` instead takes `{ caseId, version, note? }` while the case has no recovery target. The application must refresh on `recovery_case_changed` or `recovery_request_inactive`. Apply WorkflowExecution migration `20261120090215_VersionRecoveryCaseClaims`.
+
 ## Non-goals (this foundation)
 
 Robot selection, JobAssignment, MQTT, Job execution loop, CreateTransportRequest HTTP endpoint itself.

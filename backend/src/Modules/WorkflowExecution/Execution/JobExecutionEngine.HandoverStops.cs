@@ -44,7 +44,7 @@ public sealed partial class JobExecutionEngine
             throw new ConflictException("Begin the handover before confirming it.", "handover_stop_begin_required");
 
         await EnsureNoBlockingHandoverIssuesAsync(jobId, stop.Containers.Select(item => item.ContainerId).ToArray(), cancellationToken);
-        var barcodes = await VerifyStopScansAsync(stop, scans, cancellationToken);
+        var barcodes = await VerifyContainerScansAsync(stop.Containers.Select(item => item.ContainerId).ToArray(), scans, cancellationToken);
         var type = stop.Action == "PICKUP" ? HandoverType.PICKUP : HandoverType.DROPOFF;
         var expectedStatus = type == HandoverType.PICKUP ? JobContainerStatus.ASSIGNED : JobContainerStatus.ONBOARD;
         var jobContainers = job.JobContainers.ToDictionary(container => container.ContainerId);
@@ -86,11 +86,10 @@ public sealed partial class JobExecutionEngine
         await AdvanceAsync(jobId, CancellationToken.None);
     }
 
-    private async Task<Dictionary<Guid, string>> VerifyStopScansAsync(
-        StopHandover stop, IReadOnlyList<HandoverStopScan>? scans, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, string>> VerifyContainerScansAsync(
+        IReadOnlyCollection<Guid> ids, IReadOnlyList<HandoverStopScan>? scans, CancellationToken cancellationToken)
     {
-        var ids = stop.Containers.Select(item => item.ContainerId).ToArray();
-        if (scans is null || scans.Count != ids.Length || scans.Any(scan => scan is null || string.IsNullOrWhiteSpace(scan.Barcode))
+        if (scans is null || scans.Count != ids.Count || scans.Any(scan => scan is null || string.IsNullOrWhiteSpace(scan.Barcode))
             || !scans.Select(scan => scan.ContainerId).ToHashSet().SetEquals(ids))
             throw new DomainValidationException("Scan each container of this handover once.", "handover_scan_manifest_mismatch");
 

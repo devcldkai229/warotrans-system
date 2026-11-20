@@ -17,6 +17,8 @@ public sealed class JobRecoveryCase
     public string Status { get; set; } = JobRecoveryStatuses.Open;
     public string Reason { get; set; } = string.Empty;
     public List<Guid> ContainerIds { get; set; } = [];
+    public Guid? ClaimedBy { get; set; }
+    public int Version { get; set; }
     public Guid? ConfirmedBy { get; set; }
     public DateTimeOffset? ConfirmedAt { get; set; }
     public string? Note { get; set; }
