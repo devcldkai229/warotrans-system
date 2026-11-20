@@ -120,6 +120,8 @@ export interface TrafficRobotView {
   } | null
   planRevision?: number
   proposedPath?: { x: number; y: number; yaw: number }[]
+  /** Leading points of proposedPath inside the traffic grant (0 = still waiting for traffic). */
+  grantedPathPoints?: number
   waitingReason: string
   quarantineReason?: string | null
   jobStepId?: string | null

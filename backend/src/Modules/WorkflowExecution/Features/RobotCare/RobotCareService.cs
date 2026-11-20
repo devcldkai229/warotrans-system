@@ -229,13 +229,32 @@ public sealed class RobotCareService(
         }
 
         var positioning = await fleet.GetPositioningRobotIdsAsync(cancellationToken);
+        var deadlockIds = snapshot.Robots
+            .Where(r => r.WaitingReason == WaroTrans.Fleet.Traffic.TrafficWaitingReason.DeadlockRisk)
+            .Select(r => r.RobotId)
+            .ToHashSet();
         var sent = 0;
         foreach (var (waiterId, blockerId) in due)
         {
             var blocker = await fleet.GetRobotAsync(blockerId, cancellationToken);
             var waiter = await fleet.GetRobotAsync(waiterId, cancellationToken);
-            if (blocker is null || waiter is null || positioning.Contains(blockerId)
-                || !blocker.IsOnline || !blocker.IsEnabled || blocker.MotionHeld || blocker.InManualMode
+            if (blocker is null || waiter is null)
+            {
+                continue;
+            }
+
+            if (positioning.Contains(blockerId))
+            {
+                if (deadlockIds.Contains(blockerId))
+                {
+                    await fleet.YieldPositioningAsync(blockerId, Guid.Empty, cancellationToken);
+                    logger.LogInformation("Robot {Blocker} positioning intent cancelled: deadlocked with {Waiter}", blocker.Code, waiter.Code);
+                }
+
+                continue;
+            }
+
+            if (!blocker.IsOnline || !blocker.IsEnabled || blocker.MotionHeld || blocker.InManualMode
                 || blocker.LocalizationStatus != LocalizationStatus.LOCALIZED
                 || blocker.LastTelemetryAt is not { } seen || (now - seen).TotalSeconds > FreshPoseSeconds
                 || await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == blockerId && a.EndedAt == null, cancellationToken))

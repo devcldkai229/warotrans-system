@@ -7,7 +7,7 @@ import { humanize } from '@/shared/lib/format'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
-import { useTrafficOverlay } from './useTrafficOverlay'
+import { summarizeTrafficWait, useTrafficOverlay } from './useTrafficOverlay'
 import { RobotPreviewCard } from './RobotPreviewCard'
 import { t } from '@/shared/i18n'
 interface FleetMapProps {
@@ -108,15 +108,23 @@ export function FleetMap({
         },
       ]
     }),
-    ...(snap?.waits ?? []).flatMap((wait) => {
-      const robot = robots.find((r) => r.id === wait.robotId)
-      if (!robot) return []
+    ...Array.from(new Set((snap?.waits ?? []).map((wait) => wait.robotId))).flatMap((robotId) => {
+      const robot = robots.find((r) => r.id === robotId)
+      const wait = robot && snap ? summarizeTrafficWait(robotId, snap, robots) : null
+      if (!robot || !wait) return []
+      const what = wait.resourceId.replace(/^zone:/, '')
+      const more = wait.more > 0 ? ` (+${wait.more})` : ''
       return [
         {
           x: robot.poseX,
           y: robot.poseY,
           tone: 'warn' as const,
-          lines: [t('{code} traffic wait', { code: robot.code }), `${wait.reason} @ ${wait.resourceId}`],
+          lines: [
+            wait.blockerCode
+              ? t('{code} waiting for {blocker}', { code: robot.code, blocker: wait.blockerCode })
+              : t('{code} traffic wait', { code: robot.code }),
+            `${wait.reason} @ ${what}${more}`,
+          ],
         },
       ]
     }),

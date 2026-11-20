@@ -272,4 +272,37 @@ public class SemanticReservationTests
         Assert.True(exit.Ok);
         Assert.Empty(state.Snapshot().Robots.Single(r => r.RobotId == robot).OccupiedResourceIds);
     }
+
+    [Fact]
+    public void Zone_margin_keeps_a_path_along_the_zone_edge_out_of_the_zone()
+    {
+        // Zone starts at x = 1.0; the path runs 0.40 m beside it: inside the reserve radius (~0.45 m with 0.5 m cells),
+        // clear of the body + 0.08 m (~0.38 m).
+        var zone = new SemanticZonePoly(
+            "Z-WAIT",
+            ImmutableArray.Create((1.0, 0.0), (2.0, 0.0), (2.0, 2.0), (1.0, 2.0), (1.0, 0.0)));
+        var poses = ImmutableArray.Create(new SemanticPlanPose(0.60, 0.2, 1.57), new SemanticPlanPose(0.60, 1.8, 1.57));
+
+        var reserve = Policy(zone);
+        var margin = reserve with { ZoneMarginMeters = 0.08 };
+
+        Assert.Contains("zone:Z-WAIT", SemanticReservation.CollectResources(reserve, poses));
+        Assert.DoesNotContain("zone:Z-WAIT", SemanticReservation.CollectResources(margin, poses));
+    }
+
+    [Fact]
+    public void Zone_margin_still_reserves_a_zone_the_body_enters()
+    {
+        var zone = new SemanticZonePoly(
+            "Z-WAIT",
+            ImmutableArray.Create((1.0, 0.0), (2.0, 0.0), (2.0, 2.0), (1.0, 2.0), (1.0, 0.0)));
+        var policy = Policy(zone) with { ZoneMarginMeters = 0.08 };
+        // 0.30 m from the edge: the body (0.234 m) plus the gateway stop margin (0.05 m) reaches into the zone.
+        var beside = ImmutableArray.Create(new SemanticPlanPose(0.70, 0.2, 1.57), new SemanticPlanPose(0.70, 1.8, 1.57));
+        var through = ImmutableArray.Create(new SemanticPlanPose(0.2, 1.0, 0), new SemanticPlanPose(1.8, 1.0, 0));
+
+        Assert.Contains("zone:Z-WAIT", SemanticReservation.CollectResources(policy, beside));
+        Assert.Contains("zone:Z-WAIT", SemanticReservation.CollectResources(policy, through));
+        Assert.True(policy.ZoneReserveRadiusMeters >= policy.FootprintRadiusMeters + 0.05);
+    }
 }
