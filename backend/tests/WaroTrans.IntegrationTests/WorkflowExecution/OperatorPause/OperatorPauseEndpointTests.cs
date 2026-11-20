@@ -20,6 +20,28 @@ namespace WaroTrans.IntegrationTests.WorkflowExecution.OperatorPause;
 public sealed class OperatorPauseEndpointTests(WaroTransWebApplicationFactory factory) : IntegrationTestBase(factory)
 {
     [Fact]
+    public async Task The_shared_staff_warehouse_also_limits_handover_and_recovery()
+    {
+        await Factory.CreateAccountAsync("staff-floor", AccountRole.STAFF);
+        var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync("staff-floor")).AccessToken;
+        var (jobId, foreignJobId) = await SeedJobsAsync();
+        var foreign = $"/api/workflow-execution/jobs/{foreignJobId}";
+
+        using var recovery = await client.GetWithTokenAsync($"{foreign}/recovery", token);
+        Assert.Equal(HttpStatusCode.Forbidden, recovery.StatusCode);
+        Assert.Equal("job_outside_staff_warehouse", await recovery.ReadErrorCodeAsync());
+
+        using var handover = await client.SendWithTokenAsync(HttpMethod.Post, $"{foreign}/handover/confirm-batch", token,
+            new { type = "PICKUP", containerIds = new[] { Guid.NewGuid() } });
+        Assert.Equal(HttpStatusCode.Forbidden, handover.StatusCode);
+        Assert.Equal("job_outside_staff_warehouse", await handover.ReadErrorCodeAsync());
+
+        using var sharedRecovery = await client.GetWithTokenAsync($"/api/workflow-execution/jobs/{jobId}/recovery", token);
+        Assert.Equal(HttpStatusCode.OK, sharedRecovery.StatusCode);
+    }
+
+    [Fact]
     public async Task Staff_pause_in_the_shared_warehouse_and_only_the_owner_or_admin_can_request_resume()
     {
         var owner = await Factory.CreateAccountAsync("pause-owner", AccountRole.STAFF);

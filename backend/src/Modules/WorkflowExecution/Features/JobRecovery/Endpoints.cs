@@ -9,6 +9,7 @@ using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Services;
 
 namespace WaroTrans.WorkflowExecution.Features.JobRecovery;
 
@@ -39,16 +40,23 @@ public static class JobRecoveryEndpoints
 {
     public static void Map(RouteGroupBuilder group)
     {
-        group.MapGet("/jobs/{id:guid}/recovery", async (Guid id, WorkflowExecutionDbContext db, CancellationToken cancellationToken) =>
-                Results.Ok(new { recovery = await ReadAsync(id, db, cancellationToken) }))
+        group.MapGet("/jobs/{id:guid}/recovery", async (
+                Guid id, WorkflowExecutionDbContext db, ICurrentUser currentUser, StaffWarehouseScope warehouseScope,
+                CancellationToken cancellationToken) =>
+            {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
+                return Results.Ok(new { recovery = await ReadAsync(id, db, cancellationToken) });
+            })
             .RequirePermission(Permissions.JobRead)
             .WithName("GetJobRecovery")
             .WithSummary("The latest recovery of a Job; null when it never needed one")
             .WithTags("Jobs");
 
         group.MapPost("/jobs/{id:guid}/recovery/assign", async (
-                Guid id, AssignRecoveryRobotRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db, CancellationToken cancellationToken) =>
+                Guid id, AssignRecoveryRobotRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db,
+                ICurrentUser currentUser, StaffWarehouseScope warehouseScope, CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
                 await engine.AssignRecoveryRobotAsync(id, request.RobotId, request.EndpointId, cancellationToken);
                 return Results.Ok(new { recovery = await ReadAsync(id, db, cancellationToken) });
             })
@@ -59,8 +67,10 @@ public static class JobRecoveryEndpoints
             .WithTags("Jobs");
 
         group.MapPost("/jobs/{id:guid}/recovery/unassign", async (
-                Guid id, JobExecutionEngine engine, WorkflowExecutionDbContext db, CancellationToken cancellationToken) =>
+                Guid id, JobExecutionEngine engine, WorkflowExecutionDbContext db,
+                ICurrentUser currentUser, StaffWarehouseScope warehouseScope, CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
                 await engine.UnassignRecoveryRobotAsync(id, cancellationToken);
                 return Results.Ok(new { recovery = await ReadAsync(id, db, cancellationToken) });
             })
@@ -77,8 +87,10 @@ public static class JobRecoveryEndpoints
                 JobQueries queries,
                 IAuditTrail audit,
                 ICurrentUser currentUser,
+                StaffWarehouseScope warehouseScope,
                 CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
                 var actor = Actor(currentUser);
                 var recovery = await engine.ConfirmRecoveryTransferAsync(id, request.ContainerIds ?? [], actor, request.Note, cancellationToken);
                 await audit.RecordAsync(
@@ -103,8 +115,10 @@ public static class JobRecoveryEndpoints
                 JobExecutionEngine engine,
                 JobQueries queries,
                 ICurrentUser currentUser,
+                StaffWarehouseScope warehouseScope,
                 CancellationToken cancellationToken) =>
             {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
                 await engine.ResumeRecoveryOnSameRobotAsync(id, Actor(currentUser), request?.Note, cancellationToken);
                 return Results.Ok(await queries.GetDetailAsync(id, cancellationToken));
             })

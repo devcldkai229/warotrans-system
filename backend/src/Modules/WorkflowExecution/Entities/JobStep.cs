@@ -16,6 +16,8 @@ public sealed class JobStep
     public Guid? TargetEndpointId { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+    public Guid? AcceptedMoveCommandId { get; set; }
+    public DateTimeOffset? MoveAcceptedAt { get; set; }
     public string? ErrorCode { get; set; }
     public string? ErrorMessage { get; set; }
 

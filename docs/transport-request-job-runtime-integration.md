@@ -159,6 +159,12 @@ JobTask.ContextValues use **dotted** catalog paths (`source.endpointId`, …) so
 
 Only the operator recorded on the pause or an Admin may resume an operator-paused Job. `availableActions` reflects this restriction. A direct robot Resume or manual lease request for an operator-paused Job returns `job_paused_robot_held`. Apply WorkflowExecution migration `20261120081415_RecordOperatorPause` before running the updated service.
 
+## Handover stop queue
+
+`GET /api/workflow-execution/handover-stops` lists active stop offers for the Staff warehouse. An offer opens 10 seconds after the robot acknowledges the MOVE to that stop. `mine=true` returns offers held by the current operator. The `containers` array lists the pending handovers at that stop.
+
+`POST /api/workflow-execution/jobs/{jobId}/handover-stops/{id}/claim`, `/begin` and `/release` take `moveId` and `version` from the latest offer. A changed move or version returns `handover_stop_changed`. A claim before robot arrival has no begin deadline. Once the robot is ready, the deadline starts from the later of readiness and claim. Starting the handover preserves its owner until completion. Apply WorkflowExecution migration `20261120083644_RecordHandoverStopClaims` for the queue and claim state.
+
 ## Non-goals (this foundation)
 
 Robot selection, JobAssignment, MQTT, Job execution loop, CreateTransportRequest HTTP endpoint itself.

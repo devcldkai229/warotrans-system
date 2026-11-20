@@ -424,6 +424,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AcceptedMoveCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_move_command_id");
+
                     b.Property<DateTimeOffset?>("ClaimExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("claim_expires_at");
@@ -466,6 +470,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid>("JobTaskId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_task_id");
+
+                    b.Property<DateTimeOffset?>("MoveAcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("move_accepted_at");
 
                     b.Property<string>("OutputValues")
                         .IsRequired()
@@ -537,6 +545,27 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("failure_code");
+
+                    b.Property<DateTimeOffset?>("HandoverBeganAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_began_at");
+
+                    b.Property<Guid?>("HandoverClaimMoveId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handover_claim_move_id");
+
+                    b.Property<DateTimeOffset?>("HandoverClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_claimed_at");
+
+                    b.Property<Guid?>("HandoverClaimedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handover_claimed_by");
+
+                    b.Property<int>("HandoverVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("handover_version");
 
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")

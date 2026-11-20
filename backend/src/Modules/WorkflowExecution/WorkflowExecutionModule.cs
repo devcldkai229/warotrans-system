@@ -70,6 +70,7 @@ public static class WorkflowExecutionModule
         services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
         services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
         services.AddScoped<Features.HumanTasks.HumanTaskQueries>();
+        services.AddScoped<Features.HandoverStops.HandoverStopsHandler>();
         services.Configure<Execution.RecoveryOptions>(configuration.GetSection(Execution.RecoveryOptions.SectionName));
         services.AddHostedService<Services.RobotOfflineJobHostedService>();
         services.AddScoped<WaroTrans.Fleet.Contracts.IRobotWorkQuery, Services.RobotWorkQuery>();
@@ -135,6 +136,7 @@ public static class WorkflowExecutionModule
         Features.FailJobContainer.FailJobContainerEndpoint.MapFailJobContainer(group);
         Features.RobotActivity.RobotActivityEndpoints.Map(group);
         Features.HumanTasks.HumanTaskEndpoints.Map(group);
+        Features.HandoverStops.HandoverStopEndpoints.Map(group);
         Features.JobRecovery.JobRecoveryEndpoints.Map(group);
         Features.JobQueue.JobQueueEndpoints.Map(group);
         Features.RobotCare.RobotCareEndpoints.Map(group);

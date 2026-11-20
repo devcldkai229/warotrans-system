@@ -3,6 +3,7 @@ using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace WaroTrans.WorkflowExecution.Features.ConfirmJobStep;
@@ -11,13 +12,15 @@ public sealed class ConfirmJobStepHandler(
     JobExecutionEngine engine,
     JobQueries queries,
     WorkflowExecutionDbContext db,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    StaffWarehouseScope warehouseScope)
 {
     public async Task<JobDetailDto> HandleAsync(Guid jobStepId, ConfirmJobStepRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUser.AccountId
             ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
 
+        await warehouseScope.EnsureStepAccessAsync(jobStepId, currentUser, cancellationToken);
         await engine.ConfirmHumanStepAsync(
             jobStepId,
             request.ContainerId,

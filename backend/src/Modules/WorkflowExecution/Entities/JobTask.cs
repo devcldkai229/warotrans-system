@@ -14,6 +14,11 @@ public sealed class JobTask
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? FailureCode { get; set; }
+    public Guid? HandoverClaimedBy { get; set; }
+    public Guid? HandoverClaimMoveId { get; set; }
+    public DateTimeOffset? HandoverClaimedAt { get; set; }
+    public DateTimeOffset? HandoverBeganAt { get; set; }
+    public int HandoverVersion { get; set; }
 
     public Job Job { get; set; } = null!;
     public ICollection<JobStep> JobSteps { get; set; } = [];
