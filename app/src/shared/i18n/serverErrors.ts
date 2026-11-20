@@ -239,4 +239,6 @@ export const viServerErrors: Record<string, string> = {
   manual_sequence_out_of_order: 'Đã có lệnh lái mới hơn được chấp nhận.',
   manual_sequence_required: 'Thiếu leaseId, seq hoặc thời gian gửi hợp lệ cho lệnh lái thủ công.',
   manual_setpoint_stale: 'Lệnh vận tốc đã quá hạn thời gian cho phép. Hãy thao tác lại.',
+  handover_work_zone_priority: 'Lượt bàn giao này đang ưu tiên tạm thời cho nhân viên trong khu vực làm việc.',
+  handover_work_zone_invalid: 'Hãy chọn khu vực làm việc (ZONE-AREA) thuộc bản đồ đang xuất bản của kho hiện tại.',
 };

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
-  beginHandoverStop, claimHandoverStop, confirmHandoverStop, getHandoverStopAction,
-  getUserErrorMessage, isHandoverStopActionAllowed, releaseHandoverStop,
+  beginHandoverStop, claimHandoverStop, confirmHandoverStop, extendHandoverStop,
+  getHandoverStopAction, getUserErrorMessage, isHandoverStopActionAllowed, releaseHandoverStop,
 } from '../../shared/api';
 import { t } from '../../shared/i18n';
 import { Scanner, type ScanFeedback } from '../../shared/scan/Scanner';
@@ -46,7 +46,7 @@ export function HandoverStopCard({
   onRefresh,
 }: HandoverStopCardProps) {
   const styles = useThemedStyles(createStyles);
-  const [busy, setBusy] = useState<'claim' | 'begin' | 'release' | 'confirm' | null>(null);
+  const [busy, setBusy] = useState<'claim' | 'begin' | 'release' | 'extend' | 'confirm' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scannedByContainerId, setScannedByContainerId] = useState<Record<string, string>>({});
   const scansRef = useRef<Record<string, string>>({});
@@ -68,17 +68,20 @@ export function HandoverStopCard({
 
   const owner = handoverStopOwnerState(stop, accountId);
   const phase = handoverStopPhase(stop, accountId);
+  const claimAction = getHandoverStopAction(stop, 'CLAIM');
   const canClaim = canOperate && isHandoverStopActionAllowed(stop, 'CLAIM');
   const canBegin = canOperate && isHandoverStopActionAllowed(stop, 'BEGIN');
   const canRelease = canOperate && isHandoverStopActionAllowed(stop, 'RELEASE');
+  const canExtend = canOperate && isHandoverStopActionAllowed(stop, 'EXTEND');
   const confirmAction = getHandoverStopAction(stop, 'CONFIRM');
   const canConfirm = canOperate && isHandoverStopActionAllowed(stop, 'CONFIRM');
   const beginAction = getHandoverStopAction(stop, 'BEGIN');
   const waitingForArrival = owner === 'mine' && !stop.beganAt && beginAction?.reason === 'handover_robot_not_ready';
+  const blockedByZonePriority = owner === 'free' && !canClaim && claimAction?.reason === 'handover_work_zone_priority';
   const progress = stopScanProgress(stop, scannedByContainerId);
 
   const runAction = async (
-    kind: 'claim' | 'begin' | 'release',
+    kind: 'claim' | 'begin' | 'release' | 'extend',
     action: () => Promise<HandoverStopResponse>,
   ) => {
     if (busy) return;
@@ -209,11 +212,18 @@ export function HandoverStopCard({
         </Text>
 
         {stop.beganAt ? (
-          <Text variant="caption" color="successText">
-            {t('Handover Started: {time} · Ownership locked until completion', {
-              time: formatClock(stop.beganAt),
-            })}
-          </Text>
+          <>
+            <Text variant="caption" color="successText">
+              {t('Handover Started: {time} · Ownership locked until completion', {
+                time: formatClock(stop.beganAt),
+              })}
+            </Text>
+            {stop.workDeadline ? (
+              <Text variant="caption" color="warningText">
+                {t('Work Deadline: {time}', { time: formatClock(stop.workDeadline) })}
+              </Text>
+            ) : null}
+          </>
         ) : stop.beginDeadline ? (
           <Text variant="caption" color="warningText">
             {t('Begin Deadline: {time}', { time: formatClock(stop.beginDeadline) })}
@@ -221,6 +231,14 @@ export function HandoverStopCard({
         ) : owner === 'mine' && !stop.robotReadyAt ? (
           <Text variant="caption" color="textSecondary">
             Pre-arrival claim: begin window starts once robot arrives.
+          </Text>
+        ) : null}
+
+        {blockedByZonePriority ? (
+          <Text variant="caption" color="warningText">
+            {stop.warehouseOpensAt
+              ? t('Reserved for work zone until {time}', { time: formatClock(stop.warehouseOpensAt) })
+              : t('Reserved for Staff in this work zone')}
           </Text>
         ) : null}
 
@@ -344,7 +362,7 @@ export function HandoverStopCard({
         </Text>
       ) : null}
 
-      {(canClaim || canBegin || canRelease || (showJobLink && onOpenJob)) ? (
+      {(canClaim || canBegin || canRelease || canExtend || (showJobLink && onOpenJob)) ? (
         <View style={styles.actionsRow}>
           {canClaim ? (
             <Button
@@ -372,6 +390,22 @@ export function HandoverStopCard({
               onPress={() => {
                 void runAction('begin', () =>
                   beginHandoverStop(stop.jobId, stop.id, stop.moveId, stop.version),
+                );
+              }}
+              style={styles.actionBtn}
+            />
+          ) : null}
+
+          {canExtend ? (
+            <Button
+              title="Extend Time"
+              variant="outline"
+              size="sm"
+              loading={busy === 'extend'}
+              disabled={!!busy}
+              onPress={() => {
+                void runAction('extend', () =>
+                  extendHandoverStop(stop.jobId, stop.id, stop.moveId, stop.version),
                 );
               }}
               style={styles.actionBtn}

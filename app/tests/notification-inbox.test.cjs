@@ -54,6 +54,9 @@ test('REST presentation preserves real read state/time/entity instead of resetti
   assert.equal(item.jobId, 'job-1');
   assert.equal(toLiveNotification({ ...snapshot().items[0], createdAt: '' }).timeLabel, 'Time Unavailable');
   assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'ISSUE_RESOLVED' }).category, 'SYSTEM');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'HANDOVER_OFFER' }).category, 'JOB_ASSIGNED');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'HANDOVER_OVERDUE' }).category, 'JOB_ASSIGNED');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'WAREHOUSE_HAZARD' }).category, 'HAZARD');
 });
 
 test('notification links use verified entity IDs and current permissions; unknown/web-only routes are not guessed', () => {

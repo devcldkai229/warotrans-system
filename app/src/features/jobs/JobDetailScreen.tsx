@@ -90,7 +90,7 @@ export function JobDetailScreen() {
   const [isLoadingJob, setIsLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
   const [jobRefreshError, setJobRefreshError] = useState<string | null>(null);
-  const { lastJobUpdate, lastTrafficUpdate, robotTelemetry, robotConnectivity } = useRealtime();
+  const { lastJobUpdate, lastHandoverStopsChange, lastTrafficUpdate, robotTelemetry, robotConnectivity } = useRealtime();
   const places = usePlaceDirectory();
 
   const initialModal = params?.modal;
@@ -195,6 +195,17 @@ export function JobDetailScreen() {
       refreshJob().catch(() => {});
     }
   }, [lastTrafficUpdate, jobId, job.id, refreshJob]);
+
+  useEffect(() => {
+    if (
+      canOperate
+      && lastHandoverStopsChange?.jobId
+      && (lastHandoverStopsChange.jobId === jobId || lastHandoverStopsChange.jobId === job.id)
+    ) {
+      void refetchStops();
+      void refreshJob().catch(() => {});
+    }
+  }, [lastHandoverStopsChange, canOperate, jobId, job.id, refetchStops, refreshJob]);
 
   useEffect(() => {
     if (isVerifyOpen && !verificationStepId && job.activeStepId) setVerificationStepId(job.activeStepId);

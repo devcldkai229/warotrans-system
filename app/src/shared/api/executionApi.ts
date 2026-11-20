@@ -8,7 +8,7 @@ import type {
   ActionAvailability, HandoverProblemCode, HandoverStopAction, HandoverStopResponse, HandoverStopScan,
   JobContainerResponse, JobDetailResponse, JobRecoveryAction, JobRecoveryResponse, JobStatus, JobStepResponse,
   JobTaskResponse, HandoverConfirmationBody, HandoverConfirmationResponse, RecoveryRobotCandidateResponse,
-  ReportTaskProblemBody,
+  ReportTaskProblemBody, StaffWorkZoneResponse,
 } from '../types/contracts';
 
 export type JobAction = 'START' | 'PAUSE' | 'RESUME' | 'CANCEL';
@@ -274,7 +274,7 @@ export async function listHandoverStops(
 async function changeHandoverStop(
   jobId: string,
   stopId: string,
-  path: 'claim' | 'begin' | 'release',
+  path: 'claim' | 'begin' | 'release' | 'heartbeat' | 'extend',
   moveId: string,
   version: number,
 ): Promise<HandoverStopResponse> {
@@ -303,6 +303,53 @@ export function beginHandoverStop(jobId: string, stopId: string, moveId: string,
 
 export function releaseHandoverStop(jobId: string, stopId: string, moveId: string, version: number) {
   return changeHandoverStop(jobId, stopId, 'release', moveId, version);
+}
+
+export function heartbeatHandoverStop(jobId: string, stopId: string, moveId: string, version: number) {
+  return changeHandoverStop(jobId, stopId, 'heartbeat', moveId, version);
+}
+
+export function extendHandoverStop(jobId: string, stopId: string, moveId: string, version: number) {
+  return changeHandoverStop(jobId, stopId, 'extend', moveId, version);
+}
+
+function parseWorkZoneEnvelope(data: unknown): StaffWorkZoneResponse | null {
+  if (!data || typeof data !== 'object' || !('workZone' in data)) {
+    throw new ApiError(502, 'handover_work_zone_invalid', 'Could not read your priority work zone from the server.');
+  }
+  const workZone = (data as { workZone?: unknown }).workZone;
+  if (workZone === null || workZone === undefined) {
+    return null;
+  }
+  if (
+    typeof workZone !== 'object'
+    || typeof (workZone as { code?: unknown }).code !== 'string'
+    || typeof (workZone as { warehouseId?: unknown }).warehouseId !== 'string'
+  ) {
+    throw new ApiError(502, 'handover_work_zone_invalid', 'Could not read your priority work zone from the server.');
+  }
+  return workZone as StaffWorkZoneResponse;
+}
+
+export async function getMyHandoverWorkZone(signal?: AbortSignal): Promise<StaffWorkZoneResponse | null> {
+  const data = await apiFetch<{ workZone?: unknown }>(
+    '/api/workflow-execution/handover-stops/work-zone',
+    { signal },
+  );
+  return parseWorkZoneEnvelope(data);
+}
+
+export async function setMyHandoverWorkZone(zoneId: string | null): Promise<StaffWorkZoneResponse | null> {
+  const trimmed = typeof zoneId === 'string' && zoneId.trim() ? zoneId.trim() : null;
+  const data = await apiFetch<{ workZone?: unknown }>(
+    '/api/workflow-execution/handover-stops/work-zone',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ zoneId: trimmed }),
+    },
+    callerToken(),
+  );
+  return parseWorkZoneEnvelope(data);
 }
 /** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
 export async function failJobContainer(stepId: string, containerId: string, reason: string) {

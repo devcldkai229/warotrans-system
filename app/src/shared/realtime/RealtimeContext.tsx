@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   realtimeClient,
+  HandoverStopsChangedEvent,
   RobotConnectivityEvent,
   RobotTelemetryEvent,
   TransportStatusEvent,
@@ -13,8 +15,9 @@ import { triggerHaptic } from '../utils/haptics';
 import { getAccessToken, onAccessTokenChange } from '../api/client';
 import { listRobots } from '../api/fleetApi';
 import { useNotificationInbox, type NotificationInboxState } from './useNotificationInbox';
+import { useHandoverStopHeartbeat } from './useHandoverStopHeartbeat';
 
-export type { JobUpdatedRealtimeEvent };
+export type { HandoverStopsChangedEvent, JobUpdatedRealtimeEvent };
 
 interface RealtimeContextValue extends NotificationInboxState {
   isConnected: boolean;
@@ -22,6 +25,7 @@ interface RealtimeContextValue extends NotificationInboxState {
   robotConnectivity: Record<string, RobotConnectivityEvent>;
   lastTransportStatus: TransportStatusEvent | null;
   lastJobUpdate: JobUpdatedRealtimeEvent | null;
+  lastHandoverStopsChange: HandoverStopsChangedEvent | null;
   /** Latest overall health per robot id (robotHealthUpdated). */
   robotHealth: Record<string, RobotHealthEvent>;
   lastTrafficUpdate: TrafficUpdatedEvent | null;
@@ -30,6 +34,7 @@ interface RealtimeContextValue extends NotificationInboxState {
 const RealtimeContext = createContext<RealtimeContextValue | undefined>(undefined);
 
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
+  const client = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [robotTelemetry, setRobotTelemetry] = useState<Record<string, RobotTelemetryEvent>>({});
   const [robotConnectivity, setRobotConnectivity] = useState<Record<string, RobotConnectivityEvent>>({});
@@ -39,9 +44,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const inbox = useNotificationInbox();
   const [lastTransportStatus, setLastTransportStatus] = useState<TransportStatusEvent | null>(null);
   const [lastJobUpdate, setLastJobUpdate] = useState<JobUpdatedRealtimeEvent | null>(null);
+  const [lastHandoverStopsChange, setLastHandoverStopsChange] = useState<HandoverStopsChangedEvent | null>(null);
   const [accessToken, setAuthToken] = useState(getAccessToken);
   const [appActive, setAppActive] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const telemetryVersions = useRef<Record<string, number>>({});
+
+  useHandoverStopHeartbeat(appActive, accessToken, lastHandoverStopsChange || lastJobUpdate);
 
   useEffect(() => {
     const lifecycle = AppState.addEventListener('change', state => setAppActive(state === 'active'));
@@ -115,6 +123,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setLastJobUpdate(event);
     });
 
+    const unsubHandoverStops = realtimeClient.onHandoverStopsChanged((event) => {
+      setLastHandoverStopsChange(event);
+      void client.invalidateQueries({ queryKey: ['handover-stops'] });
+      void client.invalidateQueries({ queryKey: ['handover-stops-mine'] });
+    });
+
     const unsubHealth = realtimeClient.onHealthUpdated((event) => {
       if (typeof event?.robotId === 'string') setRobotHealth(prev => ({ ...prev, [event.robotId]: event }));
     });
@@ -131,6 +145,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setRobotHealth({});
       setLastTransportStatus(null);
       setLastJobUpdate(null);
+      setLastHandoverStopsChange(null);
       setLastTrafficUpdate(null);
       // When token becomes available or changes on login/logout, reconnect with Bearer token
       realtimeClient.restart().catch(() => {});
@@ -143,12 +158,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       unsubNotification();
       unsubTransport();
       unsubJobUpdate();
+      unsubHandoverStops();
       unsubHealth();
       unsubTraffic();
       unsubToken();
       realtimeClient.stop();
     };
-  }, []);
+  }, [client]);
 
   useEffect(() => {
     if (!accessToken || !appActive) return;
@@ -166,6 +182,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         ...inbox,
         lastTransportStatus,
         lastJobUpdate,
+        lastHandoverStopsChange,
         robotHealth,
         lastTrafficUpdate,
       }}

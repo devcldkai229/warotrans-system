@@ -6,6 +6,9 @@ const {
   humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, isBlockingHandoverIssue,
   mergeMyJobIdsWithStops, recordStopScan, stopScanProgress,
 } = createLoader()('src/features/jobs/handoverData.ts');
+const {
+  computeHeartbeatIntervalMs, pickPreBeginHeartbeatTargets,
+} = createLoader()('src/features/jobs/handoverHeartbeat.ts');
 const confirmedStep = (source, actor = {}) => ({
   id: 'handover-1', stepType: 'HUMAN_INTERACTION', operationCode: 'PICKUP_CONFIRM', status: 'COMPLETED',
   outputValues: { confirmed: true, confirmationSource: source, confirmedAt: '2026-10-27T05:00:00Z', ...actor },
@@ -309,4 +312,53 @@ test('recordStopScan, stopScanProgress and isBlockingHandoverIssue track multi-c
   assert.equal(isBlockingHandoverIssue({ problemCode: 'MISSING_CONTAINER', status: 'IN_PROGRESS' }), true);
   assert.equal(isBlockingHandoverIssue({ problemCode: 'WRONG_CONTAINER', status: 'RESOLVED' }), false);
   assert.equal(isBlockingHandoverIssue({ problemCode: 'BARCODE_UNREADABLE', status: 'OPEN' }), false);
+});
+
+test('handover work-zone selection, pre-begin heartbeat and post-begin extend follow M2 contracts', async () => {
+  const requests = [];
+  const api = loadApi(async (url, init = {}, token) => {
+    requests.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null, token });
+    if (url.endsWith('/work-zone')) {
+      return init.method === 'PUT'
+        ? { workZone: JSON.parse(init.body).zoneId ? { warehouseId: 'wh-1', code: 'ZONE-AREA-A' } : null }
+        : { workZone: { warehouseId: 'wh-1', code: 'ZONE-AREA-A' } };
+    }
+    return stopOffer({
+      claimedBy: 'staff-a',
+      version: 5,
+      workDeadline: '2026-11-20T09:10:00Z',
+      heartbeatIntervalSeconds: 5,
+      availableActions: [
+        { action: 'EXTEND', allowed: true, reason: null },
+      ],
+    });
+  });
+
+  const currentZone = await api.getMyHandoverWorkZone();
+  assert.deepEqual(plain(currentZone), { warehouseId: 'wh-1', code: 'ZONE-AREA-A' });
+  assert.deepEqual(plain(await api.setMyHandoverWorkZone(' zone-1 ')), { warehouseId: 'wh-1', code: 'ZONE-AREA-A' });
+  assert.equal(await api.setMyHandoverWorkZone(null), null);
+
+  await api.heartbeatHandoverStop('job-1', 'stop-1', 'move-1', 2);
+  const extended = await api.extendHandoverStop('job-1', 'stop-1', 'move-1', 2);
+  assert.equal(api.isHandoverStopActionAllowed(extended, 'EXTEND'), true);
+
+  assert.deepEqual(plain(requests), [
+    { url: '/api/workflow-execution/handover-stops/work-zone', method: 'GET', body: null },
+    { url: '/api/workflow-execution/handover-stops/work-zone', method: 'PUT', body: { zoneId: 'zone-1' }, token: 'staff-token' },
+    { url: '/api/workflow-execution/handover-stops/work-zone', method: 'PUT', body: { zoneId: null }, token: 'staff-token' },
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/heartbeat', method: 'POST', body: { moveId: 'move-1', version: 2 }, token: 'staff-token' },
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/extend', method: 'POST', body: { moveId: 'move-1', version: 2 }, token: 'staff-token' },
+  ]);
+
+  const targets = pickPreBeginHeartbeatTargets(
+    [
+      stopOffer({ id: 'pre-begin', claimedBy: 'staff-a', beganAt: null, heartbeatIntervalSeconds: 5 }),
+      stopOffer({ id: 'already-begun', claimedBy: 'staff-a', beganAt: '2026-11-20T08:01:00Z', heartbeatIntervalSeconds: 3 }),
+      stopOffer({ id: 'other-staff', claimedBy: 'staff-b', beganAt: null, heartbeatIntervalSeconds: 5 }),
+    ],
+    'staff-a',
+  );
+  assert.deepEqual(targets.map(item => item.id), ['pre-begin']);
+  assert.equal(computeHeartbeatIntervalMs(targets), 5000);
 });

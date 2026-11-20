@@ -621,7 +621,12 @@ export interface RecoveryRobotCandidateResponse {
   reasons: string[];
 }
 
-export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE' | 'CONFIRM';
+export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE' | 'EXTEND' | 'CONFIRM';
+
+export interface StaffWorkZoneResponse {
+  warehouseId: string;
+  code: string;
+}
 
 export interface HandoverStopScan {
   containerId: string;
@@ -650,6 +655,9 @@ export interface HandoverStopResponse {
   beganAt: UtcDateTime | null;
   version: number;
   availableActions: ActionAvailability[];
+  warehouseOpensAt?: UtcDateTime;
+  workDeadline?: UtcDateTime | null;
+  heartbeatIntervalSeconds?: number;
 }
 
 export type HandoverProblemCode =
