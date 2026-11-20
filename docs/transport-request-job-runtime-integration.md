@@ -177,6 +177,12 @@ Before Begin, send POST `/heartbeat` with the same `{ moveId, version }` at the 
 
 Apply Identity migration `20261120104707_StoreStaffWorkZone` and WorkflowExecution migration `20261120104725_TrackHandoverStopDeadlines`.
 
+## Warehouse hazards
+
+POST `/api/operations/hazards` takes `requestId`, `mapVersionId`, `hazardType`, `severity`, `description` and exactly one of `edgeId`, `zoneId` or `endpointId`. The referenced location must be active on the specified published map. Hazard types are `LIQUID_SPILL`, `FALLEN_CARGO`, `FACILITY_WORK`, `FORKLIFT_TRAFFIC` and `OTHER`. Severity uses the four Issue severity values. An unchanged retry by the same account reuses the Issue ID.
+
+The Issue includes a `hazard` with the warehouse, map version, location IDs, location code and type. The `WAREHOUSE_HAZARD` inbox item opens that Issue. Admins, Staff in the active warehouse and Technicians with robot scope there receive the alert. Only authorized issue managers can change its lifecycle. Traffic control remains a separate operation.
+
 ## Payload recovery
 
 Under `/api/workflow-execution/jobs/{jobId}/recovery`, GET returns `{ recovery }` with the case ID, version, `claimedBy`, manifest barcodes, robot IDs, `robotArrived` and `availableActions`. GET `/candidates` returns `{ items }` with each robot's effective `maxContainers`, eligibility and reasons for the full cargo currently on board.

@@ -27,6 +27,10 @@ public sealed record TransitionIssueRequest(string Status, int ExpectedVersion, 
 
 public sealed record ResolveOwnHandoverIssueRequest(int ExpectedVersion, string ScannedBarcode, string Resolution);
 
+public sealed record CreateHazardRequest(
+    Guid RequestId, Guid MapVersionId, string HazardType, string Severity, string Description,
+    Guid? EdgeId = null, Guid? ZoneId = null, Guid? EndpointId = null);
+
 public sealed record AddEvidenceRequest(EvidenceInput Evidence, int ExpectedVersion);
 
 public sealed record EvidenceDto(string Kind, string? Uri, string? MimeType, string? Note, Guid? AddedBy, DateTimeOffset? AddedAt);
@@ -54,7 +58,8 @@ public sealed record IssueDto(
     Guid? ResolvedBy,
     string? Resolution,
     IReadOnlyList<string> AllowedTransitions,
-    string? ProblemCode)
+    string? ProblemCode,
+    HazardLocation? Hazard)
 {
     public static IssueDto From(IssueReport i, IReadOnlyList<string> transitions) => new(
         i.Id,
@@ -79,7 +84,8 @@ public sealed record IssueDto(
         i.ResolvedBy,
         i.Resolution,
         transitions,
-        i.ProblemCode);
+        i.ProblemCode,
+        i.Hazard);
 }
 
 public sealed record ListIssuesResponse(long Total, IReadOnlyList<IssueDto> Items);
@@ -158,6 +164,23 @@ internal sealed class ResolveOwnHandoverIssueValidator : AbstractValidator<Resol
         RuleFor(x => x.ExpectedVersion).GreaterThan(0);
         RuleFor(x => x.ScannedBarcode).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Resolution).NotEmpty().MaximumLength(1000);
+    }
+}
+
+internal sealed class CreateHazardValidator : AbstractValidator<CreateHazardRequest>
+{
+    private static readonly string[] HazardTypes = ["LIQUID_SPILL", "FALLEN_CARGO", "FACILITY_WORK", "FORKLIFT_TRAFFIC", "OTHER"];
+
+    public CreateHazardValidator()
+    {
+        RuleFor(x => x.RequestId).NotEmpty();
+        RuleFor(x => x.MapVersionId).NotEmpty();
+        RuleFor(x => x.HazardType).Must(HazardTypes.Contains).WithMessage("Unknown hazard type.");
+        RuleFor(x => x.Severity).Must(value => Enum.GetNames<IssueSeverity>().Contains(value)).WithMessage("Unknown severity.");
+        RuleFor(x => x.Description).NotEmpty().MaximumLength(2000);
+        RuleFor(x => x).Must(x => new[] { x.EdgeId, x.ZoneId, x.EndpointId }.OfType<Guid>().Count(id => id != Guid.Empty) == 1
+                && new[] { x.EdgeId, x.ZoneId, x.EndpointId }.All(id => id != Guid.Empty))
+            .WithMessage("Choose exactly one edge, work zone or endpoint of the map.");
     }
 }
 

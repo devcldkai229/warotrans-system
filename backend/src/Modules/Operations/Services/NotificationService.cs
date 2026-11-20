@@ -94,7 +94,9 @@ public sealed class NotificationService(
 /// <summary>Which notifications one signed-in person may see, and which of those they have not read yet.</summary>
 public static class NotificationVisibility
 {
-    public static FilterDefinition<Notification> VisibleTo(Guid accountId, string? role, RobotScope scope, Guid? warehouseId = null)
+    public static async Task<FilterDefinition<Notification>> VisibleToAsync(
+        Guid accountId, string? role, RobotScope scope, IStaffOperatingWarehouse staffWarehouse, IWarehouseRobotLookup robotLookup,
+        CancellationToken cancellationToken)
     {
         var f = Builders<Notification>.Filter;
         var roleMatches = role == AppRoles.Admin
@@ -111,7 +113,15 @@ public static class NotificationVisibility
 
         var visible = f.Or(f.Eq(n => n.ReceiverAccountId, accountId), forMyRole);
         if (role == AppRoles.Staff)
+        {
+            var warehouseId = await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken);
             visible &= f.Or(f.Eq(n => n.WarehouseId, null), f.Eq(n => n.WarehouseId, warehouseId));
+        }
+        else if (role == AppRoles.Technician && !scope.AllRobots)
+        {
+            var warehouses = await robotLookup.GetWarehousesAsync(scope.RobotIds, cancellationToken);
+            visible &= f.Or(f.Eq(n => n.WarehouseId, null), f.In(n => n.WarehouseId, warehouses.Select(id => (Guid?)id)));
+        }
         return visible;
     }
 

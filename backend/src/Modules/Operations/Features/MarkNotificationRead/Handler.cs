@@ -13,16 +13,17 @@ public sealed class MarkNotificationReadHandler(
     ICurrentUser currentUser,
     IRobotAccessScope robotAccessScope,
     TimeProvider clock,
-    IStaffOperatingWarehouse staffWarehouse)
+    IStaffOperatingWarehouse staffWarehouse,
+    IWarehouseRobotLookup robotLookup)
 {
     /// <summary>Marks it read for the caller only. Another person's notification is "not found", not "forbidden".</summary>
     public async Task HandleAsync(Guid id, CancellationToken cancellationToken)
     {
         var me = currentUser.AccountId ?? throw new NotFoundException($"Notification '{id}' was not found.", "notification_not_found");
         var scope = await robotAccessScope.GetCurrentAsync(cancellationToken);
-        var warehouse = currentUser.Role == AppRoles.Staff ? await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken) : null;
+        var visible = await NotificationVisibility.VisibleToAsync(me, currentUser.Role, scope, staffWarehouse, robotLookup, cancellationToken);
         var f = Builders<Notification>.Filter;
-        var mineToSee = f.And(f.Eq(n => n.Id, id), NotificationVisibility.VisibleTo(me, currentUser.Role, scope, warehouse));
+        var mineToSee = f.And(f.Eq(n => n.Id, id), visible);
 
         if (!await mongo.Notifications.Find(mineToSee).AnyAsync(cancellationToken))
         {

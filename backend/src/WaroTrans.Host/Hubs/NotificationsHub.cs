@@ -18,7 +18,8 @@ namespace WaroTrans.Host.Hubs;
 /// scope at least once per token lifetime.
 /// </summary>
 [Authorize]
-public sealed class NotificationsHub(IRobotAccessScope robotAccessScope, IStaffOperatingWarehouse staffWarehouse) : Hub
+public sealed class NotificationsHub(
+    IRobotAccessScope robotAccessScope, IStaffOperatingWarehouse staffWarehouse, IWarehouseRobotLookup robotLookup) : Hub
 {
     public override async Task OnConnectedAsync()
     {
@@ -55,6 +56,9 @@ public sealed class NotificationsHub(IRobotAccessScope robotAccessScope, IStaffO
             else
             {
                 groups.AddRange(scope.RobotIds.Select(RealtimeGroups.Robot));
+                if (user.IsInRole(AppRoles.Technician) && RolePermissionMatrix.UserHas(user, Permissions.NotificationRead))
+                    groups.AddRange((await robotLookup.GetWarehousesAsync(scope.RobotIds, Context.ConnectionAborted))
+                        .Select(RealtimeGroups.TechnicianWarehouse));
             }
         }
 
@@ -80,6 +84,7 @@ public static class RealtimeGroups
     public static string User(Guid accountId) => $"user:{accountId:D}";
 
     public static string StaffWarehouse(Guid warehouseId) => $"staff:warehouse:{warehouseId:D}";
+    public static string TechnicianWarehouse(Guid warehouseId) => $"technician:warehouse:{warehouseId:D}";
 
     /// <summary>Everyone signed in with this role who may read notifications.</summary>
     public static string Role(string role) => $"role:{role}";

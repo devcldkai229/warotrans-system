@@ -51,6 +51,10 @@ public sealed class SignalRNotificationForwarder(IHubContext<NotificationsHub> h
             {
                 groups.Add(RealtimeGroups.StaffWarehouse(warehouseId));
             }
+            else if (role == AppRoles.Technician && e.WarehouseId is { } technicianWarehouseId)
+            {
+                groups.Add(RealtimeGroups.TechnicianWarehouse(technicianWarehouseId));
+            }
             else
             {
                 groups.Add(RealtimeGroups.Role(role));

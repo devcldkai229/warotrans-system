@@ -4,11 +4,18 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Driver;
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.Fleet.Entities;
+using WaroTrans.Fleet.Persistence;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Navigation.Entities;
+using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Persistence;
 using WaroTrans.Operations.Documents;
 using WaroTrans.Operations.Persistence;
+using WaroTrans.Warehouse.Persistence;
+using WarehouseEntity = WaroTrans.Warehouse.Entities.Warehouse;
 
 namespace WaroTrans.IntegrationTests.Operations.IssueReports;
 
@@ -77,6 +84,87 @@ public sealed class CreateIssueReportIntegrationTests(WaroTransWebApplicationFac
         Assert.Equal(HttpStatusCode.NotFound, asBob.StatusCode);
         Assert.Equal(0, bobsList.GetProperty("total").GetInt64());
         Assert.Equal(HttpStatusCode.OK, (await client.GetWithTokenAsync($"{Issues}/{id}", sam.AccessToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Warehouse_hazard_uses_the_active_location_and_notifies_the_floor_and_scoped_technicians()
+    {
+        var (client, staff) = await SignInAsync("hazard-reporter", AccountRole.STAFF);
+        var peer = await client.LoginAsync((await Factory.CreateAccountAsync("hazard-peer", AccountRole.STAFF)).Username);
+        var admin = await client.LoginAsync((await Factory.CreateAccountAsync("hazard-admin", AccountRole.ADMIN)).Username);
+        var tech = await Factory.CreateAccountAsync("hazard-tech", AccountRole.TECHNICIAN);
+        var otherTech = await Factory.CreateAccountAsync("other-hazard-tech", AccountRole.TECHNICIAN);
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var warehouseDb = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        var navigation = scope.ServiceProvider.GetRequiredService<NavigationDbContext>();
+        var fleet = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var local = new WarehouseEntity { Id = Guid.NewGuid(), Code = "LOCAL", Name = "Local", IsActive = true, CreatedAt = now };
+        var other = new WarehouseEntity { Id = Guid.NewGuid(), Code = "OTHER", Name = "Other", IsActive = true, CreatedAt = now };
+        warehouseDb.AddRange(local, other);
+        await warehouseDb.SaveChangesAsync();
+        var current = new MapVersion
+        {
+            Id = Guid.NewGuid(), WarehouseId = local.Id, Code = "CURRENT-MAP", Name = "Current", VersionNo = 1,
+            Status = MapStatus.PUBLISHED, CreatedAt = now, PublishedAt = now
+        };
+        var foreign = new MapVersion
+        {
+            Id = Guid.NewGuid(), WarehouseId = other.Id, Code = "FOREIGN-MAP", Name = "Foreign", VersionNo = 1,
+            Status = MapStatus.PUBLISHED, CreatedAt = now, PublishedAt = now.AddMinutes(-5)
+        };
+        var endpoint = new Endpoint { Id = Guid.NewGuid(), MapVersionId = current.Id, Code = "AISLE-1", Name = "Aisle 1", IsEnabled = true };
+        var foreignEndpoint = new Endpoint { Id = Guid.NewGuid(), MapVersionId = foreign.Id, Code = "AISLE-2", Name = "Aisle 2", IsEnabled = true };
+        navigation.AddRange(current, foreign, endpoint, foreignEndpoint);
+        await navigation.SaveChangesAsync();
+        var assignedRobot = Robot.Register(local.Id, current.Id, "RBT-HZD-1", "Local Robot", now);
+        var otherRobot = Robot.Register(other.Id, foreign.Id, "RBT-HZD-2", "Other Robot", now);
+        fleet.AddRange(assignedRobot, otherRobot);
+        await fleet.SaveChangesAsync();
+
+        foreach (var (accountId, robotId) in new[] { (tech.Id, assignedRobot.Id), (otherTech.Id, otherRobot.Id) })
+        {
+            using var grant = await client.SendWithTokenAsync(HttpMethod.Put, $"/api/identity/accounts/{accountId}/robot-scope",
+                admin.AccessToken, new { robotIds = new[] { robotId } });
+            grant.EnsureSuccessStatusCode();
+        }
+        var techSession = await client.LoginAsync(tech.Username);
+        var otherSession = await client.LoginAsync(otherTech.Username);
+        var requestId = Guid.NewGuid();
+        var report = new
+        {
+            requestId, mapVersionId = current.Id, endpointId = endpoint.Id, hazardType = "LIQUID_SPILL",
+            severity = "HIGH", description = "Water at the distribution aisle."
+        };
+        const string hazards = "/api/operations/hazards";
+        using var wrongWarehouse = await client.SendWithTokenAsync(HttpMethod.Post, hazards, staff.AccessToken,
+            report with { mapVersionId = foreign.Id, endpointId = foreignEndpoint.Id });
+        Assert.Equal("hazard_warehouse_out_of_scope", await wrongWarehouse.ReadErrorCodeAsync());
+        using var wrongMap = await client.SendWithTokenAsync(HttpMethod.Post, hazards, staff.AccessToken, report with { endpointId = foreignEndpoint.Id });
+        Assert.Equal("hazard_location_invalid", await wrongMap.ReadErrorCodeAsync());
+
+        using var first = await client.SendWithTokenAsync(HttpMethod.Post, hazards, staff.AccessToken, report);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var body = await BodyAsync(first);
+        var id = body.GetProperty("id").GetGuid();
+        Assert.Equal("AISLE-1", body.GetProperty("hazard").GetProperty("locationCode").GetString());
+        using var duplicate = await client.SendWithTokenAsync(HttpMethod.Post, hazards, staff.AccessToken, report);
+        Assert.Equal(id, (await BodyAsync(duplicate)).GetProperty("id").GetGuid());
+        using var conflicting = await client.SendWithTokenAsync(HttpMethod.Post, hazards, staff.AccessToken, report with { description = "Changed" });
+        Assert.Equal("hazard_request_conflict", await conflicting.ReadErrorCodeAsync());
+
+        const string alerts = "/api/operations/notifications?kind=WAREHOUSE_HAZARD";
+        using var floorInbox = await client.GetWithTokenAsync(alerts, peer.AccessToken);
+        Assert.Single((await BodyAsync(floorInbox)).GetProperty("items").EnumerateArray());
+        using var techInbox = await client.GetWithTokenAsync(alerts, techSession.AccessToken);
+        Assert.Single((await BodyAsync(techInbox)).GetProperty("items").EnumerateArray());
+        using var otherInbox = await client.GetWithTokenAsync(alerts, otherSession.AccessToken);
+        Assert.Empty((await BodyAsync(otherInbox)).GetProperty("items").EnumerateArray());
+        using var visible = await client.GetWithTokenAsync($"{Issues}/{id}", peer.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+        using var inaccessible = await client.GetWithTokenAsync($"{Issues}/{id}", otherSession.AccessToken);
+        Assert.Equal(HttpStatusCode.NotFound, inaccessible.StatusCode);
     }
 
     [Fact]

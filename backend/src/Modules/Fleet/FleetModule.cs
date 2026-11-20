@@ -70,6 +70,7 @@ public static class FleetModule
         services.AddScoped<ProcessRobotInteractionConfirmHandler>();
         services.AddScoped<IssueNavigateCommandHandler>();
         services.AddScoped<IFleetModule, WaroTrans.Fleet.Services.FleetModuleApi>();
+        services.AddScoped<WaroTrans.BuildingBlocks.Abstractions.IWarehouseRobotLookup, WarehouseRobotLookup>();
         services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<TeleopRobotHandler>();
         services.Configure<ManualDriveOptions>(configuration.GetSection(ManualDriveOptions.SectionName));

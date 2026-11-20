@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Geometry;
@@ -6,7 +7,7 @@ using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Services;
 
-public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INavigationModule
+public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INavigationModule, IWarehouseMapLocations
 {
     // Same convention as the operational area filter in the mobile and web map.
     private const string WorkZonePrefix = "ZONE-AREA-%";
@@ -82,5 +83,28 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
             .ToListAsync(cancellationToken);
         return zones.Where(zone => GeoJsonGeometry.ContainsPoint(zone.Geometry.RootElement, endpoint.X, endpoint.Y))
             .Select(zone => zone.Code.ToUpperInvariant()).ToList();
+    }
+
+    public async Task<WarehouseMapLocation?> FindPublishedLocationAsync(
+        Guid mapVersionId, Guid? edgeId, Guid? zoneId, Guid? endpointId, CancellationToken cancellationToken)
+    {
+        var map = await GetMapVersionAsync(mapVersionId, cancellationToken);
+        if (map is not { Status: MapStatus.PUBLISHED }) return null;
+
+        string? code;
+        if (edgeId is { } edge)
+            code = await dbContext.Edges.AsNoTracking()
+                .Where(item => item.Id == edge && item.MapVersionId == mapVersionId && item.IsActive)
+                .Select(item => item.Code).SingleOrDefaultAsync(cancellationToken);
+        else if (zoneId is { } zone)
+            code = await dbContext.Zones.AsNoTracking()
+                .Where(item => item.Id == zone && item.MapVersionId == mapVersionId && item.IsActive)
+                .Select(item => item.Code).SingleOrDefaultAsync(cancellationToken);
+        else
+            code = await dbContext.Endpoints.AsNoTracking()
+                .Where(item => item.Id == endpointId && item.MapVersionId == mapVersionId && item.IsEnabled)
+                .Select(item => item.Code).SingleOrDefaultAsync(cancellationToken);
+
+        return code is null ? null : new(map.WarehouseId, code);
     }
 }

@@ -12,6 +12,19 @@ public static class IssueEndpoints
 {
     public static RouteGroupBuilder MapIssueReports(this RouteGroupBuilder group)
     {
+        group.MapPost("/hazards", async (
+                CreateHazardRequest request, IValidator<CreateHazardRequest> validator,
+                IssueService issues, CancellationToken cancellationToken) =>
+            {
+                var validation = await validator.ValidateAsync(request, cancellationToken);
+                if (!validation.IsValid) return validation.ToValidationProblem();
+                var created = await issues.CreateHazardAsync(request, cancellationToken);
+                return TypedResults.Created($"/api/operations/issues/{created.Id}", created);
+            })
+            .RequirePermission(Permissions.IssueCreate)
+            .WithName("ReportWarehouseHazard")
+            .WithSummary("Report a hazard at an active location on a published warehouse map");
+
         group.MapPost("/issues", async (
                 CreateIssueRequest request,
                 IValidator<CreateIssueRequest> validator,
