@@ -183,14 +183,138 @@ export function queueTransportRequest(id: string) {
   })
 }
 
+/** TRN-03 options of a cancel: why (as a code), a key that makes a retry safe, and some details only. */
+export interface CancelTransportRequestOptions {
+  reasonCode?: string
+  /** Same key, same cancellation: a double click or a retried request never cancels twice. */
+  idempotencyKey?: string
+  /** Cancel only these details (not picked up yet). Empty = the whole request. */
+  detailIds?: string[]
+}
+
 /**
- * TRN-01: cancels the request and its Jobs. Containers not picked up are cancelled; a Job with cargo on the robot is
- * paused for recovery and the request stays CANCELLING. Idempotent.
+ * TRN-01 / TRN-03: starts the cancellation of the request. Containers not picked up are cancelled; a robot carrying
+ * cargo is stopped and its Job held, and the request stays CANCELLING until that cargo is delivered or unloaded by
+ * scan. Follow it with getCancellation. Idempotent.
  */
-export function cancelTransportRequest(id: string, reason: string) {
+export function cancelTransportRequest(id: string, reason: string, options: CancelTransportRequestOptions = {}) {
   return apiRequest<TransportRequestDetailDto>(`/api/transportation/transport-requests/${id}/cancel`, {
     method: 'POST',
-    body: JSON.stringify({ reason }),
+    headers: options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : undefined,
+    body: JSON.stringify({ reason, reasonCode: options.reasonCode, detailIds: options.detailIds }),
+  })
+}
+
+export interface CancelPreviewJob {
+  jobId: string
+  jobNo: string
+  jobStatus: string
+  robotId: string | null
+  robotCode: string | null
+  robotOnline: boolean
+  delivered: number
+  onRobot: number
+  notPickedUp: number
+  total: number
+}
+
+export interface CancelPreviewDetail {
+  detailId: string
+  sequenceNo: number
+  containerId: string
+  containerBarcode: string | null
+  detailStatus: string
+  jobContainerStatus: string | null
+  jobNo: string | null
+  canCancelAlone: boolean
+  cannotCancelAloneReason: string | null
+}
+
+/** GET .../cancel-preview: what a cancel would do now. The cancel itself checks everything again. */
+export interface CancelPreview {
+  transportRequestId: string
+  requestCode: string
+  requestStatus: string
+  canCancel: boolean
+  cannotCancelReason: string | null
+  totalContainers: number
+  delivered: number
+  onRobot: number
+  notPickedUp: number
+  alreadyClosed: number
+  jobs: CancelPreviewJob[]
+  details: CancelPreviewDetail[]
+  reasonCodes: string[]
+}
+
+export type CancellationStatus = 'REQUESTED' | 'STOPPING' | 'WAITING_ROBOT' | 'RECOVERING' | 'MANUAL_INTERVENTION' | 'FINALIZED'
+export type CancellationStage =
+  | 'PENDING'
+  | 'STOP_REQUESTED'
+  | 'WAITING_ROBOT'
+  | 'CARGO_ON_ROBOT'
+  | 'DELIVERING'
+  | 'MANUAL'
+  | 'DONE'
+
+export interface CancellationContainer {
+  containerId: string
+  barcode: string | null
+  jobContainerStatus: string
+  resolution: string | null
+  storageLocationId: string | null
+  levelNo: number | null
+  handedOverAt: string | null
+}
+
+export interface CancellationItem {
+  jobId: string
+  jobNo: string
+  jobStatus: string
+  robotId: string | null
+  robotCode: string | null
+  robotOnline: boolean
+  robotMotionHeld: boolean
+  stage: CancellationStage
+  canHandOver: boolean
+  canDeliver: boolean
+  containers: CancellationContainer[]
+}
+
+/** GET .../cancellation: the latest cancellation of a request and where it stands. */
+export interface Cancellation {
+  id: string
+  transportRequestId: string
+  scope: 'REQUEST' | 'DETAILS'
+  targetDetailIds: string[] | null
+  status: CancellationStatus
+  reasonCode: string
+  reason: string | null
+  requestedBy: string | null
+  requestedAt: string
+  finalizedAt: string | null
+  lastError: string | null
+  delivered: number
+  handedOver: number
+  notPickedUp: number
+  onRobot: number
+  needsAttention: number
+  items: CancellationItem[]
+}
+
+export function getCancelPreview(id: string) {
+  return apiRequest<CancelPreview>(`/api/transportation/transport-requests/${id}/cancel-preview`)
+}
+
+/** Null when the request was never cancelled (204). */
+export async function getCancellation(id: string): Promise<Cancellation | null> {
+  return (await apiRequest<Cancellation | undefined>(`/api/transportation/transport-requests/${id}/cancellation`)) ?? null
+}
+
+/** Deliver the cargo on a stopped robot anyway: its Job resumes and only drops off what is on board. */
+export function deliverCancelledCargo(requestId: string, jobId: string) {
+  return apiRequest<Cancellation>(`/api/transportation/transport-requests/${requestId}/cancellation/jobs/${jobId}/deliver`, {
+    method: 'POST',
   })
 }
 

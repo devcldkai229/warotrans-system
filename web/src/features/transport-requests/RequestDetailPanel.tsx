@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { CancellationProgressPanel } from './CancellationProgressPanel'
 import type { TransportRequestTripView, TransportRequestView } from '@/shared/api/contracts'
 import { Link } from 'react-router-dom'
 import { Can } from '@/features/auth/RequirePermission'
@@ -150,6 +151,8 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
       </Can>
 
       {actions ? <div className="mt-4 flex flex-col gap-2">{actions}</div> : null}
+
+      <CancellationProgressPanel requestId={request.id} requestStatus={request.status} />
 
       <DrawerHeading>{t('Trips ({length})', { length: request.jobs.length })}</DrawerHeading>
       {request.jobs.length === 0 ? (
