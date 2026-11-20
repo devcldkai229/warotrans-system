@@ -18,6 +18,7 @@ const {
   isPendingBatchForVoucher,
   newBatchGroup,
   reconcilePendingBatchWithVoucher,
+  runPersistentBatchAllocation,
 } = load('src/features/inventory/inboundBatch.ts');
 const { emptyPreparation, validPreparation } = load('src/features/inventory/voucherPreparation.ts');
 const { createPreparationStorage } = load('src/features/inventory/preparationStorage.ts');
@@ -231,4 +232,68 @@ test('empty DRAFT with no pendingBatch remains editable and rejects malformed pe
   ]) {
     assert.equal(validPreparation({ ...fresh, pendingBatch: bad }, 'INBOUND'), false);
   }
+});
+
+test('storage failure keeps pendingBatch locked in RAM and retries persist before calling API with same requestId', async () => {
+  let ramPrep = { ...emptyPreparation('INBOUND'), requestedCount: '6', groups: [group('group-1')] };
+  let persisted = null;
+  let persistShouldFail = true;
+  const events = [];
+
+  const runAttempt = () => runPersistentBatchAllocation({
+    prep: ramPrep,
+    warehouseId: 'wh-1',
+    voucherId: 'draft-1',
+    onStage: (staged) => {
+      events.push(`stage:${staged.requestId}`);
+      ramPrep = staged;
+    },
+    persist: async (staged) => {
+      events.push(`persist:${staged.requestId}`);
+      if (persistShouldFail) throw new Error('disk full');
+      persisted = staged;
+    },
+    submit: async (body) => {
+      events.push(`submit:${body.requestId}`);
+      return { body };
+    },
+  });
+
+  // 1. First write fails: RAM locks pendingBatch, submit is never invoked.
+  const first = await runAttempt();
+  assert.equal(first.status, 'persist_failed');
+  assert.ok(ramPrep.pendingBatch);
+  const originalRequestId = ramPrep.pendingBatch.requestId;
+  assert.equal(persisted, null);
+  assert.deepEqual(events, [`stage:${originalRequestId}`, `persist:${originalRequestId}`]);
+
+  // Editing remains locked while pendingBatch is staged in RAM.
+  const editWhileLocked = applyDraftBatchGroupEdit(ramPrep, [group('group-1', { containerCount: '12' })], 'wh-1', 'draft-1');
+  assert.equal(editWhileLocked.requestedCount, '6');
+
+  // 2. Retry while storage still fails: beginPendingBatch sees nextPrep === ramPrep,
+  // but persist MUST still be attempted and submit MUST remain blocked.
+  const second = await runAttempt();
+  assert.equal(second.status, 'persist_failed');
+  assert.equal(ramPrep.pendingBatch.requestId, originalRequestId);
+  assert.deepEqual(events, [
+    `stage:${originalRequestId}`,
+    `persist:${originalRequestId}`,
+    `persist:${originalRequestId}`,
+  ]);
+
+  // 3. Storage recovers: retry persists the exact pendingBatch BEFORE submit sends same requestId/payload.
+  persistShouldFail = false;
+  const third = await runAttempt();
+  assert.equal(third.status, 'submitted');
+  assert.equal(persisted.pendingBatch.requestId, originalRequestId);
+  assert.equal(third.result.body.requestId, originalRequestId);
+  assert.equal(third.result.body.containerCount, 6);
+  assert.deepEqual(events, [
+    `stage:${originalRequestId}`,
+    `persist:${originalRequestId}`,
+    `persist:${originalRequestId}`,
+    `persist:${originalRequestId}`,
+    `submit:${originalRequestId}`,
+  ]);
 });

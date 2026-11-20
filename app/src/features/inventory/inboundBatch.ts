@@ -172,3 +172,43 @@ export function reconcilePendingBatchWithVoucher(
   }
   return prep;
 }
+
+export interface PersistentBatchAllocationOptions<TResult> {
+  prep: VoucherPreparation;
+  warehouseId: string;
+  voucherId: string;
+  onStage: (staged: VoucherPreparation) => void;
+  persist: (staged: VoucherPreparation) => Promise<void>;
+  submit: (body: CreateContainerBatchBody) => Promise<TResult>;
+  shouldStop?: () => boolean;
+}
+
+export type PersistentBatchAllocationOutcome<TResult> =
+  | { status: 'persist_failed'; nextPrep: VoucherPreparation; body: CreateContainerBatchBody; error: unknown }
+  | { status: 'aborted'; nextPrep: VoucherPreparation; body: CreateContainerBatchBody }
+  | { status: 'submitted'; nextPrep: VoucherPreparation; body: CreateContainerBatchBody; result: TResult };
+
+export async function runPersistentBatchAllocation<TResult>({
+  prep,
+  warehouseId,
+  voucherId,
+  onStage,
+  persist,
+  submit,
+  shouldStop,
+}: PersistentBatchAllocationOptions<TResult>): Promise<PersistentBatchAllocationOutcome<TResult>> {
+  const plan = beginPendingBatch(prep, warehouseId, voucherId);
+  if (plan.nextPrep !== prep) {
+    onStage(plan.nextPrep);
+  }
+  try {
+    await persist(plan.nextPrep);
+  } catch (error) {
+    return { status: 'persist_failed', nextPrep: plan.nextPrep, body: plan.body, error };
+  }
+  if (shouldStop?.()) {
+    return { status: 'aborted', nextPrep: plan.nextPrep, body: plan.body };
+  }
+  const result = await submit(plan.body);
+  return { status: 'submitted', nextPrep: plan.nextPrep, body: plan.body, result };
+}

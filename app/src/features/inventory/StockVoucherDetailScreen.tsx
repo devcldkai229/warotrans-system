@@ -17,12 +17,12 @@ import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text } from '../../shared/ui';
 import {
-  beginPendingBatch,
   clearPendingBatch,
   inboundBatchProblem,
   isDefinitiveBatchRejection,
   isPendingBatchForVoucher,
   reconcilePendingBatchWithVoucher,
+  runPersistentBatchAllocation,
 } from './inboundBatch';
 import { preparationDeviceStore } from './preparationDeviceStore';
 import { canAllocateInboundBatch, canCreateVoucher, canReadVouchers, uncertainDraftWrite, voucherDate, voucherLineLocation } from './stockVoucherData';
@@ -103,20 +103,28 @@ export function StockVoucherDetailScreen() {
     const controller = new AbortController(); request.current = controller;
     let nextPrep = prep.value;
     try {
-      const plan = beginPendingBatch(prep.value, data.warehouseId, data.id);
-      nextPrep = plan.nextPrep;
-      if (nextPrep !== prep.value) {
-        // Update slot state before persisting so an unmount flush cannot erase pendingBatch.
-        prep.reset(nextPrep);
-        try {
-          await preparationDeviceStore.write(prep.scope, nextPrep);
-        } catch {
-          if (alive.current) setActionError(t('Could not save the batch request on this device. Try again.'));
-          return;
+      const outcome = await runPersistentBatchAllocation({
+        prep: prep.value,
+        warehouseId: data.warehouseId,
+        voucherId: data.id,
+        onStage: (staged) => {
+          nextPrep = staged;
+          // Update slot state before persisting so an unmount flush cannot erase pendingBatch.
+          prep.reset(staged);
+        },
+        persist: (staged) => preparationDeviceStore.write(prep.scope, staged),
+        submit: (body) => createContainerBatch(body, controller.signal),
+        shouldStop: () => !alive.current || controller.signal.aborted,
+      });
+      nextPrep = outcome.nextPrep;
+      if (outcome.status === 'persist_failed') {
+        if (alive.current && !controller.signal.aborted) {
+          setActionError(t('Could not save the batch request on this device. Try again.'));
         }
-        if (!alive.current || controller.signal.aborted) return;
+        return;
       }
-      const batch = await createContainerBatch(plan.body, controller.signal);
+      if (outcome.status === 'aborted' || !alive.current || controller.signal.aborted) return;
+      const batch = outcome.result;
       if (!alive.current || controller.signal.aborted) return;
       const cleared = clearPendingBatch(nextPrep);
       prep.reset(cleared);
