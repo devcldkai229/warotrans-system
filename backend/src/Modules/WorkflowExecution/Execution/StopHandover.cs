@@ -65,7 +65,15 @@ internal sealed record StopHandover(
             containers.Add(new StopHandoverContainer(task, step, containerId));
         }
 
-        if (containers.Count == 0) return null;
+        if (containers.Count == 0 || containers.Select(item => item.ContainerId).Distinct().Count() != containers.Count)
+            return null;
+
+        // A group can complete only a continuous run of handover steps, without skipping another operation.
+        var pending = ordered.Where(row => row.Step.Id != move.Id
+            && row.Step.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
+        if (!pending.Take(containers.Count).Select(row => row.Step.Id).SequenceEqual(containers.Select(item => item.Step.Id)))
+            return null;
+
         var isCurrentHandover = current.Step.Status == JobStepStatus.WAITING
             && containers.Any(item => item.Step.Id == current.Step.Id);
         var ready = move.Status == JobStepStatus.COMPLETED && isCurrentHandover

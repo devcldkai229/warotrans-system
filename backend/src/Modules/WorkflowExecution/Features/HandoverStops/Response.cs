@@ -1,8 +1,11 @@
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.WorkflowExecution.Execution;
 
 namespace WaroTrans.WorkflowExecution.Features.HandoverStops;
 
 public sealed record HandoverStopVersionRequest(Guid MoveId, int Version);
+
+public sealed record ConfirmHandoverStopRequest(Guid MoveId, int Version, IReadOnlyList<HandoverStopScan> Scans);
 
 public sealed record HandoverStopContainerResponse(Guid ContainerId, string? Barcode);
 

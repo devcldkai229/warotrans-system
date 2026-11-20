@@ -165,6 +165,12 @@ Only the operator recorded on the pause or an Admin may resume an operator-pause
 
 `POST /api/workflow-execution/jobs/{jobId}/handover-stops/{id}/claim`, `/begin` and `/release` take `moveId` and `version` from the latest offer. A changed move or version returns `handover_stop_changed`. A claim before robot arrival has no begin deadline. Once the robot is ready, the deadline starts from the later of readiness and claim. Starting the handover preserves its owner until completion. Apply WorkflowExecution migration `20261120083644_RecordHandoverStopClaims` for the queue and claim state.
 
+`POST /api/workflow-execution/jobs/{jobId}/handover-stops/{id}/confirm` takes `{ moveId, version, scans: [{ containerId, barcode }] }` and returns the updated Job detail. The owner can confirm after the robot is ready and the handover has begun, when the offer's `CONFIRM` action is available. Send one valid scan for every container in the offer. A missing or wrong scan leaves the entire stop unchanged. Repeating the confirmed move and version as the same owner returns the Job detail without another custody update. A claimed stop requires group confirmation and legacy per-step confirmation returns `handover_stop_confirmation_required`. Apply WorkflowExecution migration `20261120085006_RecordHandoverStopConfirmation`.
+
+`POST /api/operations/issues` accepts `problemCode` for a `CONTAINER` issue with the Job ID and expected container ID. Supported codes are `WRONG_CONTAINER`, `MISSING_CONTAINER`, `BARCODE_UNREADABLE`, `CONTAINER_DAMAGED` and `QUANTITY_MISMATCH`. If supplied, `jobStepId` must belong to that container on the Job. An open wrong or missing container issue disables the stop's `CONFIRM` action and returns `handover_issue_blocking` on confirmation, including the legacy robot step path where applicable.
+
+Staff who reported a classified handover issue can call `POST /api/operations/issues/{id}/resolve-handover` with `{ expectedVersion, scannedBarcode, resolution }`. The server verifies the expected container's barcode and records the actor and scan. The Issue response includes `problemCode` and actor-specific `allowedTransitions`. Admin and Technician use their scoped transition route and supply `scannedBarcode` when resolving a wrong or missing container issue. Resolution does not advance the Job.
+
 ## Non-goals (this foundation)
 
 Robot selection, JobAssignment, MQTT, Job execution loop, CreateTransportRequest HTTP endpoint itself.

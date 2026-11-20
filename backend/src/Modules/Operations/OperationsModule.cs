@@ -61,6 +61,7 @@ public static class OperationsModule
         services.AddScoped<IIssueReporter>(sp => sp.GetRequiredService<IssueService>());
         services.AddScoped<IValidator<CreateIssueRequest>, CreateIssueValidator>();
         services.AddScoped<IValidator<TransitionIssueRequest>, TransitionIssueValidator>();
+        services.AddScoped<IValidator<ResolveOwnHandoverIssueRequest>, ResolveOwnHandoverIssueValidator>();
         services.AddScoped<IValidator<AddEvidenceRequest>, AddEvidenceValidator>();
 
         return services;

@@ -19,6 +19,13 @@ public static class HandoverStopEndpoints
         MapChange("begin", HandoverStopAction.Begin);
         MapChange("release", HandoverStopAction.Release);
 
+        group.MapPost("/jobs/{jobId:guid}/handover-stops/{id:guid}/confirm", async (
+                Guid jobId, Guid id, ConfirmHandoverStopRequest request, HandoverStopsHandler handler, CancellationToken cancellationToken) =>
+                Results.Ok(await handler.ConfirmAsync(jobId, id, request, cancellationToken)))
+            .RequirePermission(Permissions.JobOperate)
+            .Audited("job.handover_stop_confirm", "JOB_TASK", "id")
+            .WithName("ConfirmHandoverStop");
+
         void MapChange(string path, HandoverStopAction action)
         {
             group.MapPost($"/jobs/{{jobId:guid}}/handover-stops/{{id:guid}}/{path}", async (

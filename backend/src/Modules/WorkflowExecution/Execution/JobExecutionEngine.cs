@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -40,7 +41,7 @@ namespace WaroTrans.WorkflowExecution.Execution;
 /// After a PICKUP/DROPOFF WAITING step is committed, the engine arms the assigned robot via
 /// <see cref="IFleetModule.RequestHumanInteractionAsync"/>.
 /// </summary>
-public sealed class JobExecutionEngine(
+public sealed partial class JobExecutionEngine(
     WorkflowExecutionDbContext db,
     IFleetModule fleet,
     INavigationModule navigation,
@@ -58,7 +59,8 @@ public sealed class JobExecutionEngine(
     IIssueReporter? issueReporter = null,
     IWarehouseModule? warehouse = null,
     IOptions<HumanTaskOptions>? humanTasks = null,
-    IOptions<RecoveryOptions>? recoveryOptions = null)
+    IOptions<RecoveryOptions>? recoveryOptions = null,
+    TimeProvider? clock = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -518,13 +520,9 @@ public sealed class JobExecutionEngine(
         HumanConfirmationSource source,
         CancellationToken cancellationToken = default)
     {
-        var stepRef = await db.JobSteps.AsNoTracking()
-            .Where(s => s.Id == jobStepId)
-            .Select(s => new { s.JobTask.JobId })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException($"JobStep '{jobStepId}' was not found.", "job_step_not_found");
-
-        var job = await LoadJobAsync(stepRef.JobId, cancellationToken);
+        var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var job = await LoadJobAsync(jobId, cancellationToken);
         var (task, step) = OrderedSteps(job).First(x => x.Step.Id == jobStepId);
         var workflowStep = await db.WorkflowSteps.AsNoTracking().SingleAsync(s => s.Id == step.WorkflowStepId, cancellationToken);
         var operation = workflowStep.Config.OperationCode;
@@ -554,6 +552,7 @@ public sealed class JobExecutionEngine(
         }
 
         var now = DateTimeOffset.UtcNow;
+        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
         EnsureNotClaimedByAnother(step, source.UserId, now);
         if (source.UserId is { } confirmer && step.ClaimedBy != confirmer)
         {
@@ -582,32 +581,15 @@ public sealed class JobExecutionEngine(
                     "handover_container_mismatch");
             }
 
+            await EnsureNoBlockingHandoverIssuesAsync(job.Id, [expected], cancellationToken);
             await EnsureScannedBarcodeMatchesAsync(source.ScannedBarcode, expected, cancellationToken);
             if (type == HandoverType.PICKUP)
             {
                 await EnsureRobotHasRoomAsync(job, cancellationToken);
             }
 
-            db.HandoverConfirmations.Add(new HandoverConfirmation
-            {
-                Id = Guid.NewGuid(),
-                JobStepId = step.Id,
-                ContainerId = expected,
-                ConfirmedBy = source.UserId,
-                ConfirmationSource = source.Channel,
-                ConfirmedByRobotId = source.RobotId,
-                SourceMessageId = source.MessageId,
-                HandoverType = type,
-                ConfirmedAt = now,
-                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
-            });
-
             var jobContainer = job.JobContainers.First(jc => jc.ContainerId == expected);
-            SetContainerStatus(
-                job,
-                jobContainer,
-                type == HandoverType.PICKUP ? JobContainerStatus.ONBOARD : JobContainerStatus.DELIVERED,
-                now);
+            RecordHandover(job, step, jobContainer, type, source, now);
         }
 
         // WFX-05: REPORT_ISSUE has a real side effect. The issue is opened before the step completes; if that fails the
@@ -638,6 +620,41 @@ public sealed class JobExecutionEngine(
                 cancellationToken);
         }
 
+        CompleteHumanStep(job, task, step, workflowStep, source, now, issueId, inspectionResult);
+        await SaveAndPublishAsync(cancellationToken, transaction);
+
+        await AdvanceAsync(job.Id, cancellationToken);
+        return step;
+    }
+
+    private void RecordHandover(
+        Job job, JobStep step, JobContainer container, HandoverType type, HumanConfirmationSource source, DateTimeOffset now)
+    {
+        db.HandoverConfirmations.Add(new HandoverConfirmation
+        {
+            Id = Guid.NewGuid(),
+            JobStepId = step.Id,
+            ContainerId = container.ContainerId,
+            ConfirmedBy = source.UserId,
+            ConfirmationSource = source.Channel,
+            ConfirmedByRobotId = source.RobotId,
+            SourceMessageId = source.MessageId,
+            HandoverType = type,
+            ConfirmedAt = now,
+            Note = string.IsNullOrWhiteSpace(source.Note) ? null : source.Note.Trim(),
+            Evidence = string.IsNullOrWhiteSpace(source.ScannedBarcode) ? null : new()
+            {
+                ["scannedBarcode"] = JsonSerializer.SerializeToElement(source.ScannedBarcode.Trim())
+            }
+        });
+
+        SetContainerStatus(job, container, type == HandoverType.PICKUP ? JobContainerStatus.ONBOARD : JobContainerStatus.DELIVERED, now);
+    }
+
+    private void CompleteHumanStep(
+        Job job, JobTask task, JobStep step, WorkflowStep workflowStep, HumanConfirmationSource source,
+        DateTimeOffset now, Guid? issueId = null, string? inspectionResult = null)
+    {
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
@@ -652,17 +669,13 @@ public sealed class JobExecutionEngine(
                 ? JsonSerializer.SerializeToElement(rid)
                 : JsonSerializer.SerializeToElement((object?)null),
             ["confirmedAt"] = JsonSerializer.SerializeToElement(now),
-            ["note"] = JsonSerializer.SerializeToElement(note ?? string.Empty)
+            ["note"] = JsonSerializer.SerializeToElement(source.Note ?? string.Empty)
         };
         // INSPECTION_CONFIRM declares the output inspectionResult (PASSED / FAILED) in the step registry.
         if (inspectionResult is not null)
             step.OutputValues["inspectionResult"] = JsonSerializer.SerializeToElement(inspectionResult);
         SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.COMPLETED, now);
         CompleteTaskIfDone(task);
-        await SaveAndPublishAsync(cancellationToken);
-
-        await AdvanceAsync(job.Id, cancellationToken);
-        return step;
     }
 
     // ------------------------------------------------------------------ recovery (WFX-04, FL-06)
@@ -1159,13 +1172,15 @@ public sealed class JobExecutionEngine(
         }
     }
 
-    private async Task<(Job Job, JobStep Step)> LoadWaitingHumanStepAsync(Guid jobStepId, CancellationToken cancellationToken)
-    {
-        var jobId = await db.JobSteps.AsNoTracking()
+    private async Task<Guid> FindStepJobIdAsync(Guid jobStepId, CancellationToken cancellationToken) =>
+        await db.JobSteps.AsNoTracking()
             .Where(s => s.Id == jobStepId)
             .Select(s => (Guid?)s.JobTask.JobId)
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException($"JobStep '{jobStepId}' was not found.", "job_step_not_found");
+
+    private async Task<(Job Job, JobStep Step)> LoadWaitingHumanStepAsync(Guid jobId, Guid jobStepId, CancellationToken cancellationToken)
+    {
         var job = await LoadJobAsync(jobId, cancellationToken);
         var step = OrderedSteps(job).First(x => x.Step.Id == jobStepId).Step;
         if (job.Status != JobStatus.RUNNING)
@@ -1186,17 +1201,22 @@ public sealed class JobExecutionEngine(
     /// <summary>Takes a free or expired step, or extends one's own claim. Two people at once: one wins, the other gets 409.</summary>
     public async Task<JobStep> ClaimHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
     {
-        var (_, step) = await LoadWaitingHumanStepAsync(jobStepId, cancellationToken);
+        var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
+        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
         EnsureNotClaimedByAnother(step, accountId, now);
         SetClaim(step, accountId, now);
-        await SaveAndPublishAsync(cancellationToken);
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return step;
     }
 
     public async Task<JobStep> ReleaseHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
     {
-        var (job, step) = await LoadWaitingHumanStepAsync(jobStepId, cancellationToken);
+        var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
         if (step.ClaimedBy != accountId || !ClaimIsLive(step, DateTimeOffset.UtcNow))
         {
             throw new ConflictException("This step is not claimed by you.", "human_task_not_yours");
@@ -1204,16 +1224,20 @@ public sealed class JobExecutionEngine(
 
         ClearClaim(step);
         await OfferAgainAsync(job, step, accountId, cancellationToken);
-        await SaveAndPublishAsync(cancellationToken);
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return step;
     }
 
     /// <summary>An Admin takes over from someone who does not answer. The endpoint checks the permission and records the reason.</summary>
     public async Task<JobStep> TakeOverHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
     {
-        var (_, step) = await LoadWaitingHumanStepAsync(jobStepId, cancellationToken);
-        SetClaim(step, accountId, DateTimeOffset.UtcNow);
-        await SaveAndPublishAsync(cancellationToken);
+        var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        SetClaim(step, accountId, now);
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return step;
     }
 
@@ -2947,11 +2971,17 @@ public sealed class JobExecutionEngine(
         _pendingEvents.Add(new JobContainerStatusChanged(job.Id, container.TransportRequestId, container.ContainerId, status.ToString()));
     }
 
-    private async Task SaveAndPublishAsync(CancellationToken cancellationToken)
+    private async Task SaveAndPublishAsync(CancellationToken cancellationToken, IDbContextTransaction? transaction = null)
     {
         try
         {
             await SaveWithAssignmentsAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                // Finish the durable transition and publish its events even if the caller leaves after the write.
+                cancellationToken = CancellationToken.None;
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException
         {
@@ -2966,6 +2996,8 @@ public sealed class JobExecutionEngine(
             _pendingEvents.Clear();
             if (ex.Entries.Any(entry => entry.Entity is Job))
                 throw new ConflictException("This Job's operator pause has changed. Refresh it and try again.", "job_operator_pause_changed");
+            if (ex.Entries.Any(entry => entry.Entity is JobTask))
+                throw new ConflictException("The handover stop changed. Refresh the queue.", "handover_stop_changed");
             throw new ConflictException("Someone else is handling this step.", HumanTaskClaimedCode);
         }
 
@@ -3232,7 +3264,7 @@ public sealed class JobExecutionEngine(
     /// A robot does not count its load, so a pickup that would put more on it than it carries is refused here
     /// (<see cref="WaroTrans.BuildingBlocks.RobotLoad"/>). A robot runs one Job at a time, so its load is the Job's ONBOARD.
     /// </summary>
-    private async Task EnsureRobotHasRoomAsync(Job job, CancellationToken cancellationToken)
+    private async Task EnsureRobotHasRoomAsync(Job job, CancellationToken cancellationToken, int pickups = 1)
     {
         int? own = null;
         if (AssignedRobot(job) is Guid robotId)
@@ -3242,10 +3274,10 @@ public sealed class JobExecutionEngine(
 
         var most = WaroTrans.BuildingBlocks.RobotLoad.EffectiveMaxContainers(own);
         var onboard = job.JobContainers.Count(c => c.Status == JobContainerStatus.ONBOARD);
-        if (onboard + 1 > most)
+        if (onboard + pickups > most)
         {
             throw new ConflictException(
-                $"The robot of Job {job.JobNo} already carries {onboard} container(s), its limit is {most}.",
+                $"The robot of Job {job.JobNo} carries {onboard} container(s) and cannot take {pickups} more; its limit is {most}.",
                 "robot_capacity_full");
         }
     }

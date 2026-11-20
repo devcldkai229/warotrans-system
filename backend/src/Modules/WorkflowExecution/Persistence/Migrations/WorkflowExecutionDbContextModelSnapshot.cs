@@ -562,6 +562,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("handover_claimed_by");
 
+                    b.Property<DateTimeOffset?>("HandoverConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_confirmed_at");
+
                     b.Property<int>("HandoverVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("integer")

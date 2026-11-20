@@ -34,6 +34,7 @@ public sealed class IssueService(
     IRobotAccessScope robotAccessScope,
     INotificationService notifications,
     IAuditTrail audit,
+    IHandoverIssueVerifier handoverVerifier,
     TimeProvider clock) : IIssueReporter
 {
     public const int MaxTake = 100;
@@ -62,11 +63,17 @@ public sealed class IssueService(
         issue.JobStepId = request.JobStepId;
         issue.StorageLocationId = request.StorageLocationId;
         issue.RobotId = request.RobotId;
+        issue.ProblemCode = request.ProblemCode;
         issue.Evidence = (request.Evidence ?? []).Select(e => ToEvidence(e, me, now)).ToList();
 
-        await mongo.IssueReports.InsertOneAsync(issue, cancellationToken: cancellationToken);
+        await using (var subjectLock = issue.ProblemCode is null
+            ? null
+            : await handoverVerifier.LockSubjectAsync(issue.JobId!.Value, issue.ContainerId!.Value, issue.JobStepId, cancellationToken))
+        {
+            await mongo.IssueReports.InsertOneAsync(issue, cancellationToken: cancellationToken);
+        }
         await AfterCreatedAsync(issue, cancellationToken);
-        return IssueDto.From(issue);
+        return Project(issue);
     }
 
     /// <summary>WFX-05: a HUMAN REPORT_ISSUE step. Idempotent on the step, so a retried confirmation reuses the issue.</summary>
@@ -171,11 +178,24 @@ public sealed class IssueService(
             .Skip(Math.Max(0, query.Skip))
             .Limit(Math.Clamp(query.Take, 1, MaxTake))
             .ToListAsync(cancellationToken);
-        return new ListIssuesResponse(total, items.Select(IssueDto.From).ToList());
+        return new ListIssuesResponse(total, items.Select(Project).ToList());
     }
 
     public async Task<IssueDto> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        IssueDto.From(await LoadVisibleAsync(id, cancellationToken));
+        Project(await LoadVisibleAsync(id, cancellationToken));
+
+    public async Task<bool> HasBlockingHandoverIssueAsync(
+        Guid jobId, IReadOnlyCollection<Guid> containerIds, CancellationToken cancellationToken = default)
+    {
+        if (containerIds.Count == 0) return false;
+
+        var f = Builders<IssueReport>.Filter;
+        var filter = f.Eq(issue => issue.JobId, jobId)
+            & f.In(issue => issue.ContainerId, containerIds.Select(id => (Guid?)id))
+            & f.In(issue => issue.ProblemCode, HandoverProblemCodes.Blocking)
+            & f.In(issue => issue.Status, new[] { IssueStatus.OPEN, IssueStatus.ACKNOWLEDGED, IssueStatus.IN_PROGRESS });
+        return await mongo.IssueReports.Find(filter).Project(issue => issue.Id).AnyAsync(cancellationToken);
+    }
 
     // ------------------------------------------------------------------ change
 
@@ -214,13 +234,46 @@ public sealed class IssueService(
                 cancellationToken);
         }
 
-        return IssueDto.From(updated);
+        return Project(updated);
     }
 
     public async Task<IssueDto> TransitionAsync(Guid id, TransitionIssueRequest request, CancellationToken cancellationToken)
     {
         var issue = await LoadVisibleAsync(id, cancellationToken);
         var to = Enum.Parse<IssueStatus>(request.Status);
+        if (HandoverProblemCodes.Blocking.Contains(issue.ProblemCode))
+        {
+            if (to == IssueStatus.CLOSED && issue.Status != IssueStatus.RESOLVED)
+                throw new ConflictException("Verify the expected container before closing this issue.", "issue_handover_verification_required");
+            if (to == IssueStatus.RESOLVED)
+                await VerifyHandoverBarcodeAsync(issue, request.ScannedBarcode, cancellationToken);
+        }
+        return await TransitionCoreAsync(issue, to, request.ExpectedVersion, request.Resolution, request.ScannedBarcode, cancellationToken);
+    }
+
+    public async Task<IssueDto> ResolveOwnHandoverAsync(Guid id, ResolveOwnHandoverIssueRequest request, CancellationToken cancellationToken)
+    {
+        var issue = await LoadVisibleAsync(id, cancellationToken);
+        if (!CanResolveOwnHandover(issue))
+            throw new AppException("Only the reporting Staff member can resolve this handover issue.", 403, "issue_own_handover_required");
+
+        await using var subjectLock = await handoverVerifier.LockSubjectAsync(
+            issue.JobId!.Value, issue.ContainerId!.Value, issue.JobStepId, cancellationToken);
+        await VerifyHandoverBarcodeAsync(issue, request.ScannedBarcode, cancellationToken);
+        return await TransitionCoreAsync(issue, IssueStatus.RESOLVED, request.ExpectedVersion, request.Resolution,
+            request.ScannedBarcode, cancellationToken);
+    }
+
+    private async Task VerifyHandoverBarcodeAsync(IssueReport issue, string? barcode, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(barcode) || issue.ContainerId is not { } container
+            || !await handoverVerifier.BarcodeMatchesAsync(container, barcode, cancellationToken))
+            throw new DomainValidationException("Scan the expected container to verify the correction.", "issue_handover_barcode_mismatch");
+    }
+
+    private async Task<IssueDto> TransitionCoreAsync(
+        IssueReport issue, IssueStatus to, int expectedVersion, string? resolution, string? scannedBarcode, CancellationToken cancellationToken)
+    {
         if (!IssueLifecycle.CanMove(issue.Status, to))
         {
             throw new ConflictException(
@@ -231,23 +284,27 @@ public sealed class IssueService(
         var now = clock.GetUtcNow();
         var update = Builders<IssueReport>.Update.Set(i => i.Status, to);
         update = to == IssueStatus.RESOLVED
-            ? update.Set(i => i.ResolvedAt, now).Set(i => i.ResolvedBy, currentUser.AccountId).Set(i => i.Resolution, request.Resolution!.Trim())
+            ? update.Set(i => i.ResolvedAt, now).Set(i => i.ResolvedBy, currentUser.AccountId).Set(i => i.Resolution, resolution!.Trim())
             : to == IssueStatus.IN_PROGRESS && issue.Status == IssueStatus.RESOLVED
                 // Reopened: the earlier resolution no longer holds.
                 ? update.Set(i => i.ResolvedAt, null).Set(i => i.ResolvedBy, null)
                 : update;
 
-        var updated = await SaveAsync(issue, request.ExpectedVersion, update, cancellationToken);
+        if (to == IssueStatus.RESOLVED && !string.IsNullOrWhiteSpace(scannedBarcode) && issue.ProblemCode is not null)
+            update = update.Push(i => i.Evidence, ToEvidence(new EvidenceInput("NOTE", null, null,
+                $"Verified container barcode: {scannedBarcode.Trim()}"), currentUser.AccountId, now));
+
+        var updated = await SaveAsync(issue, expectedVersion, update, cancellationToken);
 
         await audit.RecordAsync(
-            new AuditEntry("issue.status_changed", Entity, id,
+            new AuditEntry("issue.status_changed", Entity, issue.Id,
                 Before: new Dictionary<string, object?> { ["status"] = issue.Status.ToString() },
                 After: new Dictionary<string, object?> { ["status"] = to.ToString(), ["resolution"] = updated.Resolution }),
             cancellationToken);
 
         if (to is IssueStatus.RESOLVED or IssueStatus.CLOSED)
         {
-            await notifications.ResolveAsync($"issue:{id}:open", cancellationToken);
+            await notifications.ResolveAsync($"issue:{issue.Id}:open", cancellationToken);
             if (to == IssueStatus.RESOLVED && issue.ReportedBy != Guid.Empty && issue.ReportedBy != currentUser.AccountId)
             {
                 await notifications.PublishAsync(
@@ -257,13 +314,13 @@ public sealed class IssueService(
                         $"Issue {updated.Code} you reported was resolved",
                         Shorten(updated.Resolution ?? string.Empty),
                         Entity,
-                        id,
+                        issue.Id,
                         Audience: NotificationAudience.Person(issue.ReportedBy)),
                     cancellationToken);
             }
         }
 
-        return IssueDto.From(updated);
+        return Project(updated);
     }
 
     public async Task<IssueDto> AddEvidenceAsync(Guid id, AddEvidenceRequest request, CancellationToken cancellationToken)
@@ -290,10 +347,25 @@ public sealed class IssueService(
             new AuditEntry("issue.evidence_added", Entity, id,
                 After: new Dictionary<string, object?> { ["kind"] = request.Evidence.Kind, ["uri"] = request.Evidence.Uri }),
             cancellationToken);
-        return IssueDto.From(updated);
+        return Project(updated);
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private IssueDto Project(IssueReport issue)
+    {
+        var allowed = IssueLifecycle.NextOf(issue.Status);
+        var user = httpContextAccessor.HttpContext?.User ?? new ClaimsPrincipal();
+        if (!RolePermissionMatrix.UserHas(user, Permissions.IssueManage))
+            allowed = CanResolveOwnHandover(issue) ? allowed.Where(status => status == IssueStatus.RESOLVED).ToList() : [];
+        else if (HandoverProblemCodes.Blocking.Contains(issue.ProblemCode) && issue.Status != IssueStatus.RESOLVED)
+            allowed = allowed.Where(status => status != IssueStatus.CLOSED).ToList();
+        return IssueDto.From(issue, allowed.Select(status => status.ToString()).ToList());
+    }
+
+    private bool CanResolveOwnHandover(IssueReport issue) =>
+        currentUser.Role == AppRoles.Staff && currentUser.AccountId == issue.ReportedBy
+        && issue.JobId is not null && issue.ContainerId is not null && HandoverProblemCodes.All.Contains(issue.ProblemCode);
 
     /// <summary>Applies <paramref name="update"/> only if nobody changed the issue since <paramref name="expectedVersion"/>.</summary>
     private async Task<IssueReport> SaveAsync(
@@ -377,6 +449,7 @@ public sealed class IssueService(
     {
         ["code"] = i.Code,
         ["type"] = i.IssueType.ToString(),
+        ["problemCode"] = i.ProblemCode,
         ["severity"] = i.Severity.ToString(),
         ["status"] = i.Status.ToString(),
         ["jobId"] = i.JobId,

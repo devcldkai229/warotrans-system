@@ -6,6 +6,7 @@ using WaroTrans.Warehouse.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
+using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
 using WaroTrans.WorkflowExecution.Services;
 
@@ -20,7 +21,10 @@ public sealed class HandoverStopsHandler(
     IAccountNameLookup accountNames,
     IWarehouseModule warehouse,
     TimeProvider clock,
-    IOptions<HumanTaskOptions> options)
+    IOptions<HumanTaskOptions> options,
+    JobExecutionEngine engine,
+    JobQueries queries,
+    IIssueReporter issues)
 {
     private HumanTaskOptions Settings => options.Value;
 
@@ -44,11 +48,7 @@ public sealed class HandoverStopsHandler(
     {
         var actor = Actor();
         await staffWarehouse.EnsureJobAccessAsync(jobId, user, cancellationToken);
-        await using var transaction = db.Database.IsNpgsql()
-            ? await db.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        if (transaction is not null)
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM execution.jobs WHERE id = {jobId} FOR UPDATE", cancellationToken);
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var job = await JobsWithSteps().FirstOrDefaultAsync(job => job.Id == jobId, cancellationToken)
             ?? throw new NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
         var operations = await LoadHumanOperationsAsync([job.WorkflowId], cancellationToken);
@@ -108,6 +108,15 @@ public sealed class HandoverStopsHandler(
         return (await ProjectAsync([stop], actor, now, cancellationToken))[0];
     }
 
+    public async Task<JobDetailDto> ConfirmAsync(
+        Guid jobId, Guid stopId, ConfirmHandoverStopRequest request, CancellationToken cancellationToken)
+    {
+        var actor = Actor();
+        await staffWarehouse.EnsureJobAccessAsync(jobId, user, cancellationToken);
+        await engine.ConfirmHandoverStopAsync(jobId, stopId, request.MoveId, request.Version, request.Scans, actor, cancellationToken);
+        return await queries.GetDetailAsync(jobId, cancellationToken);
+    }
+
     private Guid Actor() => user.AccountId
         ?? throw new AppException("Sign in to operate a handover.", 401, "unauthenticated");
 
@@ -136,10 +145,18 @@ public sealed class HandoverStopsHandler(
         var barcodes = (await warehouse.GetContainersAsync(ids, cancellationToken)).ToDictionary(item => item.Id, item => item.Barcode);
         var owners = stops.Select(stop => stop.OwnerAt(now, Settings)).OfType<Guid>().Distinct().ToArray();
         var names = await accountNames.GetNamesAsync(owners, cancellationToken);
-        return stops.Select(stop =>
+        var result = new List<HandoverStopResponse>(stops.Count);
+        foreach (var stop in stops)
         {
             var owner = stop.OwnerAt(now, Settings);
-            return new HandoverStopResponse(
+            var confirmDenial = owner != actor ? "handover_stop_claim_required"
+                : stop.ReadyAt is not { } arrived || arrived > now ? "handover_robot_not_ready"
+                : stop.StopTask.HandoverBeganAt is null ? "handover_stop_begin_required" : null;
+            if (confirmDenial is null && await issues.HasBlockingHandoverIssueAsync(stop.Job.Id,
+                    stop.Containers.Select(item => item.ContainerId).ToArray(), cancellationToken))
+                confirmDenial = "handover_issue_blocking";
+
+            result.Add(new HandoverStopResponse(
                 stop.StopTask.Id, stop.Job.Id, stop.Job.JobNo, stop.Job.MapVersionId, stop.EndpointId, stop.MoveId, stop.Action,
                 stop.Containers.Select(item => new HandoverStopContainerResponse(item.ContainerId, barcodes.GetValueOrDefault(item.ContainerId))).ToList(),
                 stop.OfferOpensAt(Settings), stop.ReadyAt, owner, owner is { } holder ? names.GetValueOrDefault(holder) : null,
@@ -150,8 +167,10 @@ public sealed class HandoverStopsHandler(
                         : stop.ReadyAt is not { } readyAt || readyAt > now ? "handover_robot_not_ready"
                         : stop.StopTask.HandoverBeganAt is null ? null : "handover_already_began", permitted: true),
                     ActionAvailability.Of("RELEASE", owner != actor ? "handover_stop_claim_required"
-                        : stop.StopTask.HandoverBeganAt is null ? null : "handover_already_began", permitted: true)
-                ]);
-        }).ToList();
+                        : stop.StopTask.HandoverBeganAt is null ? null : "handover_already_began", permitted: true),
+                    ActionAvailability.Of("CONFIRM", confirmDenial, permitted: true)
+                ]));
+        }
+        return result;
     }
 }

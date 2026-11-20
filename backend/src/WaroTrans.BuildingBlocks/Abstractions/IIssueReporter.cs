@@ -35,4 +35,16 @@ public interface IIssueReporter
 
     /// <returns>The issue id; the existing one when this source key already raised an issue.</returns>
     Task<Guid> ReportAsync(SystemIssueDraft draft, CancellationToken cancellationToken = default);
+
+    Task<bool> HasBlockingHandoverIssueAsync(Guid jobId, IReadOnlyCollection<Guid> containerIds, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+}
+
+/// <summary>Validates a handover issue against its Job and its real Warehouse barcode.</summary>
+public interface IHandoverIssueVerifier
+{
+    /// <summary>Holds the Job lock until the caller has stored the issue, so confirmation and reporting are serialized.</summary>
+    Task<IAsyncDisposable?> LockSubjectAsync(Guid jobId, Guid containerId, Guid? jobStepId, CancellationToken cancellationToken);
+
+    Task<bool> BarcodeMatchesAsync(Guid containerId, string barcode, CancellationToken cancellationToken);
 }

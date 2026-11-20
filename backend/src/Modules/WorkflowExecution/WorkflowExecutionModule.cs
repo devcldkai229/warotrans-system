@@ -71,6 +71,7 @@ public static class WorkflowExecutionModule
         services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
         services.AddScoped<Features.HumanTasks.HumanTaskQueries>();
         services.AddScoped<Features.HandoverStops.HandoverStopsHandler>();
+        services.AddScoped<IHandoverIssueVerifier, HandoverIssueVerifier>();
         services.Configure<Execution.RecoveryOptions>(configuration.GetSection(Execution.RecoveryOptions.SectionName));
         services.AddHostedService<Services.RobotOfflineJobHostedService>();
         services.AddScoped<WaroTrans.Fleet.Contracts.IRobotWorkQuery, Services.RobotWorkQuery>();

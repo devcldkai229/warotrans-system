@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
@@ -14,6 +16,9 @@ using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Persistence;
 using WaroTrans.WorkflowExecution.Services;
+using Product = WaroTrans.Warehouse.Entities.Product;
+using ProductCategory = WaroTrans.Warehouse.Entities.ProductCategory;
+using WarehouseContainer = WaroTrans.Warehouse.Entities.Container;
 using WarehouseEntity = WaroTrans.Warehouse.Entities.Warehouse;
 
 namespace WaroTrans.IntegrationTests.WorkflowExecution.HandoverStops;
@@ -100,9 +105,145 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         }
     }
 
+    [Fact]
+    public async Task Confirm_all_verifies_the_entire_stop_and_records_each_container_once()
+    {
+        var owner = await Factory.CreateAccountAsync("handover-owner", AccountRole.STAFF);
+        var peer = await Factory.CreateAccountAsync("handover-peer", AccountRole.STAFF);
+        var client = CreateAnonymousClient();
+        var ownerToken = (await client.LoginAsync(owner.Username)).AccessToken;
+        var peerToken = (await client.LoginAsync(peer.Username)).AccessToken;
+        var (job, stop, move, firstStep, moveId) = await SeedAsync(owner.Id);
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        var firstTask = (await db.JobTasks.FindAsync(firstStep.JobTaskId))!;
+        var firstId = firstTask.ContextValues["containerId"].GetGuid();
+        var secondId = Guid.NewGuid();
+        var endpoint = move.TargetEndpointId!.Value;
+        firstTask.ContextValues = new(firstTask.ContextValues) { ["source.endpointId"] = JsonSerializer.SerializeToElement(endpoint) };
+        var secondTask = new JobTask
+        {
+            Id = Guid.NewGuid(), JobId = job.Id, WorkflowTaskId = firstTask.WorkflowTaskId, SequenceNo = 3,
+            Status = JobTaskStatus.PENDING,
+            ContextValues = new(firstTask.ContextValues) { ["containerId"] = JsonSerializer.SerializeToElement(secondId) }
+        };
+        db.Add(secondTask);
+        db.Add(new JobStep
+        {
+            Id = Guid.NewGuid(), JobTaskId = secondTask.Id, WorkflowStepId = firstStep.WorkflowStepId, SequenceNo = 1,
+            StepType = StepType.HUMAN_INTERACTION, Status = JobStepStatus.PENDING
+        });
+
+        var now = DateTimeOffset.UtcNow;
+        var storedMove = (await db.JobSteps.FindAsync(move.Id))!;
+        storedMove.Status = JobStepStatus.COMPLETED;
+        storedMove.AcceptedMoveCommandId = moveId;
+        storedMove.MoveAcceptedAt = now.AddSeconds(-20);
+        storedMove.CompletedAt = now;
+        var storedStep = (await db.JobSteps.FindAsync(firstStep.Id))!;
+        storedStep.Status = JobStepStatus.WAITING;
+        storedStep.StartedAt = now;
+        storedStep.ResolvedInputs = new()
+        {
+            ["containerId"] = JsonSerializer.SerializeToElement(firstId),
+            ["endpointId"] = JsonSerializer.SerializeToElement(endpoint)
+        };
+        var definition = (await db.WorkflowSteps.FindAsync(firstStep.WorkflowStepId))!;
+        definition.InputBindings = new()
+        {
+            ["robotId"] = new() { SourceType = BindingSourceType.CONSTANT, ConstantValue = JsonSerializer.SerializeToElement(Guid.NewGuid()) },
+            ["containerId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "containerId" },
+            ["endpointId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "source.endpointId" }
+        };
+        var sequence = 0;
+        foreach (var id in new[] { firstId, secondId })
+        {
+            db.JobContainers.Add(new JobContainer
+            {
+                Id = Guid.NewGuid(), ContainerId = id, TransportRequestId = Guid.NewGuid(), JobId = job.Id,
+                SequenceNo = ++sequence, Status = JobContainerStatus.ASSIGNED, CreatedAt = now, UpdatedAt = now
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var category = new ProductCategory { Id = Guid.NewGuid(), Code = "HANDOVER", Name = "Handover" };
+        var product = new Product { Id = Guid.NewGuid(), CategoryId = category.Id, Sku = "HANDOVER", Name = "Handover", IsActive = true };
+        warehouse.AddRange(category, product,
+            new WarehouseContainer { Id = firstId, ProductId = product.Id, Barcode = "HANDOVER-1", CreatedBy = owner.Id },
+            new WarehouseContainer { Id = secondId, ProductId = product.Id, Barcode = "HANDOVER-2", CreatedBy = owner.Id });
+        await warehouse.SaveChangesAsync();
+
+        var path = $"/api/workflow-execution/jobs/{job.Id}/handover-stops/{stop.Id}";
+        using var claim = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/claim", ownerToken, new { moveId, version = 0 });
+        var claimed = await ReadAsync(claim);
+        using var legacy = await client.SendWithTokenAsync(HttpMethod.Post,
+            $"/api/workflow-execution/job-steps/{firstStep.Id}/confirm", peerToken, new { containerId = firstId });
+        Assert.Equal("handover_stop_confirmation_required", await legacy.ReadErrorCodeAsync());
+        using var begin = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/begin", ownerToken,
+            new { moveId, version = claimed.GetProperty("version").GetInt32() });
+        var version = (await ReadAsync(begin)).GetProperty("version").GetInt32();
+
+        var completeScans = new[] { new { containerId = firstId, barcode = "HANDOVER-1" }, new { containerId = secondId, barcode = "HANDOVER-2" } };
+        using var wrongOwner = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", peerToken,
+            new { moveId, version, scans = completeScans });
+        Assert.Equal("handover_stop_claim_required", await wrongOwner.ReadErrorCodeAsync());
+        using var partial = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", ownerToken,
+            new { moveId, version, scans = completeScans[..1] });
+        Assert.Equal("handover_scan_manifest_mismatch", await partial.ReadErrorCodeAsync());
+        using var wrongScan = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", ownerToken,
+            new { moveId, version, scans = new[] { completeScans[0], new { containerId = secondId, barcode = "HANDOVER-1" } } });
+        Assert.Equal("handover_barcode_mismatch", await wrongScan.ReadErrorCodeAsync());
+        Assert.Empty(await db.HandoverConfirmations.AsNoTracking().ToListAsync());
+
+        var confirmation = new { moveId, version, scans = completeScans };
+        const string issuesPath = "/api/operations/issues";
+        using var report = await client.SendWithTokenAsync(HttpMethod.Post, issuesPath, ownerToken, new
+        {
+            issueType = "CONTAINER", problemCode = "MISSING_CONTAINER", severity = "HIGH",
+            description = "Second piece missing", jobId = job.Id, containerId = secondId
+        });
+        Assert.Equal(HttpStatusCode.Created, report.StatusCode);
+        var issue = await ReadAsync(report);
+        var resolvePath = $"{issuesPath}/{issue.GetProperty("id").GetGuid()}/resolve-handover";
+        var issueVersion = issue.GetProperty("version").GetInt32();
+        var validResolution = new { expectedVersion = issueVersion, scannedBarcode = "HANDOVER-2", resolution = "Found the expected container" };
+        using var blocked = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", ownerToken, confirmation);
+        Assert.Equal("handover_issue_blocking", await blocked.ReadErrorCodeAsync());
+        using var resolvePeer = await client.SendWithTokenAsync(HttpMethod.Post, resolvePath, peerToken, validResolution);
+        Assert.Equal(HttpStatusCode.NotFound, resolvePeer.StatusCode);
+        using var resolveWrong = await client.SendWithTokenAsync(HttpMethod.Post, resolvePath, ownerToken,
+            new { expectedVersion = issueVersion, scannedBarcode = "HANDOVER-1", resolution = "Replaced the container" });
+        Assert.Equal("issue_handover_barcode_mismatch", await resolveWrong.ReadErrorCodeAsync());
+        using var resolve = await client.SendWithTokenAsync(HttpMethod.Post, resolvePath, ownerToken, validResolution);
+        Assert.Equal("RESOLVED", (await ReadAsync(resolve)).GetProperty("status").GetString());
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 2)
+            .Select(_ => client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", ownerToken, confirmation)));
+        try
+        {
+            var payloads = await Task.WhenAll(responses.Select(ReadAsync));
+            Assert.All(payloads, detail => Assert.Equal(job.Id, detail.GetProperty("id").GetGuid()));
+        }
+        finally
+        {
+            foreach (var response in responses) response.Dispose();
+        }
+        var confirmations = await db.HandoverConfirmations.AsNoTracking().ToListAsync();
+        Assert.Equal(2, confirmations.Count);
+        Assert.All(confirmations, record =>
+        {
+            Assert.Equal(owner.Id, record.ConfirmedBy);
+            Assert.Equal(ConfirmationSource.STAFF_APP, record.ConfirmationSource);
+            Assert.NotNull(record.Evidence);
+        });
+        Assert.All(await db.JobContainers.AsNoTracking().ToListAsync(), container => Assert.Equal(JobContainerStatus.ONBOARD, container.Status));
+    }
+
     private static async Task<JsonElement> ReadAsync(HttpResponseMessage response)
     {
-        response.EnsureSuccessStatusCode();
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
