@@ -23,6 +23,26 @@ export async function listRobots(params: { warehouseId?: string; isOnline?: bool
   const items = [...robots.values()].filter(robot => robot.isOnline === params.isOnline);
   return { items, total: items.length };
 }
+export type StopStateValue = 'NONE' | 'REQUESTED' | 'ACCEPTED' | 'STOPPED_VERIFIED' | 'REJECTED' | 'UNKNOWN';
+export interface StopStateResponse {
+  robotId: string;
+  state: StopStateValue | string;
+  motionHeld: boolean;
+  commandId: string | null;
+  mode: string | null;
+  commandStatus: string | null;
+  outcome: string | null;
+  errorCode: string | null;
+  issuedAt: string | null;
+  completedAt: string | null;
+}
+export async function getRobotStopState(robotId: string, signal?: AbortSignal): Promise<StopStateResponse> {
+  const result = await apiFetch<StopStateResponse>(`/api/fleet/robots/${encodeURIComponent(robotId)}/stop-state`, { signal });
+  if (!result || result.robotId !== robotId || typeof result.state !== 'string' || typeof result.motionHeld !== 'boolean') {
+    throw new ApiError(502, 'stop_state_invalid', 'Could not verify the robot stop state. Refresh and try again.');
+  }
+  return result;
+}
 export function getRobot(id: string) { return apiFetch<RobotDto>(`/api/fleet/robots/${id}`); }
 /**
  * Tells the robot it stands at `endpointId` of its map (an operator placed it there). 202 means the command was

@@ -526,6 +526,12 @@ export interface JobTaskResponse {
   steps: JobStepResponse[];
 }
 
+export interface JobOperatorPause {
+  pausedBy: string | null;
+  pausedAt: UtcDateTime | null;
+  reason: string | null;
+}
+
 export interface JobDetailResponse {
   id: string;
   jobNo: string;
@@ -542,6 +548,8 @@ export interface JobDetailResponse {
   failureMessage?: string | null;
   containers: JobContainerResponse[];
   tasks: JobTaskResponse[];
+  availableActions?: ActionAvailability[];
+  operatorPause?: JobOperatorPause | null;
 }
 
 export interface ReportTaskProblemBody {

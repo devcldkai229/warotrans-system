@@ -103,9 +103,9 @@ function inScope(job: AppJobItem, scope: JobScope): boolean {
 
 const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
   mine: {
-    title: 'Task Assignment Unavailable',
+    title: 'No Claimed Tasks',
     message:
-      'The current backend does not expose staff assignment. Open Fleet Queue to view and confirm waiting handovers.',
+      'Claim a waiting handover step from Fleet Queue to see it here. Turn-based pre-arrival offers are awaiting backend support.',
   },
   fleet: {
     title: 'The fleet queue is clear',

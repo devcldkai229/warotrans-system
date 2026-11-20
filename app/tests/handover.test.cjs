@@ -41,7 +41,7 @@ test('a pinned completed handover stays read only while the job waits at its nex
 
 function loadApi(apiFetch) {
   return createLoader({
-    'src/shared/api/client.ts': { apiFetch },
+    'src/shared/api/client.ts': { apiFetch, ApiError: class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }, getAccessToken: () => 'staff-token' },
     'src/shared/api/navigationApi.ts': { getMapVersionDetail: async () => ({ id: 'map', endpoints: [] }) },
     'src/shared/api/workflowApi.ts': { getWorkflow: async () => ({ id: 'workflow' }) },
     'src/shared/api/fleetApi.ts': { listRobots: async () => ({ items: [] }) },
@@ -62,11 +62,44 @@ test('confirmation posts only container and note; authenticated actor and source
 
 test('resume uses the registered job endpoint and keeps backend rejection authoritative', async () => {
   let request;
-  const api = loadApi(async (url, init) => { request = { url, body: JSON.parse(init.body) }; return rawJob(); });
+  const api = loadApi(async (url, init, token) => { request = { url, body: JSON.parse(init.body), token }; return rawJob(); });
   await api.resumeJob('job');
   assert.equal(request.url, '/api/workflow-execution/jobs/job/resume');
+  assert.equal(request.token, 'staff-token');
   assert.deepEqual(request.body, { robotId: null });
   await api.resumeJob('job', 'replacement-robot');
   assert.deepEqual(request.body, { robotId: 'replacement-robot' });
   await assert.rejects(() => loadApi(async () => { throw new Error('payload_recovery_required'); }).resumeJob('job'), /payload_recovery_required/);
+});
+
+test('pauseJob requires a trimmed reason up to 500 chars, binds caller token and reads availableActions', async () => {
+  let request;
+  const pausedJob = {
+    ...rawJob(),
+    status: 'PAUSED',
+    failureCode: 'operator_paused',
+    failureMessage: 'Pallet blocking aisle',
+    operatorPause: { pausedBy: 'staff-a', pausedAt: '2026-11-20T08:15:00Z', reason: 'Pallet blocking aisle' },
+    availableActions: [
+      { action: 'START', allowed: false, reason: 'job_not_startable' },
+      { action: 'PAUSE', allowed: false, reason: 'job_not_running' },
+      { action: 'RESUME', allowed: false, reason: 'job_pause_owner_required' },
+    ],
+  };
+  const api = loadApi(async (url, init, token) => { request = { url, init, token }; return pausedJob; });
+
+  await assert.rejects(() => api.pauseJob('job', '   '), error => error.code === 'job_pause_reason_required');
+  await assert.rejects(() => api.pauseJob('job', 'x'.repeat(501)), error => error.code === 'job_pause_reason_too_long');
+
+  const result = await api.pauseJob('job', '  Pallet blocking aisle  ');
+  assert.equal(request.url, '/api/workflow-execution/jobs/job/pause');
+  assert.equal(request.init.method, 'POST');
+  assert.equal(request.token, 'staff-token');
+  assert.deepEqual(JSON.parse(request.init.body), { reason: 'Pallet blocking aisle' });
+  assert.equal(result.operatorPause.pausedBy, 'staff-a');
+  assert.equal(api.isJobActionAllowed(result, 'RESUME', true), false);
+  assert.equal(api.getJobAction(result, 'RESUME').reason, 'job_pause_owner_required');
+  assert.equal(api.isJobActionAllowed(result, 'PAUSE', true), false);
+  assert.equal(api.isJobActionAllowed({ id: 'legacy' }, 'START', true), true);
+  assert.equal(api.isJobActionAllowed({ id: 'legacy' }, 'START', false), false);
 });

@@ -1,13 +1,33 @@
-import { apiFetch, ApiError } from './client';
+import { apiFetch, ApiError, getAccessToken } from './client';
 import { getContainer } from './warehouseApi';
 import { getMapVersionDetail } from './navigationApi';
 import { getWorkflow } from './workflowApi';
 import { listRobots } from './fleetApi';
 import { requireMobileCapability } from './capabilities';
 import type {
-  JobContainerResponse, JobDetailResponse, JobStatus, JobStepResponse, JobTaskResponse,
+  ActionAvailability, JobContainerResponse, JobDetailResponse, JobStatus, JobStepResponse, JobTaskResponse,
   HandoverConfirmationBody, HandoverConfirmationResponse, ReportTaskProblemBody,
 } from '../types/contracts';
+
+export type JobAction = 'START' | 'PAUSE' | 'RESUME' | 'CANCEL';
+
+const callerToken = () => (typeof getAccessToken === 'function' ? getAccessToken() : undefined);
+
+export function getJobAction(
+  job: Pick<JobDetailResponse, 'availableActions'> | null | undefined,
+  action: JobAction,
+): ActionAvailability | undefined {
+  return job?.availableActions?.find(item => item.action === action);
+}
+
+export function isJobActionAllowed(
+  job: Pick<JobDetailResponse, 'availableActions'> | null | undefined,
+  action: JobAction,
+  fallbackAllowed = false,
+): boolean {
+  if (!job?.availableActions) return fallbackAllowed;
+  return Boolean(getJobAction(job, action)?.allowed);
+}
 
 interface RuntimeStep extends JobStepResponse { stepKey?: string; name?: string }
 interface RuntimeTask extends JobTaskResponse {
@@ -140,11 +160,26 @@ export async function startJob(jobId: string, robotId?: string | null): Promise<
   });
   return (await hydrateJobs([response]))[0];
 }
+export async function pauseJob(jobId: string, reason: string): Promise<JobDetailResponse> {
+  requireMobileCapability('pauseJob');
+  const trimmed = reason.trim();
+  if (!trimmed) {
+    throw new ApiError(400, 'job_pause_reason_required', 'Enter a reason for pausing this Job.');
+  }
+  if (trimmed.length > 500) {
+    throw new ApiError(400, 'job_pause_reason_too_long', 'The pause reason must be 500 characters or fewer.');
+  }
+  const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/pause`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: trimmed }),
+  }, callerToken());
+  return (await hydrateJobs([response]))[0];
+}
 export async function resumeJob(jobId: string, robotId?: string | null): Promise<JobDetailResponse> {
   requireMobileCapability('resumeJob');
   const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/jobs/${jobId}/resume`, {
     method: 'POST', body: JSON.stringify({ robotId: robotId || null }),
-  });
+  }, callerToken());
   return (await hydrateJobs([response]))[0];
 }
 export async function confirmHandover(request: HandoverConfirmRequest): Promise<JobDetailResponse>;
@@ -231,7 +266,7 @@ export function reportTaskProblem(
   _taskId: string | undefined,
   body: ReportTaskProblemBody,
   jobStepId?: string,
-  context: { jobId?: string; containerId?: string } = {},
+  context: { jobId?: string; containerId?: string; robotId?: string } = {},
 ) {
   requireMobileCapability('reportIssue');
   const mapped = ISSUE_MAPPING[body.reason] ?? { issueType: 'OTHER', severity: 'MEDIUM' };
@@ -243,8 +278,9 @@ export function reportTaskProblem(
       jobId: context.jobId ?? null,
       jobStepId: jobStepId ?? null,
       containerId: context.containerId ?? null,
+      robotId: context.robotId ?? null,
     }),
-  });
+  }, callerToken());
 }
 export function completePayloadRecoveryJob(_jobId: string, _robotCode: string): never {
   throw new ApiError(501, 'recovery_not_supported', 'Payload recovery execution is not available on this server.');

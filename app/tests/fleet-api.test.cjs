@@ -41,3 +41,33 @@ test('unfiltered reads retain the BE total and default route', async () => {
   });
   assert.deepEqual(plain(await api.listRobots()), { items: [{ id: 'first' }], total: 103 });
 });
+
+test('getRobotStopState validates identity and rejects malformed responses', async () => {
+  const controller = new AbortController();
+  const stopState = {
+    robotId: 'robot-1',
+    state: 'STOPPED_VERIFIED',
+    motionHeld: true,
+    commandId: 'cmd-1',
+    mode: 'PAUSE',
+    commandStatus: 'COMPLETED',
+    outcome: 'SUCCEEDED',
+    errorCode: null,
+    issuedAt: '2026-11-20T08:15:00Z',
+    completedAt: '2026-11-20T08:15:02Z',
+  };
+  let captured = null;
+  const api = loadFleet(async (path, init) => {
+    captured = { path, init };
+    return stopState;
+  });
+  const res = await api.getRobotStopState('robot-1', controller.signal);
+  assert.equal(captured.path, '/api/fleet/robots/robot-1/stop-state');
+  assert.equal(captured.init.signal, controller.signal);
+  assert.deepEqual(plain(res), stopState);
+
+  for (const invalid of [null, { ...stopState, robotId: 'other' }, { ...stopState, motionHeld: 'yes' }, { ...stopState, state: 123 }]) {
+    const badApi = loadFleet(async () => invalid);
+    await assert.rejects(() => badApi.getRobotStopState('robot-1'), error => error.status === 502 && error.code === 'stop_state_invalid');
+  }
+});
