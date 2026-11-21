@@ -543,7 +543,7 @@ public sealed class RobotCareService(
         }
         else
         {
-            target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken);
+            target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
                 if (endpoints.Where(IsRecoveryPoint).FirstOrDefault(e => Distance(robot, e) <= ParkedRadius(e)) is { } waiting)
@@ -551,7 +551,7 @@ public sealed class RobotCareService(
                     return new RobotDestinationResult(RobotDestinationResult.NotNeeded, waiting.Code, "already_at_wait_point");
                 }
 
-                target = await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, ParkInput, cancellationToken);
+                target = await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, cancellationToken);
             }
         }
 

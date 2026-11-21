@@ -81,7 +81,6 @@ public sealed class CreateTransportRequestHandler(
 
         var containers = await EnsureContainersAsync(details, cancellationToken);
         EnsureContainersAtSource(details, containers);
-        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, endpoints, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
 
@@ -110,6 +109,10 @@ public sealed class CreateTransportRequestHandler(
             transportRequest.WorkflowId,
             TransportRequestSnapshotMapper.ToExecutionSnapshot(transportRequest),
             cancellationToken);
+
+        // Paperwork last: a request that does not fit its workflow says so first, not "make a voucher" for a move that
+        // could never run (e.g. an INTERNAL_RELOCATION to an Outbound gate).
+        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, endpoints, cancellationToken);
 
         // Hold the reservation locks through the atomic write of Request and Details.
         dbContext.TransportRequests.Add(transportRequest);
