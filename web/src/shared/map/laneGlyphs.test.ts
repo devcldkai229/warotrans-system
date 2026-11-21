@@ -42,6 +42,12 @@ describe('laneGlyphs', () => {
     expect(right[2]).toEqual({ x: 9, y: 10 })
   })
 
+  it('arrows are small and dense: shorter than half the lane width, more than one per lane width', () => {
+    const glyphs = laneGlyphs(eastward, 2, 'ONE_WAY')
+    expect(glyphs.chevronSize).toBeLessThan(1)
+    expect(glyphs.chevrons.length).toBeGreaterThanOrEqual(5) // a 10-long, 2-wide lane
+  })
+
   it('a lane shorter than the spacing still gets one chevron in the middle', () => {
     const short = chevronsAlong(
       [

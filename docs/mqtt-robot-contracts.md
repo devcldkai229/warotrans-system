@@ -83,6 +83,7 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
   "robotCode": "RBT-001",
   "type": "NAVIGATE_TO_POSE",
   "issuedAt": "2026-10-07T05:00:00.000Z",
+  "expiresAt": "2026-10-07T05:01:00.000Z",
   "jobAssignmentId": null,
   "jobStepId": null,
   "payload": {
@@ -178,7 +179,8 @@ All additive, schema version stays 1.
   "robotCode": "RBT-001",
   "type": "CANCEL",
   "issuedAt": "2026-10-07T05:00:00.000Z",
-  "jobAssignmentId": null,
+  "expiresAt": "2026-10-07T05:00:30.000Z",
+  "jobAssignmentId": "uuid of the target's assignment",
   "jobStepId": null,
   "payload": { "targetCommandId": "uuid" }
 }
@@ -190,6 +192,13 @@ Robot accept/reject rules:
 
 - `NAVIGATE_TO_POSE`: reject if not `LOCALIZED`, or another command is already active (`BUSY`)
 - `CANCEL`: reject if `targetCommandId` is not the active command (`UNKNOWN_TARGET`)
+- `CANCEL` carrying a `jobAssignmentId` different from the running MOVE's: reject (`JOB_MISMATCH`) — a cancel never
+  stops another job's move (TRN-03)
+- `expiresAt` (optional, ISO-8601 UTC; TRN-03): `NAVIGATE_TO_POSE`, `CANCEL` and `LOCALIZE` received after it
+  (+ `command_expiry_skew_sec`, default 2 s) are rejected with `COMMAND_EXPIRED`. `STOP`, `RESUME` and the authority
+  commands never expire. The backend sets NAVIGATE = issuedAt + 60 s, CANCEL = issuedAt + 30 s. A robot without it
+  (older gateway) ignores the field. Robots need a synchronised clock (chrony); `command_expiry_skew_sec: -1` turns
+  the check off.
 - Duplicate delivery of the same `commandId`: ACK `accepted=true` with `reasonCode=ALREADY_ACCEPTED` if already accepted/running/completed for that id
 
 ### STOP / RESUME (RB-03)
@@ -253,7 +262,9 @@ Robot accept/reject rules:
 }
 ```
 
-`reasonCode` examples when `accepted=false`: `NOT_LOCALIZED`, `BUSY`, `UNKNOWN_TARGET`, `INVALID_PAYLOAD`, `NAV2_UNAVAILABLE`.  
+`reasonCode` examples when `accepted=false`: `NOT_LOCALIZED`, `BUSY`, `UNKNOWN_TARGET`, `INVALID_PAYLOAD`, `NAV2_UNAVAILABLE`,
+`COMMAND_EXPIRED`, `JOB_MISMATCH`.
+
 When `accepted=true`, `reasonCode` is usually `null` (or `ALREADY_ACCEPTED` for idempotent retry).
 
 ## CommandResult (robot → backend)
@@ -398,3 +409,39 @@ Same `bootId` with `sequence <= last` is ignored. New `bootId` resets that strea
 | `JobAssignment` lifecycle | Backend/Fleet |
 | `navigationStatus` / `localizationStatus` | Robot (via telemetry) |
 | Command accept/reject + Nav2 result | Robot (via ack/result) |
+
+## Cancelling a transport request (TRN-03)
+
+Cancel is not an E-stop and not a robot command of its own. The backend:
+
+1. records a cancellation (`transport_cancellations`, one active per request, idempotency key);
+2. cancels Jobs that carry nothing; for a Job with cargo ONBOARD it sends `STOP` (`mode: PAUSE`) and holds the Job;
+3. treats the robot as stopped only when its telemetry reports `motionHold: true` (an offline robot is never assumed
+   stopped: `WAITING_ROBOT`);
+4. lets staff either resume the Job (deliver what is on board) or unload each container by scanning it onto a shelf;
+5. finalizes when every container is delivered, never picked up, or handed over — otherwise `MANUAL_INTERVENTION`.
+
+MQTT QoS 1 may deliver a command twice or late: `commandId` dedupe, `expiresAt` and the `jobAssignmentId` check on
+CANCEL keep a late or repeated message from acting on newer work. A PUBACK is never proof that a robot stopped.
+
+### Destination policy (where each robot goes)
+
+Wait Point = Queue Point = Recovery Point: an enabled, non-charger endpoint coded `EP-QUEUE*` / `EP-WAIT*` /
+`EP-RECOVERY*`, named with "wait" / "queue" / "recovery", or listed in `FleetIdle:FallbackEndpointCodes`.
+
+| Robot state when cancelled | Destination |
+|---|---|
+| Nothing picked up, had not started | Parking (left alone when already parked) |
+| On its way to a pickup | The nearer free one of a wait point and parking |
+| Carrying containers | A recovery point, on request ("Send to recovery point"); it holds still there for the unload by scan |
+| At its drop-off, unload not confirmed | Nowhere: reconcile first (confirm the delivery, or unload by scan) |
+| Cannot drive safely (not localized, robot fault) | Safe stop (it keeps its `STOP PAUSE` hold) and a technician issue |
+| Every container accounted for | Parking (a positioning NAVIGATE; a new Job takes the robot over) |
+
+The recovery leg is the Job's own open MOVE with another goal (`cancelRecoveryToEndpointId`), so it goes through
+traffic like any MOVE (Semantic / Shadow; refused in Active mode). Its RESULT does not complete the MOVE: the Job is
+held again with `STOP PAUSE`, and "continue delivery" later drives to the real drop-off. Per robot the server lists the
+open next steps (`CONTINUE_DELIVERY`, `SEND_TO_RECOVERY`, `REQUEST_MANUAL_HANDOVER`, `UNLOAD_BY_SCAN`) and why the others
+are closed. "Continue delivery" is open only for the reasons in `TransportCancellation:ContinueDeliveryReasonCodes`
+(default OPERATOR_REQUESTED, CUSTOMER_CANCELLED, OTHER), and always at a drop-off. `TransportCancellation:SendRobotsToParking`
+(default true) turns the trip to parking off; a robot that cannot be sent yet is retried for `ParkingRetrySeconds` (90).

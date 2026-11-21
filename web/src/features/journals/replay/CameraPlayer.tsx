@@ -3,6 +3,7 @@ import Hls from 'hls.js'
 import { evidenceApi, type PlaybackGrant, type RecordingSpans } from '@/shared/api/evidence'
 import { t } from '@/shared/i18n'
 import { cx } from '@/shared/lib/cx'
+import { Icon, type IconName } from '@/shared/ui/Icon'
 import { cameraState, correctDrift, mediaAt, type CameraState } from './replayModel'
 
 interface CameraPlayerProps {
@@ -103,24 +104,28 @@ export function CameraPlayer({ robotCode, spans, hasRecording, cursorMs, playing
   }, [position, playing, rate, grant, state])
 
   const showVideo = state === 'PLAYING' || state === 'SYNC_UNCERTAIN'
+  const overlayIcon: IconName = error ? 'alert' : state === 'PROCESSING' ? 'refresh' : state === 'NO_CAMERA' ? 'close' : 'clock'
   return (
-    <figure className="relative overflow-hidden rounded-lg bg-black">
+    <figure className={cx('group relative overflow-hidden rounded-lg bg-black shadow-sm', secondary && 'ring-1 ring-black/10')}>
       <video ref={video} muted playsInline className={cx('aspect-video w-full', showVideo ? 'opacity-100' : 'opacity-0')} />
-      <figcaption className="absolute left-2 top-2 flex items-center gap-2">
-        <span className="rounded bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
+      <figcaption className={cx('absolute flex items-center gap-1.5', secondary ? 'left-1.5 top-1.5' : 'left-3 top-3')}>
+        <span className={cx('rounded-sm bg-black/65 font-mono font-semibold text-white backdrop-blur-sm', secondary ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-xs')}>
           {robotCode}
-          {spans?.nominalFovDegrees ? ` · ${spans.nominalFovDegrees}°` : ''}
+          {spans?.nominalFovDegrees && !secondary ? <span className="font-normal text-white/70"> · {spans.nominalFovDegrees}°</span> : null}
         </span>
-        {position ? (
-          <span className="rounded bg-black/60 px-2 py-0.5 font-mono text-xs text-white">±{Math.round(position.errorMs)} ms</span>
+        {position && !secondary ? (
+          <span className="rounded-sm bg-black/65 px-2 py-1 font-mono text-xs text-white/80 backdrop-blur-sm" title={t('Time sync of this frame')}>
+            ±{Math.round(position.errorMs)} ms
+          </span>
         ) : null}
       </figcaption>
       {state === 'SYNC_UNCERTAIN' ? (
-        <span className="absolute right-2 top-2 rounded bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-black">{STATE_LABEL.SYNC_UNCERTAIN}</span>
+        <span className="absolute right-3 top-3 rounded-sm bg-amber-400/95 px-2 py-1 text-xs font-semibold text-black">{STATE_LABEL.SYNC_UNCERTAIN}</span>
       ) : null}
       {!showVideo ? (
-        <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-white/80">
-          {error ? `${t('Video error')}: ${error}` : state ? STATE_LABEL[state] : ''}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-800 to-slate-950 p-4 text-center text-white/80">
+          <Icon name={overlayIcon} size={secondary ? 18 : 28} className={cx('text-white/60', state === 'PROCESSING' && 'animate-spin')} />
+          <span className={secondary ? 'text-[11px]' : 'text-sm'}>{error ? `${t('Video error')}: ${error}` : state ? STATE_LABEL[state] : ''}</span>
         </div>
       ) : null}
     </figure>

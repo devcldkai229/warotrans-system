@@ -20,7 +20,9 @@ public sealed record SemanticTrafficPolicy(
     /// <summary>How far the robot may drift sideways off its proposed path and stay inside what it reserved.</summary>
     double PathToleranceMeters = 0.15,
     /// <summary>See <see cref="TrafficOptions.SemanticLaneHalfWidthMeters"/>. 0: discs only.</summary>
-    double LaneHalfWidthMeters = 0)
+    double LaneHalfWidthMeters = 0,
+    /// <summary>See <see cref="TrafficOptions.SemanticZoneMarginMeters"/>. Null: zones use <see cref="ReserveRadiusMeters"/>.</summary>
+    double? ZoneMarginMeters = null)
 {
     /// <summary>Circumscribed radius of the (padded) footprint: covers the robot at any heading, so turning in place.</summary>
     public double FootprintRadiusMeters =>
@@ -37,6 +39,17 @@ public sealed record SemanticTrafficPolicy(
     /// </summary>
     public double ReserveRadiusMeters =>
         FootprintRadiusMeters + Math.Max(0, PathToleranceMeters) + SampleStepMeters / 2.0;
+
+    /// <summary>
+    /// Disc radius at which a path sample counts as entering a single-occupancy zone. With a zone margin it is the
+    /// body (any heading) plus that margin, not the full path-tolerance reserve: a robot that drives past a zone's edge,
+    /// or stands next to it, must not lock the whole zone for everyone. Never below what the robot gate checks
+    /// (footprint + its stop margin), so a granted plan never puts the body in a zone that was not granted.
+    /// </summary>
+    public double ZoneReserveRadiusMeters =>
+        ZoneMarginMeters is { } m
+            ? Math.Min(ReserveRadiusMeters, FootprintRadiusMeters + Math.Max(0, m) + SampleStepMeters / 2.0)
+            : ReserveRadiusMeters;
 }
 
 public sealed record SemanticZonePoly(
@@ -209,7 +222,7 @@ public static class SemanticReservation
             var resources = new HashSet<string>(StringComparer.Ordinal);
             foreach (var z in policy.SingleOccupancyZones)
             {
-                if (DiscHitsZone(x, y, policy.ReserveRadiusMeters, z.Ring))
+                if (DiscHitsZone(x, y, policy.ZoneReserveRadiusMeters, z.Ring))
                 {
                     resources.Add($"zone:{z.Code}");
                 }
@@ -332,9 +345,10 @@ public static class SemanticReservation
             return false;
         }
 
+        var zoneRadius = policy.ZoneReserveRadiusMeters;
         return policy.SingleOccupancyZones.IsDefaultOrEmpty
                || policy.SingleOccupancyZones.All(z =>
-                   zonesAtStart.Contains($"zone:{z.Code}") || !DiscHitsZone(x, y, radius, z.Ring));
+                   zonesAtStart.Contains($"zone:{z.Code}") || !DiscHitsZone(x, y, zoneRadius, z.Ring));
     }
 
     /// <summary>

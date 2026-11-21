@@ -31,6 +31,8 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("MapAssetStorage:Provider", "Local");
         // Evidence is a separate process; the existing suites run without it (EvidenceBridge tests opt in).
         builder.UseSetting("EvidenceBridge:Enabled", "false");
+        // TRN-03: a robot that cannot be sent to parking yet is not waited for here (no parking places on the test map).
+        builder.UseSetting("TransportCancellation:ParkingRetrySeconds", "0");
 
         builder.ConfigureTestServices(services =>
         {

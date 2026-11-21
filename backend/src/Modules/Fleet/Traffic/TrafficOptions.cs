@@ -79,6 +79,24 @@ public sealed class TrafficOptions
     public double SemanticPathToleranceMeters { get; set; } = 0.15;
 
     /// <summary>
+    /// Margin (m) beyond the body at which a path counts as entering a single-occupancy zone. Null: the full
+    /// reserve radius (body + path tolerance), so a robot merely passing a zone's edge, or parked next to it, holds the
+    /// whole zone. Keep it at least the robot gateway's stop margin (0.05 m).
+    /// </summary>
+    public double? SemanticZoneMarginMeters { get; set; }
+
+    /// <summary>
+    /// Endpoints a robot may back off to when breaking a wait-for cycle, besides parking places and <c>EP-QUEUE*</c>
+    /// points: codes, comma separated (MAP-ONE: <c>EP-WAIT</c>). Empty: parking places and queue points only.
+    /// </summary>
+    public string? DeadlockRetreatEndpointCodes { get; set; }
+
+    public IReadOnlySet<string> DeadlockRetreatCodes() =>
+        (DeadlockRetreatEndpointCodes ?? string.Empty)
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
     /// Grant a traffic_plan that belongs to no open backend NAVIGATE (an RViz / CLI goal). Off on real robots: only
     /// motion the backend commanded is authorized.
     /// </summary>
@@ -112,6 +130,7 @@ public sealed class TrafficOptions
         HorizonMeters = SemanticHorizonMeters,
         CellSizeMeters = SemanticCellSizeMeters,
         PathToleranceMeters = SemanticPathToleranceMeters,
+        ZoneMarginMeters = SemanticZoneMarginMeters,
         FootprintHalfLength = Math.Max(0.01, Footprint.LengthMeters / 2.0 + Footprint.PaddingMeters),
         FootprintHalfWidth = Math.Max(0.01, Footprint.WidthMeters / 2.0 + Footprint.PaddingMeters)
     };

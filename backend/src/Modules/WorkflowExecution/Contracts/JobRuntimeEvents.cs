@@ -15,6 +15,7 @@ public sealed record JobContainerStatusChanged(
     public Guid EventId { get; init; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; init; } = DateTimeOffset.UtcNow;
     public Guid? HandoverConfirmedBy { get; init; }
+    public string? FailureCode { get; init; }
 }
 
 /// <summary>Job status changed (e.g. RUNNING, COMPLETED, FAILED). Consumed by realtime UI.</summary>

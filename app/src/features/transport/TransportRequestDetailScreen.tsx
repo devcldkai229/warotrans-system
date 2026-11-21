@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowDown, Box, ChevronRight, MapPin, Truck } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import {
-  cancelTransportRequest, getTransportRequest, getUserErrorMessage, getWorkflow, isActionAllowed, listJobSummaries, listRobots,
+  getTransportRequest, getUserErrorMessage, getWorkflow, isActionAllowed, listJobSummaries, listRobots,
   queueTransportRequest, rejectTransportRequest,
 } from '../../shared/api';
 import { useAuth } from '../auth/authContext';
@@ -13,6 +13,8 @@ import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { toast } from '../../shared/context/ToastContext';
 import { t } from '../../shared/i18n';
 import { startQueuedJobs } from './startQueuedJobs';
+import { CancelImpactSheet } from './CancelImpactSheet';
+import { CancellationCard } from './CancellationCard';
 import { useRealtime } from '../../shared/realtime';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -171,6 +173,8 @@ export function TransportRequestDetailScreen() {
             </Card>
           ) : null}
 
+          <CancellationCard requestId={data.id} requestStatus={data.status} warehouseId={data.warehouseId} onChanged={afterAction} />
+
           <Card gap={12}>
             <StatusPill status={data.status} dot />
             <Text variant="headline" selectable>{data.requestCode}</Text>
@@ -302,10 +306,14 @@ export function TransportRequestDetailScreen() {
           ) : null}
         </ScrollView>
       )}
-      {sheet === 'cancel' && data ? <ReasonSheet title="Cancel Request" danger required confirmTitle="Cancel Request"
-        message="Its Jobs stop. Containers not picked up stay where they are; cargo already on a robot keeps the request Cancelling until it is unloaded."
+      {sheet === 'cancel' && data ? <CancelImpactSheet requestId={data.id} requestCode={data.requestCode}
         onClose={() => setSheet(null)}
-        onSubmit={async reason => { await cancelTransportRequest(data.id, reason); setSheet(null); toast.success(`${data.requestCode} cancelled.`); afterAction(); }} /> : null}
+        onCancelled={() => {
+          setSheet(null);
+          toast.success(t('{code}: cancellation started.', { code: data.requestCode }));
+          afterAction();
+          void queryClient.invalidateQueries({ queryKey: ['transport-request-cancellation', data.id] });
+        }} /> : null}
       {sheet === 'reject' && data ? <ReasonSheet title="Reject Request" danger required confirmTitle="Reject Request"
         message="Only before any of its Jobs ran. The requester is notified with your reason."
         onClose={() => setSheet(null)}

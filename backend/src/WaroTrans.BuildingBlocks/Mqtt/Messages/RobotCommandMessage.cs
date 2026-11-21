@@ -12,7 +12,20 @@ public sealed class RobotCommandMessage
     public DateTimeOffset IssuedAt { get; set; }
     public Guid? JobAssignmentId { get; set; }
     public Guid? JobStepId { get; set; }
+
+    /// <summary>
+    /// TRN-03: the robot refuses NAVIGATE_TO_POSE / CANCEL / LOCALIZE received after this time (COMMAND_EXPIRED), so a
+    /// message the broker delivers late never starts an old move or cancels a newer one. Null = no limit (STOP, RESUME).
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; set; }
+
     public JsonElement Payload { get; set; }
+
+    /// <summary>A NAVIGATE older than this was long since timed out by the backend (ACK timeout is seconds).</summary>
+    public static readonly TimeSpan NavigateLifetime = TimeSpan.FromSeconds(60);
+
+    /// <summary>A CANCEL is only meaningful for the move running when it was sent.</summary>
+    public static readonly TimeSpan CancelLifetime = TimeSpan.FromSeconds(30);
 }
 
 public static class RobotCommandTypes

@@ -74,7 +74,7 @@ export interface MapMovement {
   label?: string
 }
 
-/** Traffic coordinator overlay (authorized edges + quarantine markers). */
+/** Traffic coordinator overlay (authorized edges + quarantine markers + planned Nav2 paths). */
 export interface MapTrafficOverlay {
   /** Graph edge numeric ids currently under motion authority. */
   authorizedEdgeIds?: number[]
@@ -82,6 +82,21 @@ export interface MapTrafficOverlay {
   occupiedResourceIds?: string[]
   /** Robots in Quarantined phase — drawn as alert markers. */
   quarantinedRobotCodes?: string[]
+  /** Live Nav2 plans (via TrafficSnapshot), drawn as a thin line in the robot's plan colour. */
+  plannedPaths?: MapPlannedPath[]
+}
+
+/** One robot's live plan: the robot's pose first, then the Nav2 poses still ahead of it. */
+export interface MapPlannedPath {
+  robotCode: string
+  color: string
+  points: Point[]
+  /** Leading points inside the traffic grant: drawn full strength; the rest is drawn fainter. */
+  grantedCount: number
+  /** Heading at the goal (radians, map frame), for the goal footprint. */
+  goalYaw?: number | null
+  /** The whole plan still waits for traffic. */
+  waiting?: boolean
 }
 
 export type MapEmphasis = 'zones' | 'edges' | 'endpoints'
@@ -568,6 +583,26 @@ export function WarehouseMap({
                     />
                   )
                 })}
+            </g>
+          ) : null}
+
+          {/* Live Nav2 plans: one thin line per robot in its plan colour. The part traffic has granted is drawn full
+              strength, the part still waiting for traffic fainter. */}
+          {trafficOverlay?.plannedPaths && trafficOverlay.plannedPaths.length > 0 ? (
+            <g pointerEvents="none" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              {trafficOverlay.plannedPaths.map((plan) => {
+                if (plan.points.length < 2) return null
+                const focused = !focusRobotCodes || focusRobotCodes.length === 0 || focusRobotCodes.includes(plan.robotCode)
+                const line = 0.16 * mark
+                const granted = plan.points.slice(0, Math.max(0, plan.grantedCount))
+                const ahead = plan.points.slice(Math.max(0, plan.grantedCount - 1))
+                return (
+                  <g key={`plan-${plan.robotCode}`} opacity={focused ? 1 : 0.3} stroke={plan.color} strokeWidth={line}>
+                    {ahead.length >= 2 ? <polyline points={stagePoints(ahead)} strokeOpacity={0.4} /> : null}
+                    {granted.length >= 2 ? <polyline points={stagePoints(granted)} strokeOpacity={0.95} /> : null}
+                  </g>
+                )
+              })}
             </g>
           ) : null}
 

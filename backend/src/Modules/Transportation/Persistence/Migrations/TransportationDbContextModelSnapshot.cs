@@ -30,6 +30,10 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ActorAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_account_id");
+
                     b.Property<int>("Attempts")
                         .HasColumnType("integer")
                         .HasColumnName("attempts");
@@ -98,6 +102,194 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasDatabaseName("i_x_stock_postings_transport_request_id");
 
                     b.ToTable("stock_postings", "transportation");
+                });
+
+            modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportCancellation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finalized_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("reason_code");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TargetDetailIds")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("target_detail_ids");
+
+                    b.Property<Guid>("TransportRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_request_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_transport_cancellations");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_transport_cancellations_idempotency_key");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("i_x_transport_cancellations_status");
+
+                    b.HasIndex("TransportRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_transport_cancellations_active_per_request")
+                        .HasFilter("status <> 'FINALIZED'");
+
+                    b.ToTable("transport_cancellations", "transportation");
+                });
+
+            modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportCancellationItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CancellationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancellation_id");
+
+                    b.Property<string>("Containers")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("containers");
+
+                    b.Property<string>("DestinationEndpointCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("destination_endpoint_code");
+
+                    b.Property<string>("DestinationNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("destination_note");
+
+                    b.Property<string>("DestinationStatus")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("destination_status");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("done_at");
+
+                    b.Property<DateTimeOffset?>("HandoverRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_requested_at");
+
+                    b.Property<Guid?>("HandoverRequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handover_requested_by");
+
+                    b.Property<string>("InitialPhase")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("initial_phase");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("JobNo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("job_no");
+
+                    b.Property<string>("Phase")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("RecoveryPointCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("recovery_point_code");
+
+                    b.Property<string>("RobotCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("robot_code");
+
+                    b.Property<Guid?>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("stage");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_transport_cancellation_items");
+
+                    b.HasIndex("JobId")
+                        .HasDatabaseName("i_x_transport_cancellation_items_job_id");
+
+                    b.HasIndex("CancellationId", "JobId")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_transport_cancellation_items_cancellation_id_job_id");
+
+                    b.ToTable("transport_cancellation_items", "transportation");
                 });
 
             modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportRequest", b =>
@@ -319,6 +511,18 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                     b.ToTable("transport_request_details", "transportation");
                 });
 
+            modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportCancellationItem", b =>
+                {
+                    b.HasOne("WaroTrans.Transportation.Entities.TransportCancellation", "Cancellation")
+                        .WithMany("Items")
+                        .HasForeignKey("CancellationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_transport_cancellation_items_transport_cancellations_cancel~");
+
+                    b.Navigation("Cancellation");
+                });
+
             modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportRequestDetail", b =>
                 {
                     b.HasOne("WaroTrans.Transportation.Entities.TransportRequest", "TransportRequest")
@@ -329,6 +533,11 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasConstraintName("f_k_transport_request_details_transport_requests_transport_requ~");
 
                     b.Navigation("TransportRequest");
+                });
+
+            modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportCancellation", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportRequest", b =>

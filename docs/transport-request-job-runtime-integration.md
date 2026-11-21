@@ -118,7 +118,7 @@ retries after unique-violation).
 
 Execution commits pickup and delivery confirmations with a stock handover outbox row per Container. Delivery waits for the corresponding pickup to reach Transportation. Transportation persists a posting keyed by Job, Container and phase, then retries Warehouse updates until they are applied. The Transport Request detail exposes the pending, retrying or posted status from these queues.
 
-Request cancellation and handover confirmation read cargo under the same Job lock. Cancellation holds onboard cargo for recovery. A confirmed dropoff stays reserved while its posting is pending, so another request cannot book the same Container from a stale shelf balance.
+Request cancellation and handover confirmation read cargo under the same Job lock. TRN-03 holds onboard cargo for recovery. A confirmed delivery or unload stays reserved while its posting is pending. A manual unload posting waits for the pickup to leave the Execution outbox and reach Warehouse before restocking the Container.
 
 ## JobBatchPlan validation (internal)
 

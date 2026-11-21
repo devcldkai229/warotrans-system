@@ -1,5 +1,5 @@
 // Lane drawing shared by the monitor map and the Map Editor (OTTO style): a translucent band as wide as the lane
-// with large chevrons along it. A one-way lane has one row of chevrons down the middle; a two-way lane is split by a
+// with a dense row of small arrows along it. A one-way lane has one row of chevrons down the middle; a two-way lane is split by a
 // dashed centre line into two half lanes whose chevrons point opposite ways (travel on the right of the drawing
 // direction, like a road). Everything works in drawing coordinates (y down), whatever the unit.
 
@@ -72,10 +72,11 @@ export function chevronsAlong(points: DrawPoint[], spacing: number, offset = 0, 
 }
 
 /**
- * Road-marking arrow in a unit box (length 1, pointing right, centred), filled: a shaft and a wide head, like the
- * arrows painted on a road. Drawn with `scale(size)`; `size` is the arrow length.
+ * Slim arrow in a unit box (length 1, pointing right, centred), filled: a thin shaft and a short head, like a "→"
+ * glyph. Drawn with `scale(size)`; `size` is the arrow length. Many small arrows read the direction better than a
+ * few big ones and do not hide the robots and plans drawn on top.
  */
-export const LANE_ARROW_PATH = 'M-0.5 -0.08 L0.06 -0.08 L0.06 -0.26 L0.5 0 L0.06 0.26 L0.06 0.08 L-0.5 0.08 Z'
+export const LANE_ARROW_PATH = 'M-0.5 -0.06 L0.16 -0.06 L0.16 -0.24 L0.5 0 L0.16 0.24 L0.16 0.06 L-0.5 0.06 Z'
 /** @deprecated the open chevron; lanes draw LANE_ARROW_PATH now. */
 export const CHEVRON_PATH = LANE_ARROW_PATH
 
@@ -90,20 +91,26 @@ export interface LaneGlyphs {
   sides: [DrawPoint[], DrawPoint[]]
 }
 
+/** Arrow length and spacing as fractions of the lane width: small arrows, close together. */
+export const ONE_WAY_SIZE = 0.42
+export const ONE_WAY_SPACING = 0.85
+export const TWO_WAY_SIZE = 0.32
+export const TWO_WAY_SPACING = 0.7
+
 export function laneGlyphs(points: DrawPoint[], width: number, direction: 'ONE_WAY' | 'BIDIRECTIONAL'): LaneGlyphs {
   const half = width / 2
   const sides: [DrawPoint[], DrawPoint[]] = [offsetPolyline(points, -half), offsetPolyline(points, half)]
   if (direction === 'ONE_WAY') {
-    return { chevrons: chevronsAlong(points, width * 2.2), chevronSize: width * 0.9, divider: null, sides }
+    return { chevrons: chevronsAlong(points, width * ONE_WAY_SPACING), chevronSize: width * ONE_WAY_SIZE, divider: null, sides }
   }
-  // Two-way: one arrow per half lane, the head (0.52 of the length) fits inside the half.
-  const spacing = width * 1.9
+  // Two-way: a row per half lane; the head (0.48 of the size wide) fits inside the half.
+  const spacing = width * TWO_WAY_SPACING
   return {
     chevrons: [
       ...chevronsAlong(points, spacing, width / 4), // right half: drawing direction
       ...chevronsAlong(points, spacing, -width / 4, true), // left half: back
     ],
-    chevronSize: width * 0.75,
+    chevronSize: width * TWO_WAY_SIZE,
     divider: points,
     sides,
   }

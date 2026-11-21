@@ -24,30 +24,52 @@ public sealed class IssueCancelCommandHandler(
     };
 
     /// <summary>
-    /// The robot reports it still executes a NAVIGATE this backend has closed (aborted while the robot was offline):
-    /// tell it to stop. Sent per report until the robot lets go; one at a time, and never for an unknown or open command.
+    /// A command that has just closed may still be reported by the robot for a few seconds (its next authority_state was
+    /// already on its way): no orphan CANCEL inside this window. Also the least time between two orphan CANCELs.
+    /// </summary>
+    public static readonly TimeSpan OrphanGrace = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Whether a CANCEL goes out for a NAVIGATE the robot still reports: the NAVIGATE is closed (whatever its outcome)
+    /// and has been for <see cref="OrphanGrace"/>, and no CANCEL for it is in flight or was sent within that grace.
+    /// </summary>
+    public static bool OrphanCancelDue(RobotCommand target, IEnumerable<RobotCommand> earlierCancels, DateTimeOffset now)
+    {
+        if (target.IsInFlight || (target.CompletedAt is { } completedAt && now - completedAt < OrphanGrace))
+        {
+            return false;
+        }
+
+        return !earlierCancels.Any(c => c.IsInFlight || now - c.IssuedAt < OrphanGrace);
+    }
+
+    /// <summary>
+    /// The robot reports it still executes a NAVIGATE this backend has closed (aborted or cancelled while the robot was
+    /// offline): tell it to stop. Sent per report until the robot lets go — whatever the closed command's outcome, a
+    /// robot still driving it must be stopped — but one at a time: not while a CANCEL for it is in flight or was sent
+    /// within <see cref="OrphanGrace"/>. A CANCEL that failed or timed out is therefore sent again.
     /// </summary>
     public async Task<bool> CancelOrphanAsync(Guid robotId, Guid targetCommandId, CancellationToken cancellationToken)
     {
+        var now = DateTimeOffset.UtcNow;
         var target = await db.RobotCommands.AsNoTracking().FirstOrDefaultAsync(
             c => c.Id == targetCommandId && c.RobotId == robotId && c.Type == RobotCommandType.NAVIGATE_TO_POSE,
             cancellationToken);
-        if (target is null || target.IsInFlight)
+        if (target is null)
         {
             return false;
         }
 
-        var pending = await db.RobotCommands.AnyAsync(
-            c => c.RobotId == robotId && c.Type == RobotCommandType.CANCEL && c.TargetCommandId == targetCommandId
-                 && c.Status == RobotCommandStatus.SENT,
-            cancellationToken);
+        var earlierCancels = await db.RobotCommands.AsNoTracking()
+            .Where(c => c.RobotId == robotId && c.Type == RobotCommandType.CANCEL && c.TargetCommandId == targetCommandId)
+            .ToListAsync(cancellationToken);
         var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken);
-        if (pending || robot is null)
+        if (robot is null || !OrphanCancelDue(target, earlierCancels, now))
         {
             return false;
         }
 
-        var utcNow = DateTimeOffset.UtcNow;
+        var utcNow = now;
         var commandId = Guid.NewGuid();
         var payload = new CancelCommandPayload { TargetCommandId = targetCommandId };
         db.RobotCommands.Add(RobotCommand.CreateCancel(
@@ -64,6 +86,7 @@ public sealed class IssueCancelCommandHandler(
                 RobotCode = robot.Code,
                 Type = RobotCommandTypes.Cancel,
                 IssuedAt = utcNow,
+                ExpiresAt = utcNow + RobotCommandMessage.CancelLifetime,
                 JobAssignmentId = target.JobAssignmentId,
                 JobStepId = target.JobStepId,
                 Payload = JsonSerializer.SerializeToElement(payload, JsonOptions)
@@ -129,6 +152,7 @@ public sealed class IssueCancelCommandHandler(
             RobotCode = robot.Code,
             Type = RobotCommandTypes.Cancel,
             IssuedAt = utcNow,
+            ExpiresAt = utcNow + RobotCommandMessage.CancelLifetime,
             JobAssignmentId = target.JobAssignmentId,
             JobStepId = target.JobStepId,
             Payload = JsonSerializer.SerializeToElement(cancelPayload, JsonOptions)

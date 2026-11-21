@@ -14,6 +14,9 @@ public sealed class StockPosting
     public Guid TransportRequestId { get; set; }
     public Guid? DestinationStorageLocationId { get; set; }
     public short? DestinationLevelNo { get; set; }
+
+    /// <summary>TRN-03: who unloaded a container by hand (CANCEL_HANDOVER only).</summary>
+    public Guid? ActorAccountId { get; set; }
     public int Attempts { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }
@@ -24,5 +27,8 @@ public sealed class StockPosting
 public enum StockPostingType
 {
     PICKUP,
-    DELIVERY
+    DELIVERY,
+
+    /// <summary>TRN-03: after a cancel a person took the container off the robot and put it on a shelf.</summary>
+    CANCEL_HANDOVER
 }

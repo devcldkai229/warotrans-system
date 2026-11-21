@@ -1792,6 +1792,25 @@ public sealed partial class JobExecutionEngine(
     /// <summary>Endpoint a MOVE backs off to; set when its NAVIGATE was cancelled, the retreat leaves once that has ended.</summary>
     public const string RetreatToKey = "retreatToEndpointId";
 
+    /// <summary>When a MOVE first hit a transient refusal (robot busy, a write race, a retreat handover) it retries.</summary>
+    public const string RetryWaitSinceKey = "retryWaitSince";
+
+    /// <summary>A transient refusal lasting longer than this is not transient: the MOVE fails instead of retrying forever.</summary>
+    public const int TransientRetryLimitSeconds = 60;
+
+    /// <summary>
+    /// Traffic refusals a retreat may meet right after its NAVIGATE was cancelled, while that route's authority or the
+    /// cancel's quarantine is still being cleared (<c>QUARANTINED:NAVIGATE:NAVIGATION_CANCELED</c>).
+    /// </summary>
+    public static bool IsRetreatHandoverReason(string? reason) =>
+        reason is not null
+        && (reason.StartsWith("AUTHORITY_ALREADY_HELD", StringComparison.Ordinal)
+            || (reason.StartsWith("QUARANTINED:", StringComparison.Ordinal)
+                && reason.EndsWith(":NAVIGATION_CANCELED", StringComparison.Ordinal)));
+
+    /// <summary>Arrival tolerance of a deadlock retreat: more than a bay's 0.25 m run-in, so it never docks.</summary>
+    public const double RetreatArrivalToleranceMeters = 0.35;
+
     /// <summary>A wait-for cycle this old is broken: one of the two robots backs off.</summary>
     public const double DeadlockAfterSeconds = 5;
 
@@ -1849,7 +1868,9 @@ public sealed partial class JobExecutionEngine(
                 .Where(x => x.Step.Status == JobStepStatus.WAITING
                             && (x.Step.StepType is StepType.WAIT or StepType.CHECK
                                 || (x.Step.StepType == StepType.MOVE
-                                    && (x.Step.OutputValues.ContainsKey(PositioningWaitSinceKey) || x.Step.OutputValues.ContainsKey(AreaWaitSinceKey))))
+                                    && (x.Step.OutputValues.ContainsKey(PositioningWaitSinceKey)
+                                        || x.Step.OutputValues.ContainsKey(AreaWaitSinceKey)
+                                        || x.Step.OutputValues.ContainsKey(RetryWaitSinceKey))))
                             && x.Step.OutputValues.TryGetValue(WaitUntilKey, out var until)
                             && until.GetDateTimeOffset() <= now)
                 .ToList();
@@ -1946,6 +1967,15 @@ public sealed partial class JobExecutionEngine(
                 continue; // an idle robot in the way is moved by RobotCareService instead
             }
 
+            // One of them is already backing off: give that retreat time to finish. Only for a while — a retreat that
+            // is itself held by the other robot never finishes, and skipping it forever left both waiting until the
+            // NAVIGATE timed out.
+            if ((mine.Value.Retreating && RetreatStillFresh(mine.Value.RobotId, now))
+                || (theirs.Value.Retreating && RetreatStillFresh(theirs.Value.RobotId, now)))
+            {
+                continue;
+            }
+
             var loser = mine.Value.Cargo != theirs.Value.Cargo
                 ? (mine.Value.Cargo ? theirs.Value : mine.Value)
                 : (mine.Value.StartedAt >= theirs.Value.StartedAt ? mine.Value : theirs.Value);
@@ -1970,7 +2000,24 @@ public sealed partial class JobExecutionEngine(
             }
 
             var winnerGoal = (loser.RobotId == robotId ? theirs.Value : mine.Value).Target;
-            if (await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, winnerId, winnerGoal, cancellationToken))
+            var backedOff = await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, winnerId, winnerGoal, cancellationToken);
+            if (!backedOff)
+            {
+                var altLoser = loser.RobotId == robotId ? theirs.Value : mine.Value;
+                var altWinnerId = altLoser.RobotId == robotId ? partnerId : robotId;
+                var altWinnerGoal = loser.Target;
+                if (!LastRetreat.TryGetValue(altLoser.RobotId, out var altLast) || (now - altLast).TotalSeconds >= DeadlockCooldownSeconds)
+                {
+                    if (await RetreatAsync(altLoser.JobId, altLoser.StepId, altLoser.RobotId, altWinnerId, altWinnerGoal, cancellationToken))
+                    {
+                        loser = altLoser;
+                        winnerId = altWinnerId;
+                        backedOff = true;
+                    }
+                }
+            }
+
+            if (backedOff)
             {
                 // What the other robot was granted but never entered lies around the one that backs off: free it, and
                 // let the other robot wait a moment, so the retreat can get through.
@@ -2008,7 +2055,19 @@ public sealed partial class JobExecutionEngine(
         return Math.Sqrt(Math.Pow(px - (ax + t * vx), 2) + Math.Pow(py - (ay + t * vy), 2));
     }
 
-    private readonly record struct OpenMove(Guid RobotId, Guid JobId, Guid StepId, DateTimeOffset StartedAt, bool Cargo, Guid? Target);
+    /// <summary>
+    /// The robot started its deadlock retreat less than two cooldowns ago. Unknown start (host restarted mid-retreat):
+    /// not fresh, so the pair is resolved again instead of waited on forever.
+    /// </summary>
+    private static bool RetreatStillFresh(Guid robotId, DateTimeOffset now)
+    {
+        lock (DeadlockSince)
+        {
+            return LastRetreat.TryGetValue(robotId, out var started) && (now - started).TotalSeconds < 2 * DeadlockCooldownSeconds;
+        }
+    }
+
+    private readonly record struct OpenMove(Guid RobotId, Guid JobId, Guid StepId, DateTimeOffset StartedAt, bool Cargo, Guid? Target, bool Retreating = false);
 
     /// <summary>The robot's MOVE that has a NAVIGATE out, if any.</summary>
     private async Task<OpenMove?> OpenMoveAsync(Guid robotId, CancellationToken cancellationToken)
@@ -2026,9 +2085,12 @@ public sealed partial class JobExecutionEngine(
             return null;
         }
 
+        var retreating = step.OutputValues.TryGetValue(AreaQueueZoneKey, out var z)
+                         && z.ValueKind == JsonValueKind.String
+                         && z.GetString() == DeadlockRetreatZone;
         var cargo = await db.JobContainers.AsNoTracking()
             .AnyAsync(c => c.JobId == step.JobId && c.Status == JobContainerStatus.ONBOARD, cancellationToken);
-        return new OpenMove(robotId, step.JobId, step.Id, step.StartedAt ?? DateTimeOffset.MinValue, cargo, step.TargetEndpointId);
+        return new OpenMove(robotId, step.JobId, step.Id, step.StartedAt ?? DateTimeOffset.MinValue, cargo, step.TargetEndpointId, retreating);
     }
 
     /// <summary>Cancels the robot's NAVIGATE and sends it to the free retreat point farthest from the other robot.</summary>
@@ -2065,9 +2127,12 @@ public sealed partial class JobExecutionEngine(
             return Math.Min(d, Math.Min(Dist(x, y, winnerGoal.X, winnerGoal.Y), line));
         }
 
+        var extraRetreatCodes = trafficOptions?.Value.DeadlockRetreatCodes() ?? new HashSet<string>();
         var target = endpoints
             .Where(e => e.IsEnabled
-                        && (e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal))
+                        && (e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK
+                            || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal)
+                            || extraRetreatCodes.Contains(e.Code))
                         && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) > 0.3
                         // not through the other robot: the straight way there passes >= 0.6 m from its body
                         && SegmentDistance(winner.PoseX, winner.PoseY, robot.PoseX, robot.PoseY, e.X, e.Y) >= 0.6
@@ -2127,6 +2192,7 @@ public sealed partial class JobExecutionEngine(
         var outputs = new Dictionary<string, JsonElement>(current);
         outputs.Remove(AreaQueueLegKey);
         outputs.Remove(RobotCommandIdKey);
+        outputs.Remove(RetryWaitSinceKey); // waiting for the area is not a transient refusal: its clock starts over
         outputs[AreaWaitSinceKey] = JsonSerializer.SerializeToElement(since);
         outputs[AreaQueueZoneKey] = JsonSerializer.SerializeToElement(zone);
         outputs[WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(zone == DeadlockRetreatZone ? DeadlockHoldSeconds : 1));
@@ -2197,6 +2263,33 @@ public sealed partial class JobExecutionEngine(
         return null;
     }
 
+    /// <summary>
+    /// Parks the MOVE as WAITING for a second after a transient refusal. Counted from the first refusal
+    /// (<see cref="RetryWaitSinceKey"/>, cleared when the NAVIGATE goes out); past <see cref="TransientRetryLimitSeconds"/>
+    /// the MOVE fails, so a refusal that does not clear is reported instead of hidden.
+    /// </summary>
+    /// <returns>As the step executors: true when the step reached a final state (here: failed).</returns>
+    private async Task<bool> RetryLaterAsync(
+        Job job, JobTask task, JobStep step, string stepKey, DateTimeOffset now, string reason, CancellationToken cancellationToken)
+    {
+        var since = step.OutputValues.TryGetValue(RetryWaitSinceKey, out var s) ? s.GetDateTimeOffset() : now;
+        if ((now - since).TotalSeconds >= TransientRetryLimitSeconds)
+        {
+            Fail(job, task, step, stepKey, "transient_retry_timeout",
+                $"The MOVE could not be sent for {TransientRetryLimitSeconds} s ({reason}).", now);
+            return true;
+        }
+
+        step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+        {
+            [RetryWaitSinceKey] = JsonSerializer.SerializeToElement(since),
+            [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1))
+        };
+        SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+        await SaveAndPublishAsync(cancellationToken);
+        return false;
+    }
+
     private async Task<bool> StartMoveAsync(Job job, JobTask task, JobStep step, string stepKey, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -2236,6 +2329,18 @@ public sealed partial class JobExecutionEngine(
         }
 
         var endpointId = step.ResolvedInputs["targetEndpointId"].GetGuid();
+        // TRN-03: a cancelled Job's robot takes its cargo to a recovery point instead of the step's own target.
+        var recoveryTo = RecoveryTarget(step);
+        if (recoveryTo is { } recoveryEndpoint)
+        {
+            if (step.OutputValues.ContainsKey(CancelRecoveryArrivedKey))
+            {
+                return false; // there already; HoldAtRecoveryAsync holds the Job
+            }
+
+            endpointId = recoveryEndpoint;
+        }
+
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
         if (pose is null || !pose.IsEnabled || pose.MapVersionId != job.MapVersionId)
         {
@@ -2316,6 +2421,13 @@ public sealed partial class JobExecutionEngine(
                     robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
                 if (!tracked.Ok)
                 {
+                    // A retreat starts right after its NAVIGATE was cancelled: traffic may still hold that route's
+                    // authority, or the quarantine of the cancel, for a moment. Retry, within a bound.
+                    if (step.OutputValues.ContainsKey(RetreatToKey) && IsRetreatHandoverReason(tracked.Reason))
+                    {
+                        return await RetryLaterAsync(job, task, step, stepKey, now, $"traffic: {tracked.Reason}", cancellationToken);
+                    }
+
                     Fail(job, task, step, stepKey, TrafficRobotUnavailable,
                         $"Semantic Mode cannot move the robot: {tracked.Reason}", DateTimeOffset.UtcNow);
                     return true;
@@ -2339,7 +2451,7 @@ public sealed partial class JobExecutionEngine(
                         queueSince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var rs) ? rs.GetDateTimeOffset() : now;
                     }
 
-                    var area = queueZone is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
+                    var area = queueZone is not null || recoveryTo is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
                         z.QueueEndpointCode is not null && SemanticReservation.PointInRing(pose.X, pose.Y, z.Ring));
                     var busy = area is null ? null : await AreaBusyByAsync(job, step, robotId, area, policy, cancellationToken);
                     if (area is not null && busy is not null)
@@ -2374,20 +2486,30 @@ public sealed partial class JobExecutionEngine(
                     Guid semanticCommandId;
                     try
                     {
+                        // A retreat only has to clear the way, not dock: with this tolerance the gateway skips the
+                        // reverse run-in into a bay (a pivot that slid off the bay axis left that run-in outside the
+                        // grant, so the robot never finished backing off and the other one waited behind it).
+                        var tolerance = queueZone == DeadlockRetreatZone
+                            ? Math.Max(goal.PositionTolerance, RetreatArrivalToleranceMeters)
+                            : goal.PositionTolerance;
                         semanticCommandId = await fleet.NavigateAsync(
                             robotId, goal.X, goal.Y, goal.Yaw, job.Id, step.Id, cancellationToken, route: null,
-                            timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: goal.PositionTolerance);
+                            timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: tolerance);
                     }
-                    catch (AppException busyRobot) when (busyRobot.Code == "robot_busy" && queueZone == DeadlockRetreatZone)
+                    catch (AppException robotBusy) when (robotBusy.Code == "robot_busy")
                     {
-                        // The cancelled NAVIGATE has not ended yet: send the retreat a second later.
-                        step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
-                        {
-                            [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1))
-                        };
-                        SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
-                        await SaveAndPublishAsync(cancellationToken);
-                        return false;
+                        // The previous command (a cancelled NAVIGATE, a positioning leg) has not fully closed yet.
+                        // Nothing tracked here is stale: retry a second later, within a bound.
+                        return await RetryLaterAsync(job, task, step, stepKey, now, "robot_busy", cancellationToken);
+                    }
+                    catch (DbUpdateConcurrencyException)
+                    {
+                        // The job was written meanwhile (the command's events, a hosted service): what this context
+                        // tracks is stale and cannot be saved. Start again from the stored job, then retry.
+                        db.ChangeTracker.Clear();
+                        var freshJob = await LoadJobAsync(job.Id, cancellationToken);
+                        var (freshTask, freshStep) = OrderedSteps(freshJob).First(x => x.Step.Id == step.Id);
+                        return await RetryLaterAsync(freshJob, freshTask, freshStep, stepKey, now, "concurrent update", cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -2414,6 +2536,11 @@ public sealed partial class JobExecutionEngine(
                         issued[SupersededCommandIdsKey] = supersededSemantic;
                     }
 
+                    if (recoveryTo is { } semanticRecovery)
+                    {
+                        issued[CancelRecoveryToKey] = JsonSerializer.SerializeToElement(semanticRecovery);
+                    }
+
                     step.OutputValues = issued;
                     await SaveAndPublishAsync(cancellationToken);
                     logger.LogInformation(
@@ -2429,6 +2556,13 @@ public sealed partial class JobExecutionEngine(
             }
 
             // Active Mode: segmented coordinator is sole motion authority (publisher issues MQTT).
+            if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null && recoveryTo is not null)
+            {
+                Fail(job, task, step, stepKey, "recovery_not_supported_in_traffic_mode",
+                    "Active Mode cannot drive to a recovery point.", DateTimeOffset.UtcNow);
+                return true;
+            }
+
             if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
             {
                 var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
@@ -2736,6 +2870,11 @@ public sealed partial class JobExecutionEngine(
             if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var superseded))
             {
                 outputs[SupersededCommandIdsKey] = superseded; // commands of earlier attempts (resume)
+            }
+
+            if (recoveryTo is { } legacyRecovery)
+            {
+                outputs[CancelRecoveryToKey] = JsonSerializer.SerializeToElement(legacyRecovery);
             }
 
             step.OutputValues = outputs;
@@ -3105,7 +3244,10 @@ public sealed partial class JobExecutionEngine(
         }
         else
         {
-            _pendingEvents.Add(new JobContainerStatusChanged(job.Id, container.TransportRequestId, container.ContainerId, status.ToString()));
+            _pendingEvents.Add(new JobContainerStatusChanged(job.Id, container.TransportRequestId, container.ContainerId, status.ToString())
+            {
+                FailureCode = container.FailureCode
+            });
         }
     }
 
@@ -3543,16 +3685,23 @@ public sealed partial class JobExecutionEngine(
 
     /// <summary>
     /// Operator cancel: job → CANCELLED; traffic CancelRequest (quarantine if occupied — no silent release).
+    /// Cancelling a Job that is already CANCELLED answers with it (idempotent); a COMPLETED / FAILED Job is refused.
+    /// Serialized with handover confirmations on the Job's row lock, so a drop-off confirmed first stays DELIVERED.
     /// </summary>
     public async Task<Job> CancelJobAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
     {
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var job = await LoadJobAsync(jobId, cancellationToken);
-        await CancelJobCoreAsync(job, reason, transaction, cancellationToken);
-        return job;
+        if (job.Status == JobStatus.CANCELLED)
+        {
+            return job;
+        }
+
+        return await CancelLoadedJobAsync(job, reason, transaction, cancellationToken);
     }
 
-    private async Task CancelJobCoreAsync(Job job, string? reason, IDbContextTransaction? transaction, CancellationToken cancellationToken)
+    private async Task<Job> CancelLoadedJobAsync(
+        Job job, string? reason, IDbContextTransaction? transaction, CancellationToken cancellationToken)
     {
         if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is { } terminal)
         {
@@ -3586,10 +3735,10 @@ public sealed partial class JobExecutionEngine(
                 segmentedTraffic.Epoch, null, reason ?? "OPERATOR_CANCEL"));
         }
 
-        // Active mode stops the robot through its traffic authority; every other mode needs an explicit CANCEL of
-        // the running NAVIGATE, otherwise the robot keeps driving to the goal of a cancelled Job.
-        if (robotId is Guid cancelRobotId
-            && (trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) != TrafficCoordinatorMode.Active)
+        // Every mode sends an explicit CANCEL of the running NAVIGATE, otherwise the robot keeps driving to the goal of
+        // a cancelled Job. Active mode also lost its traffic authority above; the CANCEL makes the robot drop the goal
+        // instead of waiting at the next stop point for an authority that never comes.
+        if (robotId is Guid cancelRobotId)
         {
             foreach (var running in OrderedSteps(job).Select(x => x.Step)
                          .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING))
@@ -3606,8 +3755,10 @@ public sealed partial class JobExecutionEngine(
             .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
             .ToDictionaryAsync(s => s.Id, cancellationToken);
 
+        // Only what has not finished: COMPLETED / SKIPPED / FAILED steps keep their result (history is not rewritten).
         foreach (var (task, step) in OrderedSteps(job)
-                     .Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.EXECUTING or JobStepStatus.WAITING))
+                     .Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.READY or JobStepStatus.EXECUTING
+                         or JobStepStatus.WAITING or JobStepStatus.PAUSED))
         {
             step.ErrorCode = "job_cancelled";
             step.ErrorMessage = reason ?? "Cancelled by operator.";
@@ -3615,7 +3766,8 @@ public sealed partial class JobExecutionEngine(
             SetStepStatus(job, task, step, stepKey, JobStepStatus.CANCELLED, now);
         }
 
-        foreach (var task in job.JobTasks.Where(t => t.Status is JobTaskStatus.PENDING or JobTaskStatus.RUNNING))
+        foreach (var task in job.JobTasks.Where(t => t.Status is JobTaskStatus.PENDING or JobTaskStatus.READY
+                     or JobTaskStatus.RUNNING or JobTaskStatus.PAUSED))
         {
             task.Status = JobTaskStatus.CANCELLED;
             task.CompletedAt ??= now;
@@ -3635,6 +3787,7 @@ public sealed partial class JobExecutionEngine(
         job.FailureMessage = reason ?? "Cancelled by operator.";
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
         await SaveAndPublishAsync(cancellationToken, transaction);
+        return job;
     }
 
     /// <summary>FailureCode of a Job paused because its request was cancelled while cargo was on the robot (WH-04).</summary>
@@ -3652,31 +3805,33 @@ public sealed partial class JobExecutionEngine(
         string reason,
         CancellationToken cancellationToken = default)
     {
+        // Inspect cargo after any concurrently committed handover.
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var job = await LoadJobAsync(jobId, cancellationToken);
         var mine = job.JobContainers.Where(c => c.TransportRequestId == transportRequestId).ToList();
 
         if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is not null)
         {
-            return Outcomes(mine, ContainerCancelOutcome.AlreadyFinished);
+            return Outcomes(mine, _ => ContainerCancelOutcome.AlreadyFinished);
         }
 
         var onboard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).ToList();
         if (onboard.Count == 0)
         {
-            await CancelJobCoreAsync(job, $"Transport request cancelled: {reason}", transaction, cancellationToken);
-            return Outcomes(mine, ContainerCancelOutcome.Cancelled);
+            await CancelLoadedJobAsync(job, $"Transport request cancelled: {reason}", transaction, cancellationToken);
+            return Outcomes(mine, c => c.Status == JobContainerStatus.CANCELLED
+                ? ContainerCancelOutcome.Cancelled : ContainerCancelOutcome.AlreadyFinished);
         }
 
         var robotId = AssignedRobot(job);
         if (job.FailureCode != CargoOnboardCancelCode)
         {
             var now = DateTimeOffset.UtcNow;
+            var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+                .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                .ToDictionaryAsync(s => s.Id, cancellationToken);
             if (job.Status == JobStatus.RUNNING)
             {
-                var workflowSteps = await db.WorkflowSteps.AsNoTracking()
-                    .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
-                    .ToDictionaryAsync(s => s.Id, cancellationToken);
                 foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
                 {
                     ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
@@ -3690,6 +3845,8 @@ public sealed partial class JobExecutionEngine(
                 job.Status = JobStatus.PAUSED;
             }
 
+            // TRN-03: no new work after a cancel. Resuming this Job (deliver anyway) must only deliver what is on board.
+            SkipNotPickedUp(job, workflowSteps.ToDictionary(x => x.Key, x => x.Value.StepKey), $"Transport request cancelled: {reason}", now);
             job.FailureCode = CargoOnboardCancelCode;
             job.FailureMessage =
                 $"The transport request was cancelled while {onboard.Count} container(s) were on the robot. "
@@ -3720,15 +3877,19 @@ public sealed partial class JobExecutionEngine(
                 cancellationToken);
         }
 
-        return Outcomes(mine, ContainerCancelOutcome.RecoveryRequired);
+        return Outcomes(mine, c => c.Status switch
+        {
+            JobContainerStatus.ONBOARD => ContainerCancelOutcome.RecoveryRequired,
+            JobContainerStatus.CANCELLED when c.FailureCode == DetailCancelledCode => ContainerCancelOutcome.Cancelled,
+            _ => ContainerCancelOutcome.AlreadyFinished
+        });
 
-        static IReadOnlyList<ContainerCancelOutcome> Outcomes(IEnumerable<JobContainer> containers, string unfinished) =>
+        static IReadOnlyList<ContainerCancelOutcome> Outcomes(IEnumerable<JobContainer> containers, Func<JobContainer, string> outcome) =>
             containers.Select(c => new ContainerCancelOutcome(c.ContainerId, c.JobId, c.Status switch
             {
                 JobContainerStatus.DELIVERED => ContainerCancelOutcome.AlreadyDelivered,
-                JobContainerStatus.FAILED => ContainerCancelOutcome.AlreadyFinished,
-                JobContainerStatus.CANCELLED => ContainerCancelOutcome.Cancelled,
-                _ => unfinished
+                JobContainerStatus.CANCELLED when c.FailureCode == CancelHandedOverCode => ContainerCancelOutcome.AlreadyHandedOver,
+                _ => outcome(c)
             })).ToList();
     }
 

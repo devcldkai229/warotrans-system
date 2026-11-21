@@ -21,10 +21,18 @@ public sealed class JobContainerStatusChangedHandler(
     TransportationDbContext db,
     StockPostingProcessor postings,
     IIntegrationEventPublisher events,
-    ILogger<JobContainerStatusChangedHandler> logger) : IIntegrationEventHandler<JobContainerStatusChanged>
+    ILogger<JobContainerStatusChangedHandler> logger,
+    Features.Cancellation.TransportCancellationService? cancellations = null) : IIntegrationEventHandler<JobContainerStatusChanged>
 {
     public async Task HandleAsync(JobContainerStatusChanged integrationEvent, CancellationToken cancellationToken = default)
     {
+        if (integrationEvent.Status == "CANCELLED" && integrationEvent.FailureCode == CancellationProgress.CancelHandedOverCode)
+        {
+            // Close the detail with the cancellation's stock posting so the container stays reserved in between.
+            await RefreshCancellationAsync(integrationEvent.TransportRequestId, cancellationToken);
+            return;
+        }
+
         await using var transaction = await TransportRequestWriteLock.AcquireAsync(db, integrationEvent.TransportRequestId, cancellationToken);
         var request = await db.TransportRequests
             .Include(r => r.Details)
@@ -92,6 +100,26 @@ public sealed class JobContainerStatusChangedHandler(
             request.Status);
 
         await events.PublishAsync(TransportRequestEvents.Progressed(request, detail), cancellationToken);
+        await RefreshCancellationAsync(request.Id, cancellationToken);
+    }
+
+    /// <summary>TRN-03: a container of a request being cancelled moved (delivered, unloaded): the cancellation may be done.</summary>
+    private async Task RefreshCancellationAsync(Guid requestId, CancellationToken cancellationToken)
+    {
+        if (cancellations is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await cancellations.RefreshForRequestAsync(requestId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Never fail the handover that raised the event; the background refresh catches up.
+            logger.LogWarning(ex, "Refreshing the cancellation of request {RequestId} failed", requestId);
+        }
     }
 
     /// <returns>The new posting, or null when this event moves no stock or was queued before.</returns>

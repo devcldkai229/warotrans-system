@@ -24,6 +24,14 @@
     "plugins": [
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow WaroTrans to read QR codes and barcodes from your photos.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Allow WaroTrans to scan container barcodes.",

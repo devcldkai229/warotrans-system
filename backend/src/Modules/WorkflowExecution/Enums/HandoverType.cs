@@ -8,5 +8,8 @@ public enum HandoverType
     MAINTENANCE,
     INSPECTION,
     CHARGE_CONNECT,
-    CHARGE_DISCONNECT
+    CHARGE_DISCONNECT,
+
+    /// <summary>TRN-03: cargo taken off a robot by a person after its request was cancelled.</summary>
+    CANCEL_UNLOAD
 }

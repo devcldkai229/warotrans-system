@@ -185,6 +185,13 @@ public sealed class StockPostingTests
             return Task.CompletedTask;
         }
 
+        public Task RecordCancelHandoverAsync(ContainerCancelHandover handover, CancellationToken cancellationToken = default)
+        {
+            ThrowIfFailing();
+            Calls.Add("CANCEL_HANDOVER");
+            return Task.CompletedTask;
+        }
+
         private void ThrowIfFailing()
         {
             if (FailNext > 0)

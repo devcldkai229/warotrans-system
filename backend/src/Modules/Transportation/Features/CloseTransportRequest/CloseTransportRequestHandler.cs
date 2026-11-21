@@ -4,6 +4,7 @@ using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Enums;
+using WaroTrans.Transportation.Features.Cancellation;
 using WaroTrans.Transportation.Features.GetTransportRequest;
 using WaroTrans.Transportation.Features.Shared;
 using WaroTrans.Transportation.IntegrationEvents;
@@ -12,7 +13,14 @@ using WaroTrans.WorkflowExecution.Contracts;
 
 namespace WaroTrans.Transportation.Features.CloseTransportRequest;
 
-public sealed record CloseTransportRequestRequest(string? Reason);
+/// <param name="ReasonCode">TRN-03 cancel only: why, as a code (OPERATOR_REQUESTED by default).</param>
+/// <param name="IdempotencyKey">TRN-03 cancel only: the same key returns the same cancellation.</param>
+/// <param name="DetailIds">TRN-03 cancel only: cancel just these details, before they are picked up.</param>
+public sealed record CloseTransportRequestRequest(
+    string? Reason,
+    string? ReasonCode = null,
+    string? IdempotencyKey = null,
+    IReadOnlyList<Guid>? DetailIds = null);
 
 /// <summary>
 /// TRN-01 cancel and TRN-02 reject. Both are idempotent: repeating the same call answers with the current request and
@@ -25,65 +33,19 @@ public sealed class CloseTransportRequestHandler(
     ICurrentUser currentUser,
     IIntegrationEventPublisher events,
     GetTransportRequestHandler reader,
+    TransportCancellationService cancellations,
     ILogger<CloseTransportRequestHandler> logger)
 {
+    /// <summary>
+    /// TRN-01 / TRN-03: the cancel is a long-running cancellation (<see cref="TransportCancellationService"/>); this
+    /// answers with the request as it stands right after the Jobs were told. Follow the rest through
+    /// GET /transport-requests/{id}/cancellation.
+    /// </summary>
     public async Task<GetTransportRequestResponse> CancelAsync(Guid id, CloseTransportRequestRequest body, CancellationToken cancellationToken)
     {
-        var reason = RequireReason(body);
-        TransportRequest request;
-        await using (var transaction = await TransportRequestWriteLock.AcquireAsync(db, id, cancellationToken))
-        {
-            request = await LoadAsync(id, cancellationToken);
-            if (request.Status == TransportRequestStatus.CANCELLED)
-                return await reader.HandleAsync(id, cancellationToken);
-
-            // CANCELLING again re-runs the idempotent fan-out if a first attempt failed half-way.
-            if (request.Status != TransportRequestStatus.CANCELLING)
-            {
-                var jobs = await JobsOfAsync(id, cancellationToken);
-                Guard(TransportRequestActionPolicy.Cancel, request, jobs);
-                var now = DateTimeOffset.UtcNow;
-                request.Status = TransportRequestStatus.CANCELLING;
-                request.CancelledBy = currentUser.AccountId;
-                request.CancelReason = reason;
-                request.CancelRequestedAt = now;
-                request.UpdatedAt = now;
-                await db.SaveChangesAsync(cancellationToken);
-            }
-
-            if (transaction is not null)
-                await transaction.CommitAsync(cancellationToken);
-        }
-
-        // Jobs take their own locks. Release the request lock before calling WorkflowExecution.
-        var outcomes = await jobControl.CancelForRequestAsync(id, reason, cancellationToken);
-        var inRecovery = outcomes
-            .Where(o => o.Outcome == ContainerCancelOutcome.RecoveryRequired)
-            .Select(o => o.ContainerId)
-            .ToHashSet();
-        var delivered = outcomes.Where(o => o.Outcome == ContainerCancelOutcome.AlreadyDelivered)
-            .Select(o => o.ContainerId)
-            .ToHashSet();
-
-        await using (var transaction = await TransportRequestWriteLock.AcquireAsync(db, id, cancellationToken))
-        {
-            db.ChangeTracker.Clear();
-            request = await LoadAsync(id, cancellationToken);
-            request.ApplyCancel(request.CancelledBy ?? currentUser.AccountId, request.CancelReason ?? reason,
-                inRecovery, DateTimeOffset.UtcNow, delivered);
-            await db.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-                await transaction.CommitAsync(cancellationToken);
-        }
-
-        logger.LogInformation(
-            "TransportRequest {RequestCode} cancelled by {Actor}: {Recovery} container(s) waiting for recovery, status {Status}",
-            request.RequestCode, currentUser.Username, inRecovery.Count, request.Status);
-
-        await events.PublishAsync(TransportRequestEvents.Progressed(request), cancellationToken);
-        await events.PublishAsync(
-            new TransportRequestClosedByOperator(
-                request.Id, request.RequestCode, request.Status, request.RequestedBy, currentUser.AccountId, reason, inRecovery.Count),
+        await cancellations.RequestAsync(
+            id,
+            new CancelTransportRequestBody(body.Reason, body.ReasonCode, body.IdempotencyKey, body.DetailIds),
             cancellationToken);
         return await reader.HandleAsync(id, cancellationToken);
     }
