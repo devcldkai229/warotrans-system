@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { PlanResponse, PlaybackSpan, TrajectoryResponse } from '@/shared/api/evidence'
-import { cameraState, correctDrift, footage, mediaAt, pathUntil, planAt, poseAt } from './replayModel'
+import {
+  cameraState,
+  correctDrift,
+  currentEventId,
+  footage,
+  formatElapsed,
+  incidentJump,
+  mediaAt,
+  pathUntil,
+  planAt,
+  poseAt,
+} from './replayModel'
 
 const T0 = Date.parse('2026-11-17T10:00:00Z')
 const iso = (offsetMs: number) => new Date(T0 + offsetMs).toISOString()
@@ -102,5 +113,30 @@ describe('correctDrift', () => {
     expect(correctDrift(10, 10.1, 1)).toEqual({ kind: 'rate', rate: 0.95 })
     expect(correctDrift(10, 9.9, 2)).toEqual({ kind: 'rate', rate: 2.1 })
     expect(correctDrift(10, 10.05, 1)).toEqual({ kind: 'none' })
+  })
+})
+
+describe('player helpers', () => {
+  const ev = (id: string, offsetMs: number, severity = 'WARNING') => ({ id, severity, occurredAtUtc: iso(offsetMs) })
+  const events = [ev('a', 10_000), ev('info', 15_000, 'INFO'), ev('b', 30_000, 'ERROR')]
+
+  it('shows elapsed time as m:ss, and hours when long', () => {
+    expect(formatElapsed(0)).toBe('0:00')
+    expect(formatElapsed(83_400)).toBe('1:23')
+    expect(formatElapsed(3_723_000)).toBe('1:02:03')
+  })
+
+  it('jumps to the next or previous incident a few seconds early, skipping INFO and the one under the cursor', () => {
+    expect(incidentJump(events, T0, 1)).toBe(T0 + 7000)
+    expect(incidentJump(events, T0 + 7000, 1)).toBe(T0 + 27_000)
+    expect(incidentJump(events, T0 + 27_000, 1)).toBeNull()
+    expect(incidentJump(events, T0 + 27_000, -1)).toBe(T0 + 7000)
+    expect(incidentJump(events, T0 + 7000, -1)).toBeNull()
+  })
+
+  it('knows which event the cursor is at', () => {
+    expect(currentEventId(events, T0 + 11_000)).toBe('a')
+    expect(currentEventId(events, T0 + 16_000)).toBe('info')
+    expect(currentEventId(events, T0 + 25_000)).toBeNull()
   })
 })
