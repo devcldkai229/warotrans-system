@@ -21,6 +21,7 @@ public sealed class IssueReport
     public Guid? StorageLocationId { get; set; }
     public Guid? RobotId { get; set; }
     public string? ProblemCode { get; set; }
+    public HazardLocation? Hazard { get; set; }
 
     [BsonRepresentation(BsonType.String)]
     public IssueType IssueType { get; set; }
@@ -49,3 +50,6 @@ public sealed class IssueReport
     public Guid? ResolvedBy { get; set; }
     public string? Resolution { get; set; }
 }
+
+public sealed record HazardLocation(
+    Guid WarehouseId, Guid MapVersionId, Guid? EdgeId, Guid? ZoneId, Guid? EndpointId, string LocationCode, string HazardType);

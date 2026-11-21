@@ -15,6 +15,7 @@ public sealed class JobRecoveryCaseConfiguration : IEntityTypeConfiguration<JobR
         builder.Property(x => x.Status).HasMaxLength(30).IsRequired();
         builder.Property(x => x.Reason).HasMaxLength(500).IsRequired();
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.Version).IsConcurrencyToken();
         builder.Property(x => x.ContainerIds)
             .HasColumnType("jsonb")
             .HasConversion(

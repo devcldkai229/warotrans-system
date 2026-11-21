@@ -17,4 +17,7 @@ public sealed class RobotInteractionConfirmMessage
     public Guid ContainerId { get; set; }
     public Guid EndpointId { get; set; }
     public string Source { get; set; } = "ROBOT_BUTTON";
+    public Guid? RequestMessageId { get; set; }
+    public RobotHandoverStop? HandoverStop { get; set; }
+    public RobotRecoveryTransfer? RecoveryTransfer { get; set; }
 }

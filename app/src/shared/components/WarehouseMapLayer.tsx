@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { getAccessToken, getApiBaseUrl } from '../api/client';
 import type { MapVersionDetailDto } from '../api/navigationApi';
 import type { RobotResponse } from '../types/contracts';
 import { mapRobotSnapshots } from '../maps/mapModel';
 import { zoneColor } from '../maps/mapPresentation';
-import { fitMapViewport, hasMapCalibration, resolveMapPreviewUri, worldToMapPercent } from '../utils/mapCoordinates';
+import { useMapPreviewSource } from '../maps/hooks/useMapPreviewSource';
+import { fitMapViewport, hasMapCalibration, worldToMapPercent } from '../utils/mapCoordinates';
 import { Button, Text } from '../ui';
 import { ThemeColors } from '../theme/colors';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
@@ -23,13 +23,14 @@ interface Props {
   contentInsets?: { top: number; bottom: number };
   updateMode?: MapUpdateMode;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
+  onManualDrive?: (robotId: string) => void;
 }
 
 /** Actual map raster and surveyed geometry. Robot poses use the map's origin, rotation and resolution. */
 export function WarehouseMapLayer(props: Props) {
   return interactiveMapEnabled && props.map && hasMapCalibration(props.map) ? <MapViewport map={props.map} robots={props.robots}
     selectedRobot={props.selectedRobot} onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={props.contentInsets} title="Job Map"
-    onLocalizeRobot={props.onLocalizeRobot}/> : <LegacyWarehouseMapLayer {...props}/>;
+    onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}/> : <LegacyWarehouseMapLayer {...props}/>;
 }
 
 function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, loading = false, contentInsets = { top: 0, bottom: 0 }, updateMode = 'polling' }: Props) {
@@ -40,12 +41,9 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
   const valid = hasMapCalibration(geometry);
   const availableHeight = Math.max(0, bounds.height - contentInsets.top - contentInsets.bottom);
   const { width, height } = valid ? fitMapViewport(geometry, Math.max(0, bounds.width - 24), availableHeight) : { width: 0, height: 0 };
-  const uri = resolveMapPreviewUri(map?.previewImageUri, getApiBaseUrl(), getAccessToken());
-  const source = uri ? { uri } : null;
-  const [imageAttempt, setImageAttempt] = useState(0);
-  const imageKey = `${map?.id}:${uri}:${imageAttempt}`;
-  const [loadedImage, setLoadedImage] = useState<string | null>(null);
-  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const preview = useMapPreviewSource(map?.id, map?.previewImageUri, valid);
+  const source = preview.uri ? { uri: preview.uri } : null;
+  const imageKey = `${map?.id}:${preview.uri}:${preview.imageAttempt}`;
   const runtimeMap = map;
   const endpoints = runtimeMap?.endpoints.filter(endpoint => endpoint.mapVersionId === map?.id && endpoint.isEnabled) || [];
   return <View style={styles.root} onLayout={event => setBounds(event.nativeEvent.layout)}>
@@ -54,7 +52,7 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
         {source && (
           <>
             <Image key={imageKey} source={source} accessibilityLabel={`Map ${map?.code}`}
-              onLoad={() => setLoadedImage(imageKey)} onError={() => setFailedImage(imageKey)} resizeMode="stretch"
+              onLoad={preview.onImageLoad} onError={preview.onImageError} resizeMode="stretch"
               style={[
                 StyleSheet.absoluteFill,
                 { width, height },
@@ -65,7 +63,7 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
             ) : null}
           </>
         )}
-        {source && loadedImage !== imageKey && failedImage !== imageKey ? <ActivityIndicator style={styles.imageLoading} color={colors.primary} /> : null}
+        {preview.isLoading ? <ActivityIndicator style={styles.imageLoading} color={colors.primary} /> : null}
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
           {(runtimeMap?.zones || []).filter(zone => zone.mapVersionId === map?.id && zone.isActive && zone.geometry.type === 'Polygon').map(zone => {
             const rings = zone.geometry.coordinates.map(ring => ring.map(p => worldToMapPercent(p[0],p[1],geometry)));
@@ -107,9 +105,9 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
           </Pressable>;
         })}
       </View>}
-    {valid && (!source || failedImage === imageKey) ? <View style={[styles.imageError, { top: Math.max(72, contentInsets.top + 4) }]}>
-      <Text variant="caption" color={colors.warningText}>{!source ? 'Map Has No Preview Image · Geometry Only' : 'Map Image Could Not Be Loaded'}</Text>
-      {source ? <Button title="Retry Image" variant="outline" size="sm" onPress={() => setImageAttempt(attempt => attempt + 1)} /> : null}
+    {preview.hasError ? <View style={[styles.imageError, { top: Math.max(72, contentInsets.top + 4) }]}>
+      <Text variant="caption" color={colors.warningText}>{!preview.hasPreviewAsset ? 'Map Has No Preview Image · Geometry Only' : 'Map Image Could Not Be Loaded'}</Text>
+      {preview.hasPreviewAsset ? <Button title="Retry Image" variant="outline" size="sm" onPress={preview.retry} /> : null}
     </View> : null}
   </View>;
 }

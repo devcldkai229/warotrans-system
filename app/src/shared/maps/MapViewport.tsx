@@ -20,11 +20,11 @@ import {
   MapPin,
   Navigation,
   Scan,
+  SlidersHorizontal,
   Tag,
   X,
 } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
-import { getAccessToken, getApiBaseUrl } from '../api/client';
 import type { RobotResponse } from '../types/contracts';
 import { colors, ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
@@ -33,7 +33,8 @@ import { typography } from '../theme/typography';
 import { Button, SegmentedControl, StatusPill, Text } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
 import { triggerHaptic } from '../utils/haptics';
-import { resolveMapPreviewUri, worldToMapPercent } from '../utils/mapCoordinates';
+import { worldToMapPercent } from '../utils/mapCoordinates';
+import { useMapPreviewSource } from './hooks/useMapPreviewSource';
 import { BaseMapLayer } from './layers/BaseMapLayer';
 import { InfrastructureLayer } from './layers/InfrastructureLayer';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
@@ -64,6 +65,8 @@ interface Props {
   onLocalizeRobot?:(robotId:string,endpointId:string)=>Promise<void>;
   /** Pick mode: tapping a station hands it to the caller instead of opening its detail panel. */
   onPickEndpoint?:(endpoint:EndpointDto)=>void;
+  /** Given when the user may manually drive robots (robot.manual.drive). */
+  onManualDrive?:(robotId:string)=>void;
 }
 type LayerKey='stations'|'labels'|'zones'|'lanes'|'grid'|'scan';
 
@@ -197,7 +200,7 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   </View>;
 }
 
-function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot,onPickEndpoint}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
+function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot,onPickEndpoint,onManualDrive}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
   const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const layerItems = useMemo(() => getLayerItems(colors, isDark), [colors, isDark]);
@@ -210,14 +213,9 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
   const [sheet, setSheet] = useState<'layers' | 'endpoint' | 'robot' | null>(null);
   const [endpointId, setEndpointId] = useState<string | null>(null);
   const [labelsDetailed, setLabelsDetailed] = useState(false);
-  const [imageAttempt, setImageAttempt] = useState(0);
-  const [imageLoaded, setImageLoaded] = useState('');
-  const [imageFailed, setImageFailed] = useState('');
   const model = useMemo(() => findMapModel(map), [map]);
-  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl(), getAccessToken());
-  const imageKey = `${map.id}:${uri}:${imageAttempt}`;
-  const loaded = useCallback(() => setImageLoaded(imageKey), [imageKey]);
-  const failed = useCallback(() => setImageFailed(imageKey), [imageKey]);
+  const raster = !model || layers.scan;
+  const preview = useMapPreviewSource(map.id, map.previewImageUri, raster);
   const robot = robots.find(r => r.code === selectedRobot && r.currentMapVersionId === map.id);
   const state = robot ? mapRobotState(robot, map, now, updateMode) : null;
   const endpoint = map.endpoints.find(e => e.id === endpointId && e.isEnabled && e.mapVersionId === map.id);
@@ -260,7 +258,6 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
     triggerHaptic('tap');
     setSheet('layers');
   };
-  const raster = !model || layers.scan;
 
   const activeZones = useMemo(() => (map.zones || []).filter(z => z.mapVersionId === map.id && z.isActive), [map]);
   const mapRobots = useMemo(() => robots.filter(r => r.currentMapVersionId === map.id), [robots, map.id]);
@@ -296,7 +293,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
       <GestureDetector gesture={camera.gesture} touchAction="none">
         <View style={StyleSheet.absoluteFill} accessibilityLabel="Interactive warehouse map">
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { transformOrigin: '0px 0px' }, camera.sceneStyle]}>
-            <BaseMapLayer map={map} frame={frame} model={model} scan={layers.scan} grid={layers.grid} zoom={camera.settledZoom} uri={uri} imageAttempt={imageAttempt} onImageLoad={loaded} onImageError={failed} />
+            <BaseMapLayer map={map} frame={frame} model={model} scan={layers.scan} grid={layers.grid} zoom={camera.settledZoom} uri={preview.uri} imageAttempt={preview.imageAttempt} onImageLoad={preview.onImageLoad} onImageError={preview.onImageError} />
             <InfrastructureLayer map={map} frame={frame} zones={layers.zones} lanes={layers.lanes} zoom={camera.settledZoom} />
           </Animated.View>
           {layers.grid ? <GridLabels map={map} frame={frame} camera={camera} /> : null}
@@ -313,8 +310,8 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
           <RobotLayer map={map} frame={frame} robots={robots} camera={camera} selected={selectedRobot} now={now} updateMode={updateMode} onSelect={selectRobot} />
         </View>
       </GestureDetector>
-      {raster && uri && imageLoaded !== imageKey && imageFailed !== imageKey ? <ActivityIndicator style={styles.loading} color={colors.primary} pointerEvents="none" /> : null}
-      {raster && (!uri || imageFailed === imageKey) ? <View style={styles.imageError}><Text variant="caption" color="warningText">{uri ? 'Map Image Could Not Be Loaded' : 'No Preview Image · Geometry Only'}</Text>{uri ? <Button title="Retry Image" variant="outline" size="sm" onPress={() => setImageAttempt(v => v + 1)} /> : null}</View> : null}
+      {preview.isLoading ? <ActivityIndicator style={styles.loading} color={colors.primary} pointerEvents="none" /> : null}
+      {preview.hasError ? <View style={styles.imageError}><Text variant="caption" color="warningText">{preview.hasPreviewAsset ? 'Map Image Could Not Be Loaded' : 'No Preview Image · Geometry Only'}</Text>{preview.hasPreviewAsset ? <Button title="Retry Image" variant="outline" size="sm" onPress={preview.retry} /> : null}</View> : null}
     </View>
     <View style={fullBleed ? { position: 'absolute', right: 14, top: top, zIndex: 10 } : (horizontal ? { position: 'absolute', left: 12, top, right: 12 } : { position: 'absolute', right: 12, top })}>
       <MapHud horizontal={horizontal} zoom={camera.settledZoom} following={following} canFollow={!!state?.canFollow && active} onFit={camera.fit} onZoom={camera.zoomBy} onFollow={() => setFollowing(value => !value)} onLayers={() => setSheet('layers')} />
@@ -737,6 +734,20 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                     close();
                   }}
                 />
+                {onManualDrive ? (
+                  <Button
+                    title="Manual Drive"
+                    variant="outline"
+                    size="md"
+                    icon={SlidersHorizontal}
+                    fullWidth
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      close();
+                      onManualDrive(robot.id);
+                    }}
+                  />
+                ) : null}
                 <Button
                   title="Back to Layers"
                   variant="ghost"

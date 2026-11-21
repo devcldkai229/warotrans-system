@@ -21,12 +21,16 @@ export const PERMISSIONS = {
   jobTakeover: 'job.takeover',
   jobPause: 'job.pause',
   robotRead: 'robot.read',
+  robotManage: 'robot.manage',
+  robotConfigure: 'robot.configure',
   robotStop: 'robot.stop',
   /** LOCALIZE at a known endpoint; never makes the robot move. */
   robotLocalize: 'robot.localize',
   robotManualDrive: 'robot.manual.drive',
   notificationRead: 'notification.read',
+  issueRead: 'issue.read',
   issueCreate: 'issue.create',
+  issueManage: 'issue.manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

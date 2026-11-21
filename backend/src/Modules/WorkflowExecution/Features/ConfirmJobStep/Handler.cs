@@ -1,4 +1,5 @@
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.Shared;
@@ -25,7 +26,7 @@ public sealed class ConfirmJobStepHandler(
             jobStepId,
             request.ContainerId,
             HumanConfirmationSource.StaffApp(userId, request.Note, request.ScannedBarcode, request.InspectionResult),
-            cancellationToken);
+            cancellationToken, requireStop: currentUser.Role == AppRoles.Staff);
 
         var jobId = await db.JobSteps.AsNoTracking()
             .Where(s => s.Id == jobStepId)

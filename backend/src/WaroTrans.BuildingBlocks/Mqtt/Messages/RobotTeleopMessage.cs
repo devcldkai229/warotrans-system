@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace WaroTrans.BuildingBlocks.Mqtt.Messages;
 
 /// <summary>
@@ -20,4 +22,13 @@ public sealed class RobotTeleopMessage
     public bool Assist { get; set; } = true;
 
     public DateTimeOffset SentAt { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? LeaseId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? Seq { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? ClientSentAt { get; set; }
 }

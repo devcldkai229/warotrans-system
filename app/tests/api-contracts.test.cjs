@@ -49,12 +49,42 @@ test('a staff incident becomes an IssueReport on the operations API', async () =
   assert.deepEqual(plain({
     type: request.body.issueType,
     severity: request.body.severity,
+    problemCode: request.body.problemCode,
     jobId: request.body.jobId,
     step: request.body.jobStepId,
     containerId: request.body.containerId,
     robotId: request.body.robotId,
-  }), { type: 'CONTAINER', severity: 'HIGH', jobId: 'job-1', step: 'step-1', containerId: 'container-1', robotId: 'robot-1' });
+  }), { type: 'CONTAINER', severity: 'HIGH', problemCode: 'CONTAINER_DAMAGED', jobId: 'job-1', step: 'step-1', containerId: 'container-1', robotId: 'robot-1' });
   assert.match(request.body.description, /torn/);
+
+  await load('src/shared/api/executionApi.ts').reportTaskProblem(
+    undefined,
+    { reason: 'WRONG_CONTAINER', note: 'found CTN-999' },
+    undefined,
+    { jobId: 'job-1', containerId: 'container-2' },
+  );
+  assert.equal(request.body.issueType, 'CONTAINER');
+  assert.equal(request.body.severity, 'HIGH');
+  assert.equal(request.body.problemCode, 'WRONG_CONTAINER');
+  assert.equal(request.body.jobStepId, null);
+
+  // Without containerId, problemCode stays null so CreateIssueValidator (Requires JobId + ContainerId) never breaks.
+  await load('src/shared/api/executionApi.ts').reportTaskProblem(
+    undefined,
+    { reason: 'MISSING_CONTAINER', note: 'no tote selected' },
+    undefined,
+    { jobId: 'job-1' },
+  );
+  assert.equal(request.body.problemCode, null);
+
+  await load('src/shared/api/executionApi.ts').reportTaskProblem(
+    undefined,
+    { reason: 'AMR_PATH_BLOCKED', note: 'pallet in aisle' },
+    undefined,
+    { jobId: 'job-1', robotId: 'robot-1' },
+  );
+  assert.equal(request.body.issueType, 'JOB');
+  assert.equal(request.body.problemCode, null);
 });
 test('transport submits the chosen workflow and preserves storage locations and levels', async () => {
   let request;

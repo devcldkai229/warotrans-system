@@ -1,9 +1,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
+const plain = (value) => JSON.parse(JSON.stringify(value));
 const {
-  humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, mergeMyJobIdsWithStops,
+  humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, isBlockingHandoverIssue,
+  isWaitingForHandoverOffer, mergeMyJobIdsWithStops, recordStopScan, shouldUseLegacyStepHandover, stopScanProgress,
 } = createLoader()('src/features/jobs/handoverData.ts');
+const { mapJobDetailToAppJobItem } = createLoader()('src/features/jobs/jobData.ts');
+const {
+  computeHeartbeatIntervalMs, pickPreBeginHeartbeatTargets,
+} = createLoader()('src/features/jobs/handoverHeartbeat.ts');
 const confirmedStep = (source, actor = {}) => ({
   id: 'handover-1', stepType: 'HUMAN_INTERACTION', operationCode: 'PICKUP_CONFIRM', status: 'COMPLETED',
   outputValues: { confirmed: true, confirmationSource: source, confirmedAt: '2026-10-27T05:00:00Z', ...actor },
@@ -213,4 +219,190 @@ test('handover stop helpers classify pre-arrival/ready/in-progress/other and mer
     'staff-a',
   );
   assert.deepEqual([...merged].sort(), ['job-1', 'job-2']);
+});
+
+test('confirmHandoverStop sends moveId, version and deduplicated container scans, propagating 409 holds', async () => {
+  const requests = [];
+  const api = loadApi(async (url, init, token) => {
+    requests.push({ url, method: init.method, body: JSON.parse(init.body), token });
+    return { ...rawJob(), status: 'RUNNING' };
+  });
+
+  const job = await api.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, [
+    { containerId: 'ctn-1', barcode: ' CTN-0001 ' },
+    { containerId: 'ctn-2', barcode: 'CTN-0002' },
+  ]);
+  assert.equal(job.id, 'job');
+  assert.deepEqual(requests[0], {
+    url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/confirm',
+    method: 'POST',
+    body: {
+      moveId: 'move-1',
+      version: 4,
+      scans: [
+        { containerId: 'ctn-1', barcode: 'CTN-0001' },
+        { containerId: 'ctn-2', barcode: 'CTN-0002' },
+      ],
+    },
+    token: 'staff-token',
+  });
+
+  await assert.rejects(
+    () => api.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, []),
+    error => error.code === 'handover_scan_manifest_mismatch',
+  );
+  await assert.rejects(
+    () => api.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, [
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+    ]),
+    error => error.code === 'handover_scan_manifest_mismatch',
+  );
+
+  const blockedApi = loadApi(async () => {
+    const err = new Error('Resolve the wrong or missing container issue before confirming.');
+    err.status = 409;
+    err.code = 'handover_issue_blocking';
+    throw err;
+  });
+  await assert.rejects(
+    () => blockedApi.confirmHandoverStop('job-1', 'stop-1', 'move-1', 4, [{ containerId: 'ctn-1', barcode: 'CTN-0001' }]),
+    error => error.status === 409 && error.code === 'handover_issue_blocking',
+  );
+});
+
+test('recordStopScan, stopScanProgress and isBlockingHandoverIssue track multi-container scans and blocking issues', () => {
+  const stop = stopOffer({
+    containers: [
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+      { containerId: 'ctn-2', barcode: 'CTN-0002' },
+    ],
+  });
+
+  const step1 = recordStopScan(stop, {}, ' ctn-0001 ');
+  assert.equal(step1.matchedContainerId, 'ctn-1');
+  assert.equal(step1.duplicate, false);
+
+  const dup = recordStopScan(stop, step1.nextScans, 'CTN-0001');
+  assert.equal(dup.matchedContainerId, 'ctn-1');
+  assert.equal(dup.duplicate, true);
+
+  const wrong = recordStopScan(stop, step1.nextScans, 'CTN-9999');
+  assert.equal(wrong.matchedContainerId, null);
+  assert.deepEqual(plain(stopScanProgress(stop, step1.nextScans)), {
+    total: 2,
+    scanned: 1,
+    complete: false,
+    missingIds: ['ctn-2'],
+    payload: [{ containerId: 'ctn-1', barcode: 'CTN-0001' }],
+  });
+
+  const step2 = recordStopScan(stop, step1.nextScans, 'CTN-0002');
+  assert.deepEqual(plain(stopScanProgress(stop, step2.nextScans)), {
+    total: 2,
+    scanned: 2,
+    complete: true,
+    missingIds: [],
+    payload: [
+      { containerId: 'ctn-1', barcode: 'CTN-0001' },
+      { containerId: 'ctn-2', barcode: 'CTN-0002' },
+    ],
+  });
+
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'WRONG_CONTAINER', status: 'OPEN' }), true);
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'MISSING_CONTAINER', status: 'IN_PROGRESS' }), true);
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'WRONG_CONTAINER', status: 'RESOLVED' }), false);
+  assert.equal(isBlockingHandoverIssue({ problemCode: 'BARCODE_UNREADABLE', status: 'OPEN' }), false);
+});
+
+test('handover work-zone selection, pre-begin heartbeat and post-begin extend follow M2 contracts', async () => {
+  const requests = [];
+  const api = loadApi(async (url, init = {}, token) => {
+    requests.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null, token });
+    if (url.endsWith('/work-zone')) {
+      return init.method === 'PUT'
+        ? { workZone: JSON.parse(init.body).zoneId ? { warehouseId: 'wh-1', code: 'ZONE-AREA-A' } : null }
+        : { workZone: { warehouseId: 'wh-1', code: 'ZONE-AREA-A' } };
+    }
+    return stopOffer({
+      claimedBy: 'staff-a',
+      version: 5,
+      workDeadline: '2026-11-20T09:10:00Z',
+      heartbeatIntervalSeconds: 5,
+      availableActions: [
+        { action: 'EXTEND', allowed: true, reason: null },
+      ],
+    });
+  });
+
+  const currentZone = await api.getMyHandoverWorkZone();
+  assert.deepEqual(plain(currentZone), { warehouseId: 'wh-1', code: 'ZONE-AREA-A' });
+  assert.deepEqual(plain(await api.setMyHandoverWorkZone(' zone-1 ')), { warehouseId: 'wh-1', code: 'ZONE-AREA-A' });
+  assert.equal(await api.setMyHandoverWorkZone(null), null);
+
+  await api.heartbeatHandoverStop('job-1', 'stop-1', 'move-1', 2);
+  const extended = await api.extendHandoverStop('job-1', 'stop-1', 'move-1', 2);
+  assert.equal(api.isHandoverStopActionAllowed(extended, 'EXTEND'), true);
+
+  assert.deepEqual(plain(requests), [
+    { url: '/api/workflow-execution/handover-stops/work-zone', method: 'GET', body: null },
+    { url: '/api/workflow-execution/handover-stops/work-zone', method: 'PUT', body: { zoneId: 'zone-1' }, token: 'staff-token' },
+    { url: '/api/workflow-execution/handover-stops/work-zone', method: 'PUT', body: { zoneId: null }, token: 'staff-token' },
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/heartbeat', method: 'POST', body: { moveId: 'move-1', version: 2 }, token: 'staff-token' },
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/extend', method: 'POST', body: { moveId: 'move-1', version: 2 }, token: 'staff-token' },
+  ]);
+
+  const targets = pickPreBeginHeartbeatTargets(
+    [
+      stopOffer({ id: 'pre-begin', claimedBy: 'staff-a', beganAt: null, heartbeatIntervalSeconds: 5 }),
+      stopOffer({ id: 'already-begun', claimedBy: 'staff-a', beganAt: '2026-11-20T08:01:00Z', heartbeatIntervalSeconds: 3 }),
+      stopOffer({ id: 'other-staff', claimedBy: 'staff-b', beganAt: null, heartbeatIntervalSeconds: 5 }),
+    ],
+    'staff-a',
+  );
+  assert.deepEqual(targets.map(item => item.id), ['pre-begin']);
+  assert.equal(computeHeartbeatIntervalMs(targets), 5000);
+});
+
+test('grouped handover stops never fall back to legacy per-step confirmation even before claim or MOVE +10s', () => {
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: null }, undefined), true);
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: 'stop-1' }, undefined), false);
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: null }, stopOffer({ claimedBy: null })), false);
+  assert.equal(shouldUseLegacyStepHandover({ activeHandoverStopId: 'stop-1' }, stopOffer({ claimedBy: 'staff-a' })), false);
+
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'RUNNING', activeHandoverStopId: 'stop-1' }, undefined),
+    true,
+  );
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'RUNNING', activeHandoverStopId: 'stop-1' }, stopOffer()),
+    false,
+  );
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'PAUSED', activeHandoverStopId: 'stop-1' }, undefined),
+    false,
+  );
+  assert.equal(
+    isWaitingForHandoverOffer({ status: 'RUNNING', activeHandoverStopId: null }, undefined),
+    false,
+  );
+
+  const mapped = mapJobDetailToAppJobItem(
+    {
+      id: 'job-grouped',
+      jobNo: 'JOB-100',
+      workflowId: 'wf-1',
+      mapVersionId: 'map-1',
+      provisioningKey: 'prov-1',
+      status: 'RUNNING',
+      createdAt: '2026-11-20T08:00:00Z',
+      containers: [],
+      tasks: [],
+      activeHandoverStopId: 'stop-early-1',
+    },
+    'staff-a',
+  );
+  assert.equal(mapped.activeHandoverStopId, 'stop-early-1');
+  assert.equal(shouldUseLegacyStepHandover(mapped, undefined), false);
+  assert.equal(isWaitingForHandoverOffer(mapped, undefined), true);
 });

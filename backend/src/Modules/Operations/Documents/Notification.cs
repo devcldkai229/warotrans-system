@@ -24,6 +24,7 @@ public sealed class Notification
 
     /// <summary>The robot it is about; a Technician only sees robot notifications for robots in their scope.</summary>
     public Guid? RobotId { get; set; }
+    public Guid? WarehouseId { get; set; }
 
     [BsonRepresentation(BsonType.String)]
     public NotificationType Type { get; set; }

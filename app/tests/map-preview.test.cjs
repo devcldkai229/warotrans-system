@@ -5,7 +5,8 @@ const models = require('../src/shared/maps/rosMapModels.json');
 const load = createLoader({ './rosMapModels.json': models });
 const { findMapModel, mapViewport, displayPoint, mapHeading, mapRobotSnapshots, spacedLocations } = load('src/shared/maps/mapModel.ts');
 const { zoneColor, zoneLabel } = load('src/shared/maps/mapPresentation.ts');
-const { fitMapViewport, hasMapCalibration, resolveMapPreviewUri } = load('src/shared/utils/mapCoordinates.ts');
+const { fitMapViewport, hasMapCalibration, isBackendMapAssetUri, resolveMapPreviewUri } = load('src/shared/utils/mapCoordinates.ts');
+const { createMapPreviewAuthController, isTokenExpired, shouldProactivelyRefreshMapToken } = load('src/shared/maps/mapPreviewAuth.ts');
 const modelMap = { ...models[0].geometry, contentHash: models[0].contentHash, frameId: 'map' };
 const map = { imageWidthPixels: 234, imageHeightPixels: 164, resolution: 0.05, originX: -0.6, originY: -0.6, originYaw: 0 };
 
@@ -98,4 +99,79 @@ test('raster fitting and URL handling retain an honest fallback for unpublished 
   assert.equal(resolveMapPreviewUri('/map-assets/map.png','http://localhost:5090/'),'http://localhost:5090/map-assets/map.png');
   assert.equal(resolveMapPreviewUri('https://assets.example/map.png','http://localhost:5090'),'https://assets.example/map.png');
   for (const uri of [null,undefined,'','pending://map.png','s3://private/map.png']) assert.equal(resolveMapPreviewUri(uri,'http://localhost:5090'),null);
+});
+
+test('map preview auth keeps JWT strictly same-origin, blocks unsafe schemes, and retries once after token refresh', async () => {
+  const apiBase = 'http://localhost:5090';
+  assert.equal(isBackendMapAssetUri('/map-assets/w/m/map-preview.png', apiBase), true);
+  assert.equal(isBackendMapAssetUri('http://localhost:5090/map-assets/w/m/map-preview.png', apiBase), true);
+  assert.equal(isBackendMapAssetUri('https://cdn.example/map-assets/map.png', apiBase), false);
+  assert.equal(isBackendMapAssetUri('http://evil.example:5090/map-assets/map.png', apiBase), false);
+  assert.equal(isBackendMapAssetUri('//evil.example/map-assets/map.png', apiBase), false);
+
+  // Never leak JWT to cross-origin URLs or protocol-relative / javascript: / data: URIs.
+  assert.equal(resolveMapPreviewUri('https://assets.example/map.png', apiBase, 'secret-jwt'), 'https://assets.example/map.png');
+  assert.equal(resolveMapPreviewUri('http://other-host:5090/map-assets/m.png', apiBase, 'secret-jwt'), 'http://other-host:5090/map-assets/m.png');
+  assert.equal(resolveMapPreviewUri('//evil.example/map.png', apiBase, 'secret-jwt'), null);
+  assert.equal(resolveMapPreviewUri('javascript:alert(1)', apiBase, 'secret-jwt'), null);
+
+  // Same-origin relative and absolute map-assets URLs replace any stale access_token cleanly.
+  assert.equal(
+    resolveMapPreviewUri('/map-assets/m.png?access_token=old', apiBase, 'new tok'),
+    'http://localhost:5090/map-assets/m.png?access_token=new%20tok',
+  );
+  assert.equal(
+    resolveMapPreviewUri('http://localhost:5090/map-assets/m.png?access_token=old', apiBase, 'new-tok'),
+    'http://localhost:5090/map-assets/m.png?access_token=new-tok',
+  );
+
+  // Expiry threshold helpers
+  assert.equal(shouldProactivelyRefreshMapToken('tok', 10), true);
+  assert.equal(shouldProactivelyRefreshMapToken('tok', 90), false);
+  assert.equal(isTokenExpired('tok', -1), true);
+
+  // Proactive refresh when expired + failed refresh enters safe error state without retrying endlessly
+  let token = 'expired-tok';
+  let seconds = -5;
+  let refreshCalls = 0;
+  const expiredFailCtrl = createMapPreviewAuthController({
+    getToken: () => token,
+    tokenSecondsLeft: () => seconds,
+    refreshToken: async () => { refreshCalls += 1; return null; },
+    isBackendAsset: () => true,
+  });
+  const prepFail = await expiredFailCtrl.prepare();
+  assert.equal(prepFail.ok, false);
+  assert.equal(expiredFailCtrl.hasFailed, true);
+  assert.equal(refreshCalls, 1);
+
+  // Image 401/error retries AT MOST ONCE after refresh yields a new token
+  token = 'stale-tok';
+  seconds = 120;
+  let forceRefreshCalls = 0;
+  const retryOnceCtrl = createMapPreviewAuthController({
+    getToken: () => token,
+    tokenSecondsLeft: () => seconds,
+    refreshToken: async (minSec) => {
+      forceRefreshCalls += 1;
+      assert.equal(minSec, Number.POSITIVE_INFINITY);
+      token = 'fresh-tok';
+      return token;
+    },
+    isBackendAsset: () => true,
+  });
+  const firstErr = await retryOnceCtrl.onImageError('stale-tok');
+  assert.equal(firstErr.retried, true);
+  assert.equal(firstErr.token, 'fresh-tok');
+  assert.equal(forceRefreshCalls, 1);
+
+  const secondErr = await retryOnceCtrl.onImageError('fresh-tok');
+  assert.equal(secondErr.retried, false);
+  assert.equal(retryOnceCtrl.hasFailed, true);
+  assert.equal(forceRefreshCalls, 1);
+
+  // Manual retry resets the single-retry budget
+  await retryOnceCtrl.retryManual();
+  assert.equal(retryOnceCtrl.hasRetriedRefresh, false);
+  assert.equal(retryOnceCtrl.hasFailed, false);
 });

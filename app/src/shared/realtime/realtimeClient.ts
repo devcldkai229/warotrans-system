@@ -75,8 +75,8 @@ export interface ServerNotificationEvent {
 export function toLiveNotification(data: ServerNotificationEvent): LiveNotificationEvent {
   const category: LiveNotificationEvent['category'] =
     data.kind === 'ROBOT_BATTERY_LOW' ? 'BATTERY_LOW'
-      : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' ? 'JOB_ASSIGNED'
-        : data.kind.startsWith('ISSUE') && data.kind !== 'ISSUE_RESOLVED' ? 'HAZARD'
+      : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' || data.kind.startsWith('HANDOVER_') ? 'JOB_ASSIGNED'
+        : data.kind === 'WAREHOUSE_HAZARD' || data.kind === 'JOB_RECOVERY_REQUIRED' || (data.kind.startsWith('ISSUE') && data.kind !== 'ISSUE_RESOLVED') ? 'HAZARD'
           : 'SYSTEM';
   return {
     id: data.id,
@@ -126,6 +126,11 @@ export interface TrafficUpdatedEvent {
   occurredAt: string;
 }
 
+export interface HandoverStopsChangedEvent {
+  jobId: string;
+  stopId: string;
+}
+
 export type RealtimeEventHandler<T> = (data: T) => void;
 
 class RealtimeClient {
@@ -137,6 +142,7 @@ class RealtimeClient {
   private notificationListeners = new Set<RealtimeEventHandler<LiveNotificationEvent>>();
   private transportStatusListeners = new Set<RealtimeEventHandler<TransportStatusEvent>>();
   private jobUpdatedListeners = new Set<RealtimeEventHandler<JobUpdatedRealtimeEvent>>();
+  private handoverStopsChangedListeners = new Set<RealtimeEventHandler<HandoverStopsChangedEvent>>();
   private healthListeners = new Set<RealtimeEventHandler<RobotHealthEvent>>();
   private trafficListeners = new Set<RealtimeEventHandler<TrafficUpdatedEvent>>();
   private connectionStateListeners = new Set<(connected: boolean) => void>();
@@ -201,6 +207,10 @@ class RealtimeClient {
 
       conn.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
         this.jobUpdatedListeners.forEach((fn) => fn(data));
+      });
+
+      conn.on('handoverStopsChanged', (data: HandoverStopsChangedEvent) => {
+        this.handoverStopsChangedListeners.forEach((fn) => fn(data));
       });
 
       conn.on('robotHealthUpdated', (data: RobotHealthEvent) => {
@@ -281,6 +291,11 @@ class RealtimeClient {
   public onJobUpdated(fn: RealtimeEventHandler<JobUpdatedRealtimeEvent>): () => void {
     this.jobUpdatedListeners.add(fn);
     return () => this.jobUpdatedListeners.delete(fn);
+  }
+
+  public onHandoverStopsChanged(fn: RealtimeEventHandler<HandoverStopsChangedEvent>): () => void {
+    this.handoverStopsChangedListeners.add(fn);
+    return () => this.handoverStopsChangedListeners.delete(fn);
   }
 
   public onHealthUpdated(fn: RealtimeEventHandler<RobotHealthEvent>): () => void {

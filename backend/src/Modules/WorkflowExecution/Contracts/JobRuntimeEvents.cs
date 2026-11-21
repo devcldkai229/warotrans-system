@@ -22,7 +22,8 @@ public sealed record JobStatusChanged(
     string JobNo,
     string Status,
     Guid? RobotId,
-    string? FailureCode) : IIntegrationEvent
+    string? FailureCode,
+    Guid? MapVersionId = null) : IIntegrationEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;

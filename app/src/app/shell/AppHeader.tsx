@@ -11,6 +11,7 @@ import { BrandMark } from '../../shared/components/BrandMark';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { AccountSheet } from './AccountSheet';
 import { NotificationSheet } from './NotificationSheet';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { useRealtime } from '../../shared/realtime';
 import { useAuth } from '../../features/auth/authContext';
 import { useNavigation } from '../navigation/NavigationContext';
@@ -122,6 +123,11 @@ export function AppHeader({
         initials={avatarInitials}
         onClose={() => setIsAccountOpen(false)}
         onLogout={onLogout}
+        onOpenManualDrive={
+          sessionCan(session, PERMISSIONS.robotManualDrive)
+            ? () => navigate('manual_drive')
+            : undefined
+        }
       />
 
       <NotificationSheet

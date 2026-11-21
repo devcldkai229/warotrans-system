@@ -29,9 +29,13 @@ import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import type { IssueStatus } from '../../shared/types/contracts';
 import type { IssueAndPauseOutcome, IssueReceipt } from '../jobs/jobData';
+import { IssuePhotoSection } from '../safety/IssuePhotoSection';
 
 export type IncidentCategory =
+  | 'WRONG_CONTAINER'
+  | 'MISSING_CONTAINER'
   | 'CONTAINER_DAMAGED'
   | 'BARCODE_UNREADABLE'
   | 'SHELF_BLOCKED'
@@ -42,6 +46,7 @@ export interface IssueSubmitInput {
   category: IncidentCategory;
   notes: string;
   pauseJob: boolean;
+  containerId?: string;
   existingIssue?: IssueReceipt | null;
 }
 
@@ -53,8 +58,19 @@ interface IssueReportingModalProps {
   robotCode?: string;
   jobId?: string;
   containerCode?: string;
+  containers?: { containerId: string; code: string }[];
+  initialCategory?: IncidentCategory;
+  initialContainerId?: string;
   canPause?: boolean;
 }
+
+const CONTAINER_CATEGORIES = new Set<IncidentCategory>([
+  'WRONG_CONTAINER',
+  'MISSING_CONTAINER',
+  'CONTAINER_DAMAGED',
+  'BARCODE_UNREADABLE',
+  'QUANTITY_MISMATCH',
+]);
 
 const CATEGORIES: {
   id: IncidentCategory;
@@ -62,6 +78,18 @@ const CATEGORIES: {
   desc: string;
   icon: 'triangle' | 'scan' | 'warehouse' | 'box' | 'octagon';
 }[] = [
+  {
+    id: 'WRONG_CONTAINER',
+    title: 'Wrong container at stop · Blocks Confirm',
+    desc: 'Scanned or onboard tote does not match the handover manifest',
+    icon: 'triangle',
+  },
+  {
+    id: 'MISSING_CONTAINER',
+    title: 'Missing container at stop · Blocks Confirm',
+    desc: 'Expected tote cannot be found at pickup or on robot bay',
+    icon: 'box',
+  },
   {
     id: 'CONTAINER_DAMAGED',
     title: 'Container damaged / crushed',
@@ -102,10 +130,16 @@ export function IssueReportingModal({
   robotCode = 'Unassigned',
   jobId = '',
   containerCode,
+  containers = [],
+  initialCategory,
+  initialContainerId,
   canPause = false,
 }: IssueReportingModalProps) {
   const { styles, colors } = useThemedStyles(createStyles);
-  const [selectedCat, setSelectedCat] = useState<IncidentCategory>('CONTAINER_DAMAGED');
+  const [selectedCat, setSelectedCat] = useState<IncidentCategory>(initialCategory ?? 'CONTAINER_DAMAGED');
+  const [selectedContainerId, setSelectedContainerId] = useState<string | undefined>(
+    initialContainerId ?? containers[0]?.containerId,
+  );
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState<'report' | 'pause' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -114,14 +148,15 @@ export function IssueReportingModal({
 
   useEffect(() => {
     if (visible) {
-      setSelectedCat('CONTAINER_DAMAGED');
+      setSelectedCat(initialCategory ?? 'CONTAINER_DAMAGED');
+      setSelectedContainerId(initialContainerId ?? containers[0]?.containerId);
       setNotes('');
       setIsSubmitting(null);
       setSubmitError(null);
       setCreatedIssue(null);
       setPauseUncertain(false);
     }
-  }, [visible, jobId, containerCode]);
+  }, [visible, jobId, containerCode, initialCategory, initialContainerId, containers]);
 
   const handleAction = async (shouldPause: boolean) => {
     if (isSubmitting) return;
@@ -129,10 +164,12 @@ export function IssueReportingModal({
     setIsSubmitting(shouldPause ? 'pause' : 'report');
     setSubmitError(null);
     try {
+      const isContainerCategory = CONTAINER_CATEGORIES.has(selectedCat);
       const outcome = await onSubmit({
         category: selectedCat,
         notes,
         pauseJob: shouldPause,
+        containerId: isContainerCategory ? selectedContainerId : undefined,
         existingIssue: createdIssue,
       });
       if (outcome.pauseError) {
@@ -257,20 +294,70 @@ export function IssueReportingModal({
             </View>
           </View>
 
+          {CONTAINER_CATEGORIES.has(selectedCat) && containers.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Affected Container</Text>
+              <View style={styles.containerChipRow}>
+                {containers.map((item) => {
+                  const chosen = selectedContainerId === item.containerId;
+                  return (
+                    <Pressable
+                      key={item.containerId}
+                      disabled={formLocked}
+                      onPress={() => {
+                        triggerHaptic('tap');
+                        setSelectedContainerId(item.containerId);
+                      }}
+                      style={[styles.containerChip, chosen && styles.containerChipSelected, formLocked && styles.locked]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: chosen, disabled: formLocked }}
+                    >
+                      <Text style={[styles.containerChipText, chosen && styles.containerChipTextSelected]}>
+                        {item.code}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {(selectedCat === 'WRONG_CONTAINER' || selectedCat === 'MISSING_CONTAINER') && (
+                <Text style={styles.blockingHint}>
+                  Wrong or missing container issues block handover confirmation until verified with the expected container barcode.
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* Photo Evidence */}
           <View style={styles.evidenceCard}>
             <View style={styles.evidenceHeader}>
               <Text style={styles.sectionLabel}>Photo evidence</Text>
               <View style={styles.evidenceBadge}>
-                <Text style={styles.evidenceBadgeText}>Unavailable</Text>
+                <Text style={styles.evidenceBadgeText}>Optional</Text>
               </View>
             </View>
-            <View style={styles.evidenceUnavailable}>
-              <Camera size={16} color={colors.textMuted} />
-              <Text style={styles.evidenceUnavailableText}>
-                Photo upload is not configured on this server yet. Submit the report without a photo.
-              </Text>
-            </View>
+            {createdIssue && typeof createdIssue.version === 'number' ? (
+              <IssuePhotoSection
+                issue={{
+                  id: createdIssue.id,
+                  version: createdIssue.version,
+                  status: createdIssue.status as IssueStatus,
+                  evidence: createdIssue.evidence ?? [],
+                }}
+                canUpload
+                onUploaded={(updated) => {
+                  setCreatedIssue(updated);
+                  void onRefreshJob?.();
+                }}
+                onRefreshIssue={onRefreshJob}
+              />
+            ) : (
+              <View style={styles.evidenceUnavailable}>
+                <Camera size={16} color={colors.textMuted} />
+                <Text style={styles.evidenceUnavailableText}>
+                  Attach up to 4 JPEG or PNG photos (max 2 MiB each) right after creating the ticket from Reported Issues on this Job.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* 3. Operator Notes */}
@@ -468,6 +555,39 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   catTitleSelected: {
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  containerChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  containerChip: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+  },
+  containerChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  containerChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: typography.fontMono,
+    color: colors.textPrimary,
+  },
+  containerChipTextSelected: {
+    color: colors.primaryText,
+  },
+  blockingHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.warningText,
+    fontFamily: typography.fontSans,
   },
   checkBadge: {
     width: 20,

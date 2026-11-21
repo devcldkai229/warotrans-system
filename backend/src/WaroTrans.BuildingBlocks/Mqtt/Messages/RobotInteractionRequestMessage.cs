@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace WaroTrans.BuildingBlocks.Mqtt.Messages;
 
 /// <summary>
@@ -15,4 +17,10 @@ public sealed class RobotInteractionRequestMessage
     public Guid ContainerId { get; set; }
     public Guid EndpointId { get; set; }
     public DateTimeOffset SentAt { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RobotHandoverStop? HandoverStop { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RobotRecoveryTransfer? RecoveryTransfer { get; set; }
 }

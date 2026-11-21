@@ -17,7 +17,9 @@ public sealed class JobTask
     public Guid? HandoverClaimedBy { get; set; }
     public Guid? HandoverClaimMoveId { get; set; }
     public DateTimeOffset? HandoverClaimedAt { get; set; }
+    public DateTimeOffset? HandoverHeartbeatAt { get; set; }
     public DateTimeOffset? HandoverBeganAt { get; set; }
+    public DateTimeOffset? HandoverWorkDeadline { get; set; }
     public DateTimeOffset? HandoverConfirmedAt { get; set; }
     public int HandoverVersion { get; set; }
 

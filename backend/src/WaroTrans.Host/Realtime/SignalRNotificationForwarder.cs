@@ -47,6 +47,14 @@ public sealed class SignalRNotificationForwarder(IHubContext<NotificationsHub> h
                 // Only Technicians join robot:{id} groups (everyone else is in robots:all), and only for their robots.
                 groups.Add(RealtimeGroups.Robot(robotId));
             }
+            else if (role == AppRoles.Staff && e.WarehouseId is { } warehouseId)
+            {
+                groups.Add(RealtimeGroups.StaffWarehouse(warehouseId));
+            }
+            else if (role == AppRoles.Technician && e.WarehouseId is { } technicianWarehouseId)
+            {
+                groups.Add(RealtimeGroups.TechnicianWarehouse(technicianWarehouseId));
+            }
             else
             {
                 groups.Add(RealtimeGroups.Role(role));

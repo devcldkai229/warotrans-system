@@ -4,7 +4,7 @@ import { BackHandler, Linking, Platform } from 'react-native';
 export type MainTab = 'home' | 'jobs' | 'transport';
 export type AppScreen = MainTab | 'job_detail' | 'job_monitoring' | 'transport_create' | 'create_container'
   | 'stock_vouchers' | 'stock_voucher_create' | 'stock_voucher_detail'
-  | 'inventory_lookup' | 'live_map' | 'payload_recovery' | 'fleet_recall' | 'replenishment'
+  | 'inventory_lookup' | 'live_map' | 'manual_drive' | 'payload_recovery' | 'fleet_recall' | 'replenishment'
   | 'point_to_point' | 'block_path' | 'transport_history' | 'transport_detail' | 'offline_hud' | 'scanner_hud' | 'scanner';
 type Entry = { screen: AppScreen; params: Record<string, any> };
 export interface NavigationState { currentScreen: AppScreen; activeTab: MainTab; params: Record<string, any> }
@@ -17,7 +17,7 @@ interface NavigationContextType extends NavigationState {
 }
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 const screens = new Set<AppScreen>(['home','jobs','transport','job_detail','job_monitoring','transport_create',
-  'create_container','stock_vouchers','stock_voucher_create','stock_voucher_detail','inventory_lookup','live_map','payload_recovery','fleet_recall','replenishment','point_to_point',
+  'create_container','stock_vouchers','stock_voucher_create','stock_voucher_detail','inventory_lookup','live_map','manual_drive','payload_recovery','fleet_recall','replenishment','point_to_point',
   'block_path','transport_history','transport_detail','offline_hud','scanner_hud','scanner']);
 export function isMainTabScreen(screen: string): screen is MainTab { return ['home','jobs','transport'].includes(screen); }
 function tabFor(screen: AppScreen): MainTab {
@@ -35,14 +35,14 @@ export function parseNavigationUrl(url: string): Entry {
     'home-map':'home','home-pulse':'home','jobs-my':'jobs','jobs-global':'jobs','jobs-history':'jobs','jobs-empty':'jobs',
     'transport-hub':'transport','job-detail':'job_detail','handover-hud':'job_detail','mismatch-modal':'job_detail',
     'job-monitoring':'job_monitoring','transport-new':'transport_create','dispatch':'transport_create',
-    'create-container':'create_container','inventory-lookup':'inventory_lookup','live-map':'live_map','rescue':'payload_recovery',
+    'create-container':'create_container','inventory-lookup':'inventory_lookup','live-map':'live_map','manual-drive':'manual_drive','rescue':'payload_recovery',
     'stock-vouchers':'stock_vouchers','stock-voucher-new':'stock_voucher_create','stock-voucher':'stock_voucher_detail',
     'payload-recovery':'payload_recovery','maintenance':'fleet_recall','fleet-recall':'fleet_recall','point-to-point':'point_to_point',
     'block-path':'block_path','transport-history':'transport_history','transport-detail':'transport_detail','offline-hud':'offline_hud','scanner-hud':'scanner_hud',
   };
   const screen = aliases[raw] || (screens.has(raw as AppScreen) ? raw as AppScreen : 'home');
   const params: Record<string, any> = {};
-  for (const key of ['modal','view','workflow','container','robotId','requestId','warehouseId','voucherId','voucherType','target','route','source','destination','qty','repeatRequestId']) {
+  for (const key of ['modal','view','workflow','container','robotId','requestId','issueId','warehouseId','voucherId','voucherType','target','route','source','destination','qty','repeatRequestId']) {
     const value = query.get(key); if (value !== null) params[key] = value;
   }
   if (query.get('job') || query.get('jobId')) params.jobId = query.get('job') || query.get('jobId');

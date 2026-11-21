@@ -14,6 +14,7 @@ import { JobsScreen } from '../../features/jobs/JobsScreen';
 import { BarcodeScannerHUD } from '../../features/monitoring/BarcodeScannerHUD';
 import { JobLiveMapScreen } from '../../features/monitoring/JobLiveMapScreen';
 import { OfflineBannerHUD } from '../../features/monitoring/OfflineBannerHUD';
+import { ManualDriveScreen } from '../../features/fleet/ManualDriveScreen';
 import { BlockPathHazardScreen } from '../../features/safety/BlockPathHazardScreen';
 import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
 import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
@@ -76,6 +77,8 @@ export function AppNavigator() {
         return <InventoryLookupScreen />;
       case 'live_map':
         return <JobLiveMapScreen />;
+      case 'manual_drive':
+        return <ManualDriveScreen />;
       case 'payload_recovery':
         return <PayloadRecoveryScreen />;
       case 'fleet_recall':

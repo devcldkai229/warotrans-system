@@ -55,6 +55,21 @@ public static class GeoJsonGeometry
         return points;
     }
 
+    public static bool ContainsPoint(JsonElement polygon, double x, double y)
+    {
+        var ring = ParsePolygonRing(polygon);
+        var inside = false;
+        for (var i = 1; i < ring.Count; i++)
+        {
+            var start = ring[i - 1];
+            var end = ring[i];
+            if ((start[1] > y) != (end[1] > y)
+                && x < start[0] + (end[0] - start[0]) * (y - start[1]) / (end[1] - start[1]))
+                inside = !inside;
+        }
+        return inside;
+    }
+
     public static IReadOnlyList<double[]> ParsePolygonRing(JsonElement geometry)
     {
         EnsureType(geometry, "Polygon");

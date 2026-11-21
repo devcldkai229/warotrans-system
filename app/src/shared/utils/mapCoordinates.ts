@@ -18,19 +18,79 @@ export function fitMapViewport(map: MapGeometry, width: number, height: number) 
   return { width: map.imageWidthPixels * scale, height: map.imageHeightPixels * scale };
 }
 
+function parseHttpUrl(raw: string): URL | null {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isBackendMapAssetUri(
+  uri: string | null | undefined,
+  apiBaseUrl: string,
+): boolean {
+  const trimmed = uri?.trim();
+  if (!trimmed || trimmed.startsWith('pending://') || trimmed.startsWith('s3://') || trimmed.startsWith('//')) {
+    return false;
+  }
+  const base = parseHttpUrl(apiBaseUrl);
+  if (!base) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+    const parsed = parseHttpUrl(trimmed);
+    return Boolean(parsed && parsed.origin === base.origin && parsed.pathname.startsWith('/map-assets/'));
+  }
+  try {
+    const resolved = new URL(trimmed, `${base.origin}/`);
+    return resolved.origin === base.origin;
+  } catch {
+    return false;
+  }
+}
+
+function appendAccessToken(baseUrlWithoutToken: string, accessToken?: string | null): string {
+  if (!accessToken) return baseUrlWithoutToken;
+  return `${baseUrlWithoutToken}${baseUrlWithoutToken.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(accessToken)}`;
+}
+
 /**
  * Map files need a signed-in user (POL-04) and an image request cannot carry the Authorization header on every
- * platform, so a backend-relative asset gets the access token in the query (as SignalR does).
+ * platform, so a same-origin backend asset gets the access token in the query (as SignalR does). External origins
+ * never receive the bearer JWT.
  */
 export function resolveMapPreviewUri(
   uri: string | null | undefined,
   apiBaseUrl: string,
   accessToken?: string | null,
 ): string | null {
-  if (!uri || uri.startsWith('pending://') || uri.startsWith('s3://')) return null;
-  if (/^https?:\/\//i.test(uri)) return uri;
-  const url = `${apiBaseUrl.replace(/\/+$/, '')}/${uri.replace(/^\/+/, '')}`;
-  return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(accessToken)}` : url;
+  const trimmed = uri?.trim();
+  if (!trimmed || trimmed.startsWith('pending://') || trimmed.startsWith('s3://') || trimmed.startsWith('//')) {
+    return null;
+  }
+  const base = parseHttpUrl(apiBaseUrl);
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+    const parsed = parseHttpUrl(trimmed);
+    if (!parsed) return null;
+    if (!base || parsed.origin !== base.origin) {
+      return trimmed;
+    }
+    if (!parsed.pathname.startsWith('/map-assets/')) {
+      return trimmed;
+    }
+    parsed.searchParams.delete('access_token');
+    return appendAccessToken(parsed.toString(), accessToken);
+  }
+  if (!base) return null;
+  try {
+    const rawUrl = `${apiBaseUrl.replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`;
+    const resolved = new URL(rawUrl);
+    if (resolved.origin !== base.origin) return null;
+    resolved.searchParams.delete('access_token');
+    return appendAccessToken(resolved.toString(), accessToken);
+  } catch {
+    return null;
+  }
 }
 
 /** ROS map origin is the lower-left pixel; screen coordinates start at the top left. */

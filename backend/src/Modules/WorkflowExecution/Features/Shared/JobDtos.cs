@@ -69,7 +69,8 @@ public sealed record JobDetailDto(
     // Which trip (robot load) of its request this Job is, and how many trips the request has.
     int? TripNo = null,
     int? TripCount = null,
-    JobOperatorPauseDto? OperatorPause = null);
+    JobOperatorPauseDto? OperatorPause = null,
+    Guid? ActiveHandoverStopId = null);
 
 public sealed record JobOperatorPauseDto(Guid? PausedBy, DateTimeOffset? PausedAt, string? Reason);
 
@@ -125,7 +126,8 @@ public sealed record JobStepDto(
 
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
 public sealed class JobQueries(
-    WorkflowExecutionDbContext db, ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IAccountNameLookup? accountNames = null)
+    WorkflowExecutionDbContext db, ICurrentUser currentUser, StaffWarehouseScope warehouseScope,
+    JobExecutionEngine engine, IAccountNameLookup? accountNames = null)
 {
     public async Task<JobDetailDto> GetDetailAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -169,9 +171,12 @@ public sealed class JobQueries(
             : null;
         var resumeDenial = warehouseDenial
             ?? JobActionPolicy.ResumeOwnershipReason(job, currentUser.AccountId, currentUser.Role == AppRoles.Admin);
+        if (resumeDenial is null && job.Status == JobStatus.PAUSED)
+            resumeDenial = await engine.TransferredRecoveryResumeDenialAsync(job, cancellationToken);
         var operatorPause = job.Status == JobStatus.PAUSED && job.FailureCode == JobExecutionEngine.OperatorPausedCode
             ? new JobOperatorPauseDto(job.OperatorPausedBy, job.OperatorPausedAt, job.FailureMessage)
             : null;
+        var groupedStop = StopHandover.Read(job, steps.ToDictionary(pair => pair.Key, pair => pair.Value.OperationCode));
 
         return new JobDetailDto(
             job.Id,
@@ -230,7 +235,8 @@ public sealed class JobQueries(
             job.BlockingReason,
             Number(job.ContextValues, "batchSequenceNo"),
             tripCount,
-            operatorPause);
+            operatorPause,
+            groupedStop?.StopTask.Id);
     }
 
     public async Task<(IReadOnlyList<JobSummaryDto> Items, int Total)> ListAsync(

@@ -119,7 +119,7 @@ public static class HumanTaskEndpoints
                 StaffWarehouseScope warehouseScope, CancellationToken cancellationToken) =>
             {
                 await warehouseScope.EnsureStepAccessAsync(id, currentUser, cancellationToken);
-                await engine.ClaimHumanStepAsync(id, Actor(currentUser), cancellationToken);
+                await engine.ClaimHumanStepAsync(id, Actor(currentUser), cancellationToken, requireStop: currentUser.Role == AppRoles.Staff);
                 return Results.Ok(await DetailOfStepAsync(id, queries, db, cancellationToken));
             })
             .RequirePermission(Permissions.JobOperate)
@@ -199,7 +199,8 @@ public static class HumanTaskEndpoints
                     throw new DomainValidationException("Name at least one container.", "container_ids_required");
                 }
 
-                var results = await engine.ConfirmHandoverBatchAsync(id, type, request.ContainerIds, Actor(currentUser), request.Note, cancellationToken);
+                var results = await engine.ConfirmHandoverBatchAsync(id, type, request.ContainerIds, Actor(currentUser), request.Note,
+                    cancellationToken, requireStop: currentUser.Role == AppRoles.Staff);
                 return Results.Ok(new ConfirmHandoverBatchResponse(results, await queries.GetDetailAsync(id, cancellationToken)));
             })
             .RequirePermission(Permissions.JobOperate)

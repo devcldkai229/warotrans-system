@@ -45,11 +45,16 @@ public sealed class CreateContainerBatchHandler(
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
+            // Serialize the request before allocating labels or inserting its set of unique receipt ordinals.
+            await WarehouseWriteLocks.ReceivingRequestAsync(db, request.RequestId!.Value, cancellationToken);
+            replay = await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken);
+            if (replay is not null) return replay;
+
             StockVoucher? voucher = null;
             if (request.StockVoucherId is { } voucherId)
             {
                 voucher = await WarehouseWriteLocks.VoucherAsync(db, voucherId, cancellationToken);
-                // A simultaneous creator may have committed while this request waited for the voucher lock.
+                // A host that only holds the voucher lock can have committed while this request waited.
                 replay = await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken);
                 if (replay is not null) return replay;
                 if (voucher.Type != StockVoucherType.INBOUND)

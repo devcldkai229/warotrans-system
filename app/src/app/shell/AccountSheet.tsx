@@ -1,4 +1,4 @@
-import { Globe, LogOut, Monitor, Moon, Sun } from 'lucide-react-native';
+import { Globe, LogOut, Monitor, Moon, SlidersHorizontal, Sun } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
@@ -22,6 +22,8 @@ export interface AccountSheetProps {
   initials: string;
   /** Omitted when the shell is embedded somewhere that owns sign-out itself. */
   onLogout?: () => void;
+  /** Provided when the account holds `robot.manual.drive`. */
+  onOpenManualDrive?: () => void;
 }
 
 const THEME_OPTIONS: ReadonlyArray<{
@@ -48,6 +50,7 @@ export function AccountSheet({
   operatorRole,
   initials,
   onLogout,
+  onOpenManualDrive,
 }: AccountSheetProps) {
   const topInset = useTopInset();
   const { mode, setMode, colors } = useTheme();
@@ -195,6 +198,25 @@ export function AccountSheet({
             </View>
           </View>
 
+          {/* Technician Manual Drive Action (permission-gated) */}
+          {onOpenManualDrive ? (
+            <Pressable
+              onPress={() => {
+                triggerHaptic('tap');
+                onClose();
+                onOpenManualDrive();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('Manual Drive')}
+              style={({ pressed }) => [styles.manualDriveBtn, pressed && styles.themeSegmentPressed]}
+            >
+              <SlidersHorizontal size={15} color={colors.primaryText} />
+              <Text variant="label" color="primaryText">
+                Manual Drive
+              </Text>
+            </Pressable>
+          ) : null}
+
           {/* Sign Out Action */}
           {onLogout ? (
             <Pressable
@@ -298,6 +320,17 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     themeSegmentTextActive: {
       fontWeight: '700',
+    },
+    manualDriveBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      minHeight: 44,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primaryLight,
     },
     signOutBtn: {
       flexDirection: 'row',

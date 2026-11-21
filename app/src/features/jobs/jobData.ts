@@ -1,5 +1,5 @@
 import type {
-  ActionAvailability, ContainerSlot, JobDetailResponse, JobOperatorPause, JobStatus,
+  ActionAvailability, ContainerSlot, IssueEvidenceDto, JobDetailResponse, JobOperatorPause, JobStatus,
   JobStepResponse, JobStepSummary, JobSummary, JobTaskResponse, WorkflowCode,
 } from '../../shared/types/contracts';
 import type { SemanticTone } from '../../shared/theme/colors';
@@ -14,6 +14,7 @@ export interface AppJobItem extends JobSummary {
   tasks: AppJobTaskItem[];
   availableActions?: ActionAvailability[];
   operatorPause?: JobOperatorPause | null;
+  activeHandoverStopId?: string | null;
   failureCode?: string | null;
   failureMessage?: string | null;
   activeTaskId?: string; assignedStaffId?: string; activeStepId?: string; activeStepOperation?: string;
@@ -123,6 +124,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
     workflowName: String(context.workflowName || 'Workflow'), status: detail.status,
     availableActions: detail.availableActions,
     operatorPause: detail.operatorPause ?? null,
+    activeHandoverStopId: detail.activeHandoverStopId ?? null,
     failureCode: detail.failureCode ?? null,
     failureMessage: detail.failureMessage ?? null,
     activeTaskId: typeof context.activeTaskId === 'string' ? context.activeTaskId : undefined, assignedStaffId,
@@ -175,6 +177,8 @@ export interface IssueReceipt {
   id: string;
   code: string;
   status: string;
+  version?: number;
+  evidence?: IssueEvidenceDto[];
 }
 
 export interface IssueAndPauseOutcome {

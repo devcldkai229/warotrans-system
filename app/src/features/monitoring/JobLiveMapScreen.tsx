@@ -42,7 +42,7 @@ const SHEET_FALLBACK_HEIGHT = 174;
 export function JobLiveMapScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
   const { session } = useAuth();
-  const { params, dockHeight, goBack } = useNavigation();
+  const { params, dockHeight, goBack, navigate } = useNavigation();
   const { lastJobUpdate } = useRealtime();
   const dockInset = dockReservedSpace(dockHeight);
   const [sheetHeight, setSheetHeight] = useState(0);
@@ -126,6 +126,9 @@ export function JobLiveMapScreen() {
         <WarehouseMapLayer map={activeMap} robots={fleetRobots}
           onLocalizeRobot={sessionCan(session, PERMISSIONS.robotLocalize)
             ? async (robotId, endpointId) => { await localizeRobot(robotId, endpointId); setToastFeedback('Localize command accepted.'); void fleet.refetch(); }
+            : undefined}
+          onManualDrive={sessionCan(session, PERMISSIONS.robotManualDrive)
+            ? (robotId) => navigate('manual_drive', { robotId })
             : undefined}
           selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 12, bottom: dockZoneBottom }} />
         {mapError && <View style={styles.toast}><Text style={styles.toastText}>{mapError}</Text></View>}

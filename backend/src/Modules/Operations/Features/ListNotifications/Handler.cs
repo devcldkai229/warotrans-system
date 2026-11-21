@@ -15,7 +15,9 @@ public sealed record ListNotificationsQuery(bool UnreadOnly, string? Type, strin
 public sealed class ListNotificationsHandler(
     OperationsMongoContext mongo,
     ICurrentUser currentUser,
-    IRobotAccessScope robotAccessScope)
+    IRobotAccessScope robotAccessScope,
+    IStaffOperatingWarehouse staffWarehouse,
+    IWarehouseRobotLookup robotLookup)
 {
     public const int DefaultTake = 30;
     public const int MaxTake = 100;
@@ -31,7 +33,7 @@ public sealed class ListNotificationsHandler(
         }
 
         var scope = await robotAccessScope.GetCurrentAsync(cancellationToken);
-        var visible = NotificationVisibility.VisibleTo(me, currentUser.Role, scope);
+        var visible = await NotificationVisibility.VisibleToAsync(me, currentUser.Role, scope, staffWarehouse, robotLookup, cancellationToken);
         var unread = Builders<Notification>.Filter.And(visible, NotificationVisibility.UnreadBy(me));
 
         var f = Builders<Notification>.Filter;

@@ -7,8 +7,10 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Traffic;
 using WaroTrans.Fleet.Traffic.StationPolicies;
 using WaroTrans.Navigation.Contracts;
@@ -256,6 +258,9 @@ public sealed partial class JobExecutionEngine(
         {
             throw new AppException("Only the operator who paused this Job or an Administrator can resume it.", 403, ownershipDenial);
         }
+
+        if (await TransferredRecoveryResumeDenialAsync(job, cancellationToken) is { } recoveryDenial)
+            throw new ConflictException("The transport request has stopped. Review the cargo before resuming.", recoveryDenial);
 
         var previousRobot = AssignedRobot(job);
         var targetRobotId = robotId ?? previousRobot
@@ -518,7 +523,8 @@ public sealed partial class JobExecutionEngine(
         Guid jobStepId,
         Guid? containerId,
         HumanConfirmationSource source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireStop = false)
     {
         var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
@@ -552,7 +558,7 @@ public sealed partial class JobExecutionEngine(
         }
 
         var now = DateTimeOffset.UtcNow;
-        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        await EnsureLegacyHandoverAllowedAsync(job, step, now, requireStop || source.Channel == ConfirmationSource.ROBOT_BUTTON, cancellationToken);
         EnsureNotClaimedByAnother(step, source.UserId, now);
         if (source.UserId is { } confirmer && step.ClaimedBy != confirmer)
         {
@@ -710,7 +716,7 @@ public sealed partial class JobExecutionEngine(
             ContainerIds = onBoard,
             CreatedAt = now
         });
-        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code));
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code, job.MapVersionId));
         await SaveAndPublishAsync(cancellationToken);
         logger.LogWarning("Job {JobNo}: robot failed with {Count} container(s) on board; recovery required", job.JobNo, onBoard.Count);
 
@@ -919,9 +925,27 @@ public sealed partial class JobExecutionEngine(
     /// comes back the usual way. It holds no assignment yet: the Job stays with the first robot until a person says the
     /// cargo moved. It counts as busy meanwhile.
     /// </summary>
-    public async Task<JobRecoveryCase> AssignRecoveryRobotAsync(Guid jobId, Guid robotId, Guid endpointId, CancellationToken cancellationToken = default)
+    public async Task<JobRecoveryCase> AssignRecoveryRobotAsync(
+        Guid jobId, Guid robotId, Guid endpointId, CancellationToken cancellationToken = default, RecoveryCaseAccess? access = null)
     {
+        await DispatchGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await AssignRecoveryRobotCoreAsync(jobId, robotId, endpointId, access, cancellationToken);
+        }
+        finally
+        {
+            DispatchGate.Release();
+        }
+    }
+
+    private async Task<JobRecoveryCase> AssignRecoveryRobotCoreAsync(
+        Guid jobId, Guid robotId, Guid endpointId, RecoveryCaseAccess? access, CancellationToken cancellationToken)
+    {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        EnsureRecoveryOwner(recovery, access);
+        if (access is not null) await EnsureRecoveryRequestsActiveAsync(job, cancellationToken);
         if (recovery.Status != JobRecoveryStatuses.Open)
         {
             throw new ConflictException("A robot is already on its way for this recovery.", "recovery_target_assigned");
@@ -937,7 +961,7 @@ public sealed partial class JobExecutionEngine(
         var busy = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
         EnsureRobotCanTakeJob(robot, job, busy);
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
-        EnsureCapacityAllows((await EvaluateDispatchAsync(job, busy, cancellationToken)).FirstOrDefault(c => c.RobotId == robotId), robot);
+        await EnsureRecoveryRobotReadyAsync(job, robot, busy, strict: access is not null, cancellationToken);
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
         if (pose is not { IsEnabled: true } || pose.MapVersionId != job.MapVersionId)
         {
@@ -987,8 +1011,11 @@ public sealed partial class JobExecutionEngine(
         recovery.ToRobotId = robotId;
         recovery.RecoveryEndpointId = endpointId;
         recovery.MoveStepId = step.Id;
-        await SaveAndPublishAsync(cancellationToken);
+        recovery.Version++;
+        await SaveAndPublishAsync(cancellationToken, transaction);
 
+        // The assignment and MOVE step are durable. Complete the dispatch even if the caller loses the response.
+        cancellationToken = CancellationToken.None;
         await StartMoveAsync(job, task, step, moveDefinition.StepKey, cancellationToken);
         if (step.Status == JobStepStatus.FAILED)
         {
@@ -999,6 +1026,7 @@ public sealed partial class JobExecutionEngine(
             recovery.ToRobotId = null;
             recovery.RecoveryEndpointId = null;
             recovery.MoveStepId = null;
+            recovery.Version++;
             await SaveAndPublishAsync(cancellationToken);
             throw new ConflictException($"Robot {robot.Code} could not be sent: {problem}", "recovery_move_failed");
         }
@@ -1008,20 +1036,41 @@ public sealed partial class JobExecutionEngine(
     }
 
     /// <summary>Calls back the robot that was on its way, so another can be sent or the first resumed.</summary>
-    public async Task<JobRecoveryCase> UnassignRecoveryRobotAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<JobRecoveryCase> UnassignRecoveryRobotAsync(
+        Guid jobId, CancellationToken cancellationToken = default, RecoveryCaseAccess? access = null)
     {
+        await DispatchGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await UnassignRecoveryRobotCoreAsync(jobId, access, cancellationToken);
+        }
+        finally
+        {
+            DispatchGate.Release();
+        }
+    }
+
+    private async Task<JobRecoveryCase> UnassignRecoveryRobotCoreAsync(
+        Guid jobId, RecoveryCaseAccess? access, CancellationToken cancellationToken)
+    {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        EnsureRecoveryOwner(recovery, access);
         if (recovery.Status != JobRecoveryStatuses.TargetAssigned)
         {
             throw new ConflictException("No robot is on its way for this recovery.", "recovery_no_target");
         }
+
+        if (recovery.ButtonArmId is not null)
+            throw new ConflictException("Review the transfer in progress before calling the robot back.", "recovery_button_armed");
 
         await EndRecoveryMoveAsync(job, recovery, cancellationToken);
         recovery.Status = JobRecoveryStatuses.Open;
         recovery.ToRobotId = null;
         recovery.RecoveryEndpointId = null;
         recovery.MoveStepId = null;
-        await SaveAndPublishAsync(cancellationToken);
+        recovery.Version++;
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return recovery;
     }
 
@@ -1051,14 +1100,40 @@ public sealed partial class JobExecutionEngine(
     /// no Container ever has two robots. The Job then waits PAUSED: an operator resumes it, and it continues to its
     /// original destination. Refused until the second robot has arrived.
     /// </summary>
-    public async Task<JobRecoveryCase> ConfirmRecoveryTransferAsync(
+    public Task<JobRecoveryCase> ConfirmRecoveryTransferAsync(
         Guid jobId,
         IReadOnlyCollection<Guid> containerIds,
         Guid confirmedBy,
         string? note,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RecoveryCaseAccess? access = null,
+        Guid? expectedRobotId = null,
+        IReadOnlyList<HandoverStopScan>? scans = null) =>
+        ConfirmRecoveryTransferCoreAsync(jobId, containerIds, confirmedBy, note, access, expectedRobotId, scans, null, cancellationToken);
+
+    private async Task<JobRecoveryCase> ConfirmRecoveryTransferCoreAsync(
+        Guid jobId, IReadOnlyCollection<Guid> containerIds, Guid? confirmedBy, string? note, RecoveryCaseAccess? access,
+        Guid? expectedRobotId, IReadOnlyList<HandoverStopScan>? scans, RobotInteractionConfirmed? button, CancellationToken cancellationToken)
     {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        if (access is not null && await FindConfirmedRecoveryAsync(jobId, access, expectedRobotId, cancellationToken) is { } confirmed)
+            return confirmed;
+        if (button?.RecoveryTransfer is { } repeat && await db.JobRecoveryCases.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.JobId == jobId && item.Id == repeat.Id && item.Status == JobRecoveryStatuses.Transferred
+            && item.Version - 1 == repeat.Version && item.ButtonArmId == button.RequestMessageId
+            && item.ConfirmedByRobotId == button.RobotId && item.ButtonConfirmationMessageId == button.MessageId, cancellationToken) is { } transferred)
+            return transferred;
+
         var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        if (button is null)
+            EnsureRecoveryOwner(recovery, access);
+        else if (button.RecoveryTransfer is not { } attempt || recovery.Id != attempt.Id || recovery.Version != attempt.Version
+            || recovery.ClaimedBy is null || recovery.ButtonArmId is null || recovery.ButtonArmId != button.RequestMessageId
+            || recovery.ToRobotId != button.RobotId || recovery.MoveStepId != button.JobStepId
+            || recovery.RecoveryEndpointId != button.EndpointId || recovery.ContainerIds.FirstOrDefault() != button.ContainerId
+            || button.InteractionType != RobotRecoveryTransfer.InteractionType)
+            throw new ConflictException("This button message does not match the armed recovery.", "interaction_arm_changed");
+
         if (recovery.Status != JobRecoveryStatuses.TargetAssigned || recovery.ToRobotId is not { } target)
         {
             throw new ConflictException("Send a robot first.", "recovery_no_target");
@@ -1071,10 +1146,13 @@ public sealed partial class JobExecutionEngine(
         }
 
         var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToHashSet();
-        if (!onBoard.SetEquals(containerIds))
+        if (!onBoard.SetEquals(recovery.ContainerIds) || (access is null && button is null && !onBoard.SetEquals(containerIds)))
         {
             throw new DomainValidationException("Name exactly the containers that were on the robot.", "recovery_containers_mismatch");
         }
+
+        if (access is not null || button is not null)
+            await VerifyRecoveryTransferAsync(job, recovery, target, expectedRobotId, onBoard, scans, cancellationToken, verifiedScans: button is not null);
 
         var now = DateTimeOffset.UtcNow;
         job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
@@ -1086,18 +1164,25 @@ public sealed partial class JobExecutionEngine(
         job.FailureMessage = "The cargo is on the new robot. Resume the Job to continue to its destination.";
         recovery.Status = JobRecoveryStatuses.Transferred;
         recovery.ConfirmedBy = confirmedBy;
+        recovery.ConfirmedByRobotId = button?.RobotId;
+        recovery.ButtonConfirmationMessageId = button?.MessageId;
         recovery.ConfirmedAt = now;
         recovery.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         recovery.ResolvedAt = now;
+        recovery.Version++;
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), target, job.FailureCode));
-        await SaveAndPublishAsync(cancellationToken);
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return recovery;
     }
 
     /// <summary>The failed robot came back and can still carry the cargo: same Job, same robot. Normal resume checks apply.</summary>
-    public async Task<Job> ResumeRecoveryOnSameRobotAsync(Guid jobId, Guid confirmedBy, string? note, CancellationToken cancellationToken = default)
+    public async Task<Job> ResumeRecoveryOnSameRobotAsync(
+        Guid jobId, Guid confirmedBy, string? note, CancellationToken cancellationToken = default, RecoveryCaseAccess? access = null)
     {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        EnsureRecoveryOwner(recovery, access);
+        if (access is not null) await EnsureRecoveryRequestsActiveAsync(job, cancellationToken);
         if (recovery.Status != JobRecoveryStatuses.Open)
         {
             throw new ConflictException("Another robot is on its way; call it back first.", "recovery_target_assigned");
@@ -1117,7 +1202,8 @@ public sealed partial class JobExecutionEngine(
         recovery.ConfirmedAt = now;
         recovery.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         recovery.ResolvedAt = now;
-        await SaveAndPublishAsync(cancellationToken);
+        recovery.Version++;
+        await SaveAndPublishAsync(cancellationToken, transaction);
         return await ResumeAsync(jobId, robotId, cancellationToken);
     }
 
@@ -1199,13 +1285,14 @@ public sealed partial class JobExecutionEngine(
     private TimeSpan ClaimLease => TimeSpan.FromSeconds(Math.Max(1, humanTasks?.Value.ClaimLeaseSeconds ?? 300));
 
     /// <summary>Takes a free or expired step, or extends one's own claim. Two people at once: one wins, the other gets 409.</summary>
-    public async Task<JobStep> ClaimHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
+    public async Task<JobStep> ClaimHumanStepAsync(
+        Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default, bool requireStop = false)
     {
         var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        await EnsureLegacyHandoverAllowedAsync(job, step, now, requireStop, cancellationToken);
         EnsureNotClaimedByAnother(step, accountId, now);
         SetClaim(step, accountId, now);
         await SaveAndPublishAsync(cancellationToken, transaction);
@@ -1235,7 +1322,7 @@ public sealed partial class JobExecutionEngine(
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        await EnsureLegacyHandoverAllowedAsync(job, step, now, requireStop: false, cancellationToken);
         SetClaim(step, accountId, now);
         await SaveAndPublishAsync(cancellationToken, transaction);
         return step;
@@ -1279,7 +1366,8 @@ public sealed partial class JobExecutionEngine(
         IReadOnlyList<Guid> containerIds,
         Guid accountId,
         string? note,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireStop = false)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
         if (job.Status != JobStatus.RUNNING)
@@ -1328,7 +1416,7 @@ public sealed partial class JobExecutionEngine(
                 pending.Remove(containerId);
                 try
                 {
-                    await ConfirmHumanStepAsync(match.Step.Id, containerId, HumanConfirmationSource.StaffApp(accountId, note), cancellationToken);
+                    await ConfirmHumanStepAsync(match.Step.Id, containerId, HumanConfirmationSource.StaffApp(accountId, note), cancellationToken, requireStop);
                     results[containerId] = new(containerId, match.Step.Id, HandoverBatchOutcomes.Confirmed, null);
                     progressed = true;
                 }
@@ -1504,6 +1592,13 @@ public sealed partial class JobExecutionEngine(
         var operation = workflowStep.Config.OperationCode;
         if (operation is not (nameof(HumanActionCode.PICKUP_CONFIRM) or nameof(HumanActionCode.DROPOFF_CONFIRM)))
         {
+            return;
+        }
+
+        var groupedStop = await ReadActiveHandoverStopAsync(job, cancellationToken);
+        if (groupedStop?.Containers.Any(item => item.Step.Id == step.Id) == true)
+        {
+            await TryArmBegunHandoverStopAsync(job.Id, cancellationToken);
             return;
         }
 
@@ -3108,6 +3203,8 @@ public sealed partial class JobExecutionEngine(
                 throw new ConflictException("This Job's operator pause has changed. Refresh it and try again.", "job_operator_pause_changed");
             if (ex.Entries.Any(entry => entry.Entity is JobTask))
                 throw new ConflictException("The handover stop changed. Refresh the queue.", "handover_stop_changed");
+            if (ex.Entries.Any(entry => entry.Entity is JobRecoveryCase))
+                throw new ConflictException("This recovery case changed. Refresh it and try again.", "recovery_case_changed");
             throw new ConflictException("Someone else is handling this step.", HumanTaskClaimedCode);
         }
 

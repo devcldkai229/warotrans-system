@@ -1,6 +1,6 @@
 import { Check, ChevronDown, Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
@@ -15,7 +15,9 @@ import {
   TextField,
 } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { getUserErrorMessage, listHandoverStops, listJobs } from '../../shared/api';
+import {
+  getMyHandoverWorkZone, getUserErrorMessage, listHandoverStops, listJobs, setMyHandoverWorkZone,
+} from '../../shared/api';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { t } from '../../shared/i18n';
 import type { HandoverStopResponse } from '../../shared/types/contracts';
@@ -158,15 +160,20 @@ export function JobsScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, params, dockHeight, setActiveJobCount } = useNavigation();
   const { session } = useAuth();
-  const { lastJobUpdate } = useRealtime();
+  const client = useQueryClient();
+  const { lastJobUpdate, lastHandoverStopsChange } = useRealtime();
   const deepLinkedScope = scopeFromParams(params?.view);
   const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'fleet');
   const [query, setQuery] = useState('');
   const [areaId, setAreaId] = useState<string | null>(null);
   const [areaPickerOpen, setAreaPickerOpen] = useState(false);
+  const [workZonePickerOpen, setWorkZonePickerOpen] = useState(false);
+  const [workZoneError, setWorkZoneError] = useState<string | null>(null);
+  const [workZoneSaving, setWorkZoneSaving] = useState(false);
   const places = usePlaceDirectory();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
+  const canSelectWorkZone = canOperate && session?.role === 'STAFF' && places.areas.length > 0;
   const jobsQuery = useQuery({
     queryKey: ['jobs-list', session?.id],
     queryFn: () => listJobs(),
@@ -178,6 +185,11 @@ export function JobsScreen() {
     queryFn: ({ signal }) => listHandoverStops({ signal }),
     enabled: !!session?.id && canOperate,
     refetchInterval: 5_000,
+  });
+  const workZoneQuery = useQuery({
+    queryKey: ['handover-work-zone', session?.id],
+    queryFn: ({ signal }) => getMyHandoverWorkZone(signal),
+    enabled: Boolean(session?.id && canOperate && session?.role === 'STAFF'),
   });
   const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => {
     const job = mapJobDetailToAppJobItem(detail, session?.id);
@@ -193,6 +205,12 @@ export function JobsScreen() {
       if (canOperate) void refetchStops();
     }
   }, [lastJobUpdate, canOperate, refetch, refetchStops]);
+
+  useEffect(() => {
+    if (lastHandoverStopsChange && canOperate) {
+      void refetchStops();
+    }
+  }, [lastHandoverStopsChange, canOperate, refetchStops]);
 
   const onRefresh = async () => {
     triggerHaptic('tap');
@@ -280,6 +298,31 @@ export function JobsScreen() {
 
   const topInset = useTopInset();
 
+  const activeWorkZoneCode = workZoneQuery.data?.code ?? null;
+  const activeWorkZoneLabel = activeWorkZoneCode
+    ? (places.areas.find(a => a.code.toUpperCase() === activeWorkZoneCode.toUpperCase())?.name ?? activeWorkZoneCode)
+    : t('Warehouse-wide');
+
+  const handleSelectWorkZone = async (nextZoneId: string | null) => {
+    if (workZoneSaving) return;
+    triggerHaptic('tap');
+    setWorkZoneSaving(true);
+    setWorkZoneError(null);
+    try {
+      const updated = await setMyHandoverWorkZone(nextZoneId);
+      client.setQueryData(['handover-work-zone', session?.id], updated);
+      setWorkZonePickerOpen(false);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['handover-stops'] }),
+        client.invalidateQueries({ queryKey: ['handover-stops-mine'] }),
+      ]);
+    } catch (failure) {
+      setWorkZoneError(getUserErrorMessage(failure, 'Could not update your priority work zone.'));
+    } finally {
+      setWorkZoneSaving(false);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
@@ -320,6 +363,34 @@ export function JobsScreen() {
             <MapPin size={15} color={area ? colors.primaryText : colors.textSecondary} />
             <Text variant="label" numberOfLines={1} style={{ flex: 1 }} color={area ? colors.primaryText : colors.textPrimary}>
               {area?.name ?? 'All areas'}
+            </Text>
+            <ChevronDown size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+
+        {canSelectWorkZone ? (
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              setWorkZoneError(null);
+              setWorkZonePickerOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('My Work Zone: {zone}', { zone: activeWorkZoneLabel })}
+            style={({ pressed }) => [
+              styles.areaSelect,
+              activeWorkZoneCode && styles.areaSelectActive,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <MapPin size={15} color={activeWorkZoneCode ? colors.primaryText : colors.textSecondary} />
+            <Text
+              variant="label"
+              numberOfLines={1}
+              style={{ flex: 1 }}
+              color={activeWorkZoneCode ? colors.primaryText : colors.textPrimary}
+            >
+              {t('My Work Zone: {zone}', { zone: activeWorkZoneLabel })}
             </Text>
             <ChevronDown size={16} color={colors.textMuted} />
           </Pressable>
@@ -391,6 +462,10 @@ export function JobsScreen() {
                         void refetchStops();
                         void refetch();
                       }}
+                      onConfirmedJob={() => {
+                        void refetchStops();
+                        void refetch();
+                      }}
                       onRefresh={refetchStops}
                     />
                   ))}
@@ -421,6 +496,29 @@ export function JobsScreen() {
             const chosen = item.id === areaId;
             return <Pressable key={item.id ?? 'all'} accessibilityRole="radio" accessibilityState={{ checked: chosen }}
               onPress={() => { triggerHaptic('tap'); setAreaId(item.id); setAreaPickerOpen(false); }}
+              style={[styles.areaOption, chosen && styles.areaOptionActive]}>
+              <Text variant="bodyMedium" style={{ flex: 1 }} color={chosen ? colors.primaryText : colors.textPrimary}>{item.name}</Text>
+              {chosen ? <Check size={18} color={colors.primaryText} /> : null}
+            </Pressable>;
+          })}
+        </View>
+      </BottomSheet> : null}
+      {workZonePickerOpen ? <BottomSheet onClose={() => setWorkZonePickerOpen(false)} accessibilityLabel={t('My Priority Work Zone')}>
+        <View style={styles.areaSheet}>
+          <Text variant="title">My Priority Work Zone</Text>
+          <Text variant="caption" color="textSecondary">
+            Select a ZONE-AREA work zone to prioritize handover offers near you before warehouse-wide release.
+          </Text>
+          {workZoneError ? <Text variant="caption" color="dangerText">{workZoneError}</Text> : null}
+          {[
+            { id: null as string | null, code: '', name: t('Warehouse-wide (All Zones)') },
+            ...places.areas,
+          ].map(item => {
+            const chosen = item.id === null
+              ? !activeWorkZoneCode
+              : Boolean(activeWorkZoneCode && item.code.toUpperCase() === activeWorkZoneCode.toUpperCase());
+            return <Pressable key={item.id ?? 'warehouse-wide'} disabled={workZoneSaving} accessibilityRole="radio" accessibilityState={{ checked: chosen }}
+              onPress={() => { void handleSelectWorkZone(item.id); }}
               style={[styles.areaOption, chosen && styles.areaOptionActive]}>
               <Text variant="bodyMedium" style={{ flex: 1 }} color={chosen ? colors.primaryText : colors.textPrimary}>{item.name}</Text>
               {chosen ? <Check size={18} color={colors.primaryText} /> : null}

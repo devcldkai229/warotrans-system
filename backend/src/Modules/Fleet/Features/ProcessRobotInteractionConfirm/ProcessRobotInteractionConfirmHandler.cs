@@ -39,6 +39,14 @@ public sealed class ProcessRobotInteractionConfirmHandler(
             return;
         }
 
+        var capability = message.RecoveryTransfer is not null ? RobotRecoveryTransfer.Capability
+            : message.HandoverStop is not null ? RobotHandoverStop.Capability : null;
+        if (capability is not null && robot.Capabilities?.Split(',').Contains(capability, StringComparer.Ordinal) != true)
+        {
+            logger.LogWarning("Unexpected grouped interaction from robot {RobotCode}", robot.Code);
+            return;
+        }
+
         await events.PublishAsync(
             new RobotInteractionConfirmed(
                 robot.Id,
@@ -49,7 +57,10 @@ public sealed class ProcessRobotInteractionConfirmHandler(
                 message.InteractionType,
                 message.ContainerId,
                 message.EndpointId,
-                message.SentAt),
+                message.SentAt,
+                message.RequestMessageId,
+                message.HandoverStop,
+                message.RecoveryTransfer),
             cancellationToken);
 
         logger.LogInformation(

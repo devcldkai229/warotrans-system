@@ -17,6 +17,7 @@ public sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(x => x.FullName).HasMaxLength(150).IsRequired();
         builder.Property(x => x.Role).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(x => x.WorkZoneCode).HasMaxLength(100);
 
         builder.HasIndex(x => x.Username).IsUnique();
         builder.HasIndex(x => x.Email).IsUnique();

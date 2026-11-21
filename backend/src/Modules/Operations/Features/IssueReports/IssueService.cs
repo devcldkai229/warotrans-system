@@ -27,7 +27,7 @@ public sealed record ListIssuesQuery(
 /// Admin all issues; Technician the ones they reported, are assigned to, or that concern a robot in their scope;
 /// Staff the ones they reported or are assigned to. An issue outside that set is "not found".
 /// </summary>
-public sealed class IssueService(
+public sealed partial class IssueService(
     OperationsMongoContext mongo,
     ICurrentUser currentUser,
     IHttpContextAccessor httpContextAccessor,
@@ -35,6 +35,9 @@ public sealed class IssueService(
     INotificationService notifications,
     IAuditTrail audit,
     IHandoverIssueVerifier handoverVerifier,
+    IWarehouseMapLocations mapLocations,
+    IStaffOperatingWarehouse staffWarehouse,
+    IWarehouseRobotLookup robotLookup,
     TimeProvider clock) : IIssueReporter
 {
     public const int MaxTake = 100;
@@ -43,6 +46,63 @@ public sealed class IssueService(
     private static NotFoundException NotFound() => new("The issue was not found.", "issue_not_found");
 
     // ------------------------------------------------------------------ create
+
+    public async Task<IssueDto> CreateHazardAsync(CreateHazardRequest request, CancellationToken cancellationToken)
+    {
+        var me = currentUser.AccountId ?? throw new AppException("Sign in to report a hazard.", 401, "unauthenticated");
+        var key = $"hazard:{me:N}:{request.RequestId:N}";
+        var severity = Enum.Parse<IssueSeverity>(request.Severity);
+        var description = request.Description.Trim();
+        var issue = await mongo.IssueReports.Find(item => item.SourceKey == key)
+            .Project<IssueReport>(WithoutPhotoBytes).FirstOrDefaultAsync(cancellationToken);
+        if (issue is null)
+        {
+            var location = await mapLocations.FindPublishedLocationAsync(request.MapVersionId, request.EdgeId, request.ZoneId,
+                request.EndpointId, cancellationToken)
+                ?? throw new DomainValidationException("Choose an active corridor, zone or endpoint on a published map.", "hazard_location_invalid");
+            await EnsureHazardWarehouseAccessAsync(location.WarehouseId, cancellationToken);
+            var id = await CreateOnceAsync(key, me, now =>
+            {
+                var created = NewIssue(me, now);
+                created.IssueType = IssueType.OTHER;
+                created.Severity = severity;
+                created.Description = description;
+                created.Hazard = new HazardLocation(location.WarehouseId, request.MapVersionId, request.EdgeId,
+                    request.ZoneId, request.EndpointId, location.Code, request.HazardType);
+                return created;
+            }, cancellationToken);
+            issue = await LoadVisibleAsync(id, cancellationToken);
+        }
+
+        if (issue.Hazard is not { } hazard || hazard.MapVersionId != request.MapVersionId || hazard.EdgeId != request.EdgeId
+            || hazard.ZoneId != request.ZoneId || hazard.EndpointId != request.EndpointId || hazard.HazardType != request.HazardType
+            || issue.Severity != severity || issue.Description != description)
+            throw new ConflictException("This request id was already used for another hazard report.", "hazard_request_conflict");
+        await EnsureHazardWarehouseAccessAsync(hazard.WarehouseId, cancellationToken);
+        if (issue.Status is not (IssueStatus.RESOLVED or IssueStatus.CLOSED))
+            await PublishHazardAsync(issue, hazard, cancellationToken);
+        return Project(issue);
+    }
+
+    private async Task EnsureHazardWarehouseAccessAsync(Guid warehouseId, CancellationToken cancellationToken)
+    {
+        if (currentUser.Role == AppRoles.Staff && await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken) != warehouseId)
+            throw new AppException("Choose a location in your current warehouse.", 403, "hazard_warehouse_out_of_scope");
+        if (currentUser.Role == AppRoles.Technician)
+        {
+            var scope = await robotAccessScope.GetCurrentAsync(cancellationToken);
+            if (!scope.AllRobots && !(await robotLookup.GetWarehousesAsync(scope.RobotIds, cancellationToken)).Contains(warehouseId))
+                throw new AppException("This warehouse is outside your robot scope.", 403, "hazard_warehouse_out_of_scope");
+        }
+    }
+
+    private Task<Guid?> PublishHazardAsync(IssueReport issue, HazardLocation hazard, CancellationToken cancellationToken) =>
+        notifications.PublishAsync(new NotificationDraft(
+            issue.Severity >= IssueSeverity.HIGH ? NotificationType.ALERT : NotificationType.WARNING,
+            "WAREHOUSE_HAZARD", $"Hazard at {hazard.LocationCode}", Shorten(issue.Description),
+            Entity, issue.Id, $"issue:{issue.Id}:open", OncePerSituation: true,
+            Audience: new NotificationAudience([AppRoles.Admin, AppRoles.Staff, AppRoles.Technician], WarehouseId: hazard.WarehouseId)),
+            cancellationToken);
 
     public async Task<IssueDto> CreateAsync(CreateIssueRequest request, CancellationToken cancellationToken)
     {
@@ -142,6 +202,7 @@ public sealed class IssueService(
             new AuditEntry("issue.reported", Entity, issue.Id, After: Snapshot(issue)),
             cancellationToken);
 
+        if (issue.Hazard is not null) return;
         await notifications.PublishAsync(
             new NotificationDraft(
                 issue.Severity >= IssueSeverity.HIGH ? NotificationType.ALERT : NotificationType.WARNING,
@@ -177,6 +238,7 @@ public sealed class IssueService(
             .SortByDescending(i => i.ReportedAt)
             .Skip(Math.Max(0, query.Skip))
             .Limit(Math.Clamp(query.Take, 1, MaxTake))
+            .Project<IssueReport>(WithoutPhotoBytes)
             .ToListAsync(cancellationToken);
         return new ListIssuesResponse(total, items.Select(Project).ToList());
     }
@@ -384,7 +446,11 @@ public sealed class IssueService(
                 Builders<IssueReport>.Filter.Eq(i => i.Id, issue.Id),
                 Builders<IssueReport>.Filter.Eq(i => i.Version, expectedVersion)),
             update.Inc(i => i.Version, 1).Set(i => i.UpdatedAt, clock.GetUtcNow()),
-            new FindOneAndUpdateOptions<IssueReport> { ReturnDocument = ReturnDocument.After },
+            new FindOneAndUpdateOptions<IssueReport>
+            {
+                ReturnDocument = ReturnDocument.After,
+                Projection = WithoutPhotoBytes
+            },
             cancellationToken);
 
         return saved ?? throw new ConflictException("The issue was changed by someone else; reload it.", "issue_version_conflict");
@@ -395,7 +461,8 @@ public sealed class IssueService(
         var filter = Builders<IssueReport>.Filter.And(
             Builders<IssueReport>.Filter.Eq(i => i.Id, id),
             await VisibleFilterAsync(cancellationToken));
-        return await mongo.IssueReports.Find(filter).FirstOrDefaultAsync(cancellationToken) ?? throw NotFound();
+        return await mongo.IssueReports.Find(filter).Project<IssueReport>(WithoutPhotoBytes).FirstOrDefaultAsync(cancellationToken)
+            ?? throw NotFound();
     }
 
     private async Task<FilterDefinition<IssueReport>> VisibleFilterAsync(CancellationToken cancellationToken)
@@ -411,13 +478,20 @@ public sealed class IssueService(
         }
 
         var mine = f.Or(f.Eq(i => i.ReportedBy, me), f.Eq(i => i.AssigneeId, me));
+        if (currentUser.Role == AppRoles.Staff)
+        {
+            var warehouse = await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken);
+            var ordinary = mine & f.Eq(i => i.Hazard, null);
+            return warehouse is { } id ? ordinary | f.Eq(i => i.Hazard!.WarehouseId, id) : ordinary;
+        }
         if (!RolePermissionMatrix.UserHas(user, Permissions.IssueManage))
         {
             return mine;
         }
 
         var robots = scope.RobotIds.Cast<Guid?>().ToList();
-        return f.Or(mine, f.In(i => i.RobotId, robots));
+        var warehouses = await robotLookup.GetWarehousesAsync(scope.RobotIds, cancellationToken);
+        return f.Or(mine & f.Eq(i => i.Hazard, null), f.In(i => i.RobotId, robots), f.In(i => i.Hazard!.WarehouseId, warehouses));
     }
 
     private static IssueReport NewIssue(Guid reportedBy, DateTimeOffset now)
@@ -450,6 +524,7 @@ public sealed class IssueService(
         ["code"] = i.Code,
         ["type"] = i.IssueType.ToString(),
         ["problemCode"] = i.ProblemCode,
+        ["hazardLocation"] = i.Hazard?.LocationCode,
         ["severity"] = i.Severity.ToString(),
         ["status"] = i.Status.ToString(),
         ["jobId"] = i.JobId,

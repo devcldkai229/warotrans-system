@@ -289,6 +289,18 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ButtonArmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("button_arm_id");
+
+                    b.Property<Guid?>("ButtonConfirmationMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("button_confirmation_message_id");
+
+                    b.Property<Guid?>("ClaimedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("claimed_by");
+
                     b.Property<DateTimeOffset?>("ConfirmedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("confirmed_at");
@@ -296,6 +308,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid?>("ConfirmedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("confirmed_by");
+
+                    b.Property<Guid?>("ConfirmedByRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by_robot_id");
 
                     b.Property<string>("ContainerIds")
                         .IsRequired()
@@ -346,6 +362,11 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid?>("ToRobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("to_robot_id");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
 
                     b.HasKey("Id")
                         .HasName("p_k_job_recovery_cases");
@@ -566,10 +587,18 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("handover_confirmed_at");
 
+                    b.Property<DateTimeOffset?>("HandoverHeartbeatAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_heartbeat_at");
+
                     b.Property<int>("HandoverVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("integer")
                         .HasColumnName("handover_version");
+
+                    b.Property<DateTimeOffset?>("HandoverWorkDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_work_deadline");
 
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")

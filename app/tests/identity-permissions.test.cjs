@@ -30,6 +30,10 @@ test('screens are gated by server permissions, never by the role name', () => {
   assert.equal(sessionCan(staff, PERMISSIONS.robotStop), true);
   assert.equal(sessionCan(staff, PERMISSIONS.productCreate), true);
   assert.equal(sessionCan(staff, PERMISSIONS.robotManualDrive), false);
+  assert.equal(sessionCan(staff, PERMISSIONS.robotConfigure), false);
+  const technician = { role: 'TECHNICIAN', permissions: [PERMISSIONS.robotManualDrive, PERMISSIONS.robotStop, PERMISSIONS.robotConfigure] };
+  assert.equal(sessionCan(technician, PERMISSIONS.robotManualDrive), true);
+  assert.equal(sessionCan(technician, PERMISSIONS.robotManage), false);
   assert.equal(sessionCan({ role: 'ADMIN' }, PERMISSIONS.robotStop), false);
   assert.equal(sessionCan(null, PERMISSIONS.robotRead), false);
 });

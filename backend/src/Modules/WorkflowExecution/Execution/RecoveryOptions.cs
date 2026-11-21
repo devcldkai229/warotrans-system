@@ -13,4 +13,6 @@ public sealed class RecoveryOptions
     /// queue by itself, so the next free robot takes it. With cargo on board it always waits for a person (recovery).
     /// </summary>
     public bool AutoRequeueWithoutCargo { get; set; } = true;
+
+    public bool EnableTransferButton { get; set; }
 }

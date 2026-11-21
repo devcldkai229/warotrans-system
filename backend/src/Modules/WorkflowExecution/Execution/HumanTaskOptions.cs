@@ -9,5 +9,12 @@ public sealed class HumanTaskOptions
     public int ClaimLeaseSeconds { get; set; } = 300;
 
     public int StopOfferDelaySeconds { get; set; } = 10;
+    public int StopWorkZonePrioritySeconds { get; set; } = 15;
     public int StopBeginWindowSeconds { get; set; } = 120;
+    public int StopBeginReminderSeconds { get; set; } = 30;
+    public int StopUnstartedEscalationSeconds { get; set; } = 300;
+    public int StopWorkWindowSeconds { get; set; } = 300;
+    public int StopWorkExtensionSeconds { get; set; } = 120;
+    public int StopDisconnectSeconds { get; set; } = 60;
+    public bool EnableHandoverStopButton { get; set; }
 }

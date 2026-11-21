@@ -12,6 +12,19 @@ public static class IssueEndpoints
 {
     public static RouteGroupBuilder MapIssueReports(this RouteGroupBuilder group)
     {
+        group.MapPost("/hazards", async (
+                CreateHazardRequest request, IValidator<CreateHazardRequest> validator,
+                IssueService issues, CancellationToken cancellationToken) =>
+            {
+                var validation = await validator.ValidateAsync(request, cancellationToken);
+                if (!validation.IsValid) return validation.ToValidationProblem();
+                var created = await issues.CreateHazardAsync(request, cancellationToken);
+                return TypedResults.Created($"/api/operations/issues/{created.Id}", created);
+            })
+            .RequirePermission(Permissions.IssueCreate)
+            .WithName("ReportWarehouseHazard")
+            .WithSummary("Report a hazard at an active location on a published warehouse map");
+
         group.MapPost("/issues", async (
                 CreateIssueRequest request,
                 IValidator<CreateIssueRequest> validator,
@@ -100,6 +113,23 @@ public static class IssueEndpoints
             })
             .RequirePermission(Permissions.IssueCreate)
             .WithName("ResolveOwnHandoverIssue");
+
+        group.MapPost("/issues/{id:guid}/evidence/photos", async (
+                Guid id, Guid photoId, int expectedVersion, HttpRequest request, IssueService issues, CancellationToken cancellationToken) =>
+                Results.Ok(await issues.UploadPhotoAsync(id, photoId, expectedVersion, request, cancellationToken)))
+            .RequirePermission(Permissions.IssueCreate)
+            .WithName("UploadIssuePhoto");
+
+        group.MapGet("/issues/{id:guid}/evidence/photos/{photoId:guid}", async (
+                Guid id, Guid photoId, HttpResponse response, IssueService issues, CancellationToken cancellationToken) =>
+            {
+                var photo = await issues.ReadPhotoAsync(id, photoId, cancellationToken);
+                response.Headers.CacheControl = "private, no-store";
+                response.Headers.XContentTypeOptions = "nosniff";
+                return Results.File(photo.Bytes, photo.MimeType);
+            })
+            .RequirePermission(Permissions.IssueRead)
+            .WithName("ReadIssuePhoto");
 
         return group;
     }

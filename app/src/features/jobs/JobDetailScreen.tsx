@@ -58,6 +58,8 @@ import {
 import { VerifyModal } from './VerifyModal';
 import { HandoverActionsCard } from './HandoverActionsCard';
 import { HandoverStopCard } from './HandoverStopCard';
+import { isWaitingForHandoverOffer, shouldUseLegacyStepHandover } from './handoverData';
+import { JobIssuesCard } from './JobIssuesCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal, type IssueSubmitInput } from '../monitoring/IssueReportingModal';
 import {
@@ -69,6 +71,7 @@ import {
   getUserErrorMessage,
   isJobActionAllowed,
   listHandoverStops,
+  listIssues,
   mobileCapabilities,
   pauseJob,
   reportTaskProblem,
@@ -88,7 +91,7 @@ export function JobDetailScreen() {
   const [isLoadingJob, setIsLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
   const [jobRefreshError, setJobRefreshError] = useState<string | null>(null);
-  const { lastJobUpdate, lastTrafficUpdate, robotTelemetry, robotConnectivity } = useRealtime();
+  const { lastJobUpdate, lastHandoverStopsChange, lastTrafficUpdate, robotTelemetry, robotConnectivity } = useRealtime();
   const places = usePlaceDirectory();
 
   const initialModal = params?.modal;
@@ -101,6 +104,8 @@ export function JobDetailScreen() {
   const [verificationStepId, setVerificationStepId] = useState<string | null>(null);
   const [isMismatch, setIsMismatch] = useState(isInitialMismatch);
   const [isIssueOpen, setIsIssueOpen] = useState(isInitialIssue);
+  const [issueModalCategory, setIssueModalCategory] = useState<IncidentCategory | undefined>(undefined);
+  const [issueModalContainerId, setIssueModalContainerId] = useState<string | undefined>(undefined);
   const [showMenu, setShowMenu] = useState(false);
   const [showFullJobNo, setShowFullJobNo] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -149,6 +154,9 @@ export function JobDetailScreen() {
   }, [jobId, refreshJob]);
 
   const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
+  const canReadIssues = sessionCan(session, PERMISSIONS.issueRead);
+  const canCreateIssues = sessionCan(session, PERMISSIONS.issueCreate);
+  const canManageIssues = sessionCan(session, PERMISSIONS.issueManage);
   const stopsQuery = useQuery({
     queryKey: ['handover-stops', session?.id],
     queryFn: ({ signal }) => listHandoverStops({ signal }),
@@ -157,6 +165,15 @@ export function JobDetailScreen() {
   });
   const { refetch: refetchStops } = stopsQuery;
   const activeStop = stopsQuery.data?.find(item => item.jobId === job.id);
+  const allowLegacyStepHandover = shouldUseLegacyStepHandover(job, activeStop);
+  const waitingForHandoverOffer = isWaitingForHandoverOffer(job, activeStop);
+  const issuesQuery = useQuery({
+    queryKey: ['job-issues', session?.id, job.id],
+    queryFn: ({ signal }) => listIssues({ jobId: job.id }, signal),
+    enabled: Boolean(session?.id && canReadIssues && job.id),
+    refetchInterval: 10_000,
+  });
+  const { refetch: refetchIssues } = issuesQuery;
 
   useEffect(() => {
     if (
@@ -171,8 +188,9 @@ export function JobDetailScreen() {
           console.warn('Failed to refetch job detail on realtime jobUpdated:', err);
         });
       if (canOperate) void refetchStops();
+      if (canReadIssues) void refetchIssues();
     }
-  }, [lastJobUpdate, jobId, job.id, job.jobNo, canOperate, refreshJob, refetchStops]);
+  }, [lastJobUpdate, jobId, job.id, job.jobNo, canOperate, canReadIssues, refreshJob, refetchStops, refetchIssues]);
 
   // A traffic grant / wait / release for this job (trafficUpdated): its waiting reason and progress changed.
   useEffect(() => {
@@ -180,6 +198,17 @@ export function JobDetailScreen() {
       refreshJob().catch(() => {});
     }
   }, [lastTrafficUpdate, jobId, job.id, refreshJob]);
+
+  useEffect(() => {
+    if (
+      canOperate
+      && lastHandoverStopsChange?.jobId
+      && (lastHandoverStopsChange.jobId === jobId || lastHandoverStopsChange.jobId === job.id)
+    ) {
+      void refetchStops();
+      void refreshJob().catch(() => {});
+    }
+  }, [lastHandoverStopsChange, canOperate, jobId, job.id, refetchStops, refreshJob]);
 
   useEffect(() => {
     if (isVerifyOpen && !verificationStepId && job.activeStepId) setVerificationStepId(job.activeStepId);
@@ -299,7 +328,7 @@ export function JobDetailScreen() {
 
   const handleOpenVerify = (containerCode?: string) => {
     triggerHaptic('tap');
-    if (!job.activeStepId || !isWaiting) return;
+    if (!job.activeStepId || !isWaiting || !allowLegacyStepHandover) return;
     setVerificationStepId(job.activeStepId);
     if (containerCode) setTargetContainer(containerCode);
     setIsVerifyOpen(true);
@@ -314,16 +343,20 @@ export function JobDetailScreen() {
 
   const handleIssueSubmit = async (input: IssueSubmitInput) => {
     const description = input.notes.trim() || `Staff reported ${input.category} on job ${job.jobNo}`;
+    const targetContainerId = input.containerId ?? activeContainerId;
+    const stepIdForIssue = targetContainerId === activeContainerId ? job.activeStepId : undefined;
     const outcome = await submitIssueAndOptionalPause({
       existingIssue: input.existingIssue,
       createIssue: () => reportTaskProblem(
         job.activeTaskId,
         { reason: input.category, note: description },
-        job.activeStepId,
-        { jobId: job.id, containerId: activeContainerId, robotId: job.assignedRobotId },
+        stepIdForIssue,
+        { jobId: job.id, containerId: targetContainerId, robotId: job.assignedRobotId },
       ),
       pauseJob: input.pauseJob ? () => pauseJob(job.id, description.slice(0, 500)) : undefined,
     });
+    if (canReadIssues) void refetchIssues();
+    if (canOperate) void refetchStops();
     if (outcome.pausedJob && activeJobId.current === job.id) {
       jobReader.invalidate();
       setJob(mapJobDetailToAppJobItem(outcome.pausedJob, session?.id));
@@ -653,12 +686,51 @@ export function JobDetailScreen() {
               void refetchStops();
               void refreshJob().catch(() => {});
             }}
+            onConfirmedJob={(detail) => {
+              if (activeJobId.current !== job.id) return;
+              jobReader.invalidate();
+              setJob(mapJobDetailToAppJobItem(detail, session?.id));
+              void refetchStops();
+              if (canReadIssues) void refetchIssues();
+              void refreshJob().catch(() => {});
+              toast.success('Handover stop confirmed.');
+            }}
+            onReportContainerProblem={(category, containerId) => {
+              setIssueModalCategory(category);
+              setIssueModalContainerId(containerId);
+              setIsIssueOpen(true);
+            }}
             onRefresh={refetchStops}
           />
         ) : null}
 
-        {/* Web parity: claim / give back / take over, confirm without scanning, confirm the whole stop at once. */}
-        {isWaiting && activeStep ? (
+        {waitingForHandoverOffer ? (
+          <Card padding="md" gap={8}>
+            <View style={styles.cardHeaderRow}>
+              <Text variant="headline">{t('Waiting For Handover Offer')}</Text>
+              <StatusPill status="WAITING" size="sm" dot />
+            </View>
+            <Text variant="body" color={colors.textSecondary}>
+              {t('This stop uses the grouped handover queue. Wait for the offer to appear here or refresh the queue.')}
+            </Text>
+            {canOperate ? (
+              <Button
+                title="Refresh Queue"
+                variant="outline"
+                size="sm"
+                icon={RefreshCw}
+                loading={stopsQuery.isFetching}
+                onPress={() => {
+                  void refetchStops();
+                  void refreshJob().catch(() => {});
+                }}
+              />
+            ) : null}
+          </Card>
+        ) : null}
+
+        {/* Fallback per-step handover card only for non-grouped workflows (no activeHandoverStopId and no activeStop). */}
+        {isWaiting && activeStep && allowLegacyStepHandover ? (
           <HandoverActionsCard
             key={activeStep.id}
             jobId={job.id}
@@ -676,6 +748,22 @@ export function JobDetailScreen() {
               setJob(mapJobDetailToAppJobItem(detail, session?.id));
               void refetchStops();
               void refreshJob().catch(() => {});
+            }}
+          />
+        ) : null}
+
+        {issuesQuery.data?.items?.length ? (
+          <JobIssuesCard
+            issues={issuesQuery.data.items}
+            containerLabel={id => job.containers.find(container => container.containerId === id)?.code || id}
+            canCreateIssue={canCreateIssues}
+            canManageIssues={canManageIssues}
+            onIssueUpdated={async () => {
+              await Promise.all([
+                refetchIssues(),
+                ...(canOperate ? [refetchStops()] : []),
+                refreshJob().catch(() => null),
+              ]);
             }}
           />
         ) : null}
@@ -753,7 +841,7 @@ export function JobDetailScreen() {
               }
               accessibilityLabel="Initiate emergency cargo rescue"
             />
-          ) : isWaiting ? (
+          ) : isWaiting && allowLegacyStepHandover ? (
             <Button
               title="Verify Handover"
               variant="primary"
@@ -811,7 +899,7 @@ export function JobDetailScreen() {
 
       {/* Verification Modal Sheet */}
       <VerifyModal
-        visible={isVerifyOpen}
+        visible={isVerifyOpen && allowLegacyStepHandover}
         targetContainer={verificationContainer?.code || targetContainer}
         targetContainerId={verificationContainer?.containerId}
         jobStepId={verificationStepId || undefined}
@@ -836,12 +924,23 @@ export function JobDetailScreen() {
         robotCode={job.robot}
         jobId={job.id}
         containerCode={activeContainer?.code}
+        containers={job.containers
+          .filter((c): c is typeof c & { containerId: string } => Boolean(c.containerId))
+          .map(c => ({ containerId: c.containerId, code: c.code }))}
+        initialCategory={issueModalCategory}
+        initialContainerId={issueModalContainerId ?? activeContainerId}
         canPause={canPause}
-        onClose={() => setIsIssueOpen(false)}
+        onClose={() => {
+          setIsIssueOpen(false);
+          setIssueModalCategory(undefined);
+          setIssueModalContainerId(undefined);
+        }}
         onSubmit={handleIssueSubmit}
         onRefreshJob={async () => {
           await refreshJob();
           if (job.assignedRobotId) void stopStateQuery.refetch();
+          if (canOperate) void refetchStops();
+          if (canReadIssues) void refetchIssues();
         }}
       />
 

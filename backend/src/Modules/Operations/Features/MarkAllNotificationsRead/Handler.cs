@@ -11,7 +11,9 @@ public sealed class MarkAllNotificationsReadHandler(
     OperationsMongoContext mongo,
     ICurrentUser currentUser,
     IRobotAccessScope robotAccessScope,
-    TimeProvider clock)
+    TimeProvider clock,
+    IStaffOperatingWarehouse staffWarehouse,
+    IWarehouseRobotLookup robotLookup)
 {
     public async Task HandleAsync(CancellationToken cancellationToken)
     {
@@ -21,9 +23,10 @@ public sealed class MarkAllNotificationsReadHandler(
         }
 
         var scope = await robotAccessScope.GetCurrentAsync(cancellationToken);
+        var visible = await NotificationVisibility.VisibleToAsync(me, currentUser.Role, scope, staffWarehouse, robotLookup, cancellationToken);
         await mongo.Notifications.UpdateManyAsync(
             Builders<Notification>.Filter.And(
-                NotificationVisibility.VisibleTo(me, currentUser.Role, scope),
+                visible,
                 NotificationVisibility.UnreadBy(me)),
             Builders<Notification>.Update.Push(n => n.Reads, new NotificationRead { AccountId = me, ReadAt = clock.GetUtcNow() }),
             cancellationToken: cancellationToken);

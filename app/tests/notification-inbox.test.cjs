@@ -54,19 +54,36 @@ test('REST presentation preserves real read state/time/entity instead of resetti
   assert.equal(item.jobId, 'job-1');
   assert.equal(toLiveNotification({ ...snapshot().items[0], createdAt: '' }).timeLabel, 'Time Unavailable');
   assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'ISSUE_RESOLVED' }).category, 'SYSTEM');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'HANDOVER_OFFER' }).category, 'JOB_ASSIGNED');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'HANDOVER_OVERDUE' }).category, 'JOB_ASSIGNED');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'WAREHOUSE_HAZARD' }).category, 'HAZARD');
+  assert.equal(toLiveNotification({ ...snapshot().items[0], kind: 'JOB_RECOVERY_REQUIRED' }).category, 'HAZARD');
 });
 
 test('notification links use verified entity IDs and current permissions; unknown/web-only routes are not guessed', () => {
   const { notificationDestination } = modules(async () => {})('src/shared/realtime/notificationInbox.ts');
   const session = { permissions: ['job.read', 'tr.read'] };
+  const issueSession = { permissions: ['job.read', 'tr.read', 'issue.read'] };
   const item = { entityType: 'JOB', entityId: 'job-1', route: 'https://unexpected.example/' };
   assert.deepEqual(plain(notificationDestination(item, session)), { screen: 'job_detail', params: { jobId: 'job-1' } });
   assert.deepEqual(plain(notificationDestination({ ...item, entityType: 'REQUEST', entityId: 'request-1' }, session)),
     { screen: 'transport_detail', params: { requestId: 'request-1' } });
-  for (const entityType of ['ROBOT', 'ISSUE', 'CONTAINER', 'RECOVERY', 'NEW_KIND']) {
+  assert.deepEqual(
+    plain(notificationDestination({ ...item, kind: 'WAREHOUSE_HAZARD', entityType: 'ISSUE', entityId: 'iss-1' }, issueSession)),
+    { screen: 'block_path', params: { issueId: 'iss-1' } },
+  );
+  assert.deepEqual(
+    plain(notificationDestination({ ...item, kind: 'JOB_RECOVERY_REQUIRED', entityType: 'RECOVERY', entityId: 'job-9' }, session)),
+    { screen: 'payload_recovery', params: { jobId: 'job-9' } },
+  );
+  for (const entityType of ['ROBOT', 'ISSUE', 'CONTAINER', 'NEW_KIND']) {
     assert.equal(notificationDestination({ ...item, entityType }, session), null);
   }
   assert.equal(notificationDestination(item, { permissions: [] }), null);
+  assert.equal(
+    notificationDestination({ ...item, kind: 'JOB_RECOVERY_REQUIRED', entityType: 'RECOVERY', entityId: 'job-9' }, { permissions: [] }),
+    null,
+  );
   assert.equal(notificationDestination({ ...item, entityId: null }, session), null);
 });
 

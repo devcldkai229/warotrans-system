@@ -225,8 +225,33 @@ export interface RobotResponse {
   mapVersionCode: string | null;
   currentCommandId: string | null;
   isEnabled: boolean;
+  motionHeld?: boolean;
+  manualLeaseHolderName?: string | null;
+  manualLeaseHolderId?: string | null;
+  manualLeaseUntil?: UtcDateTime | null;
+  maintenanceReason?: string | null;
+  maintenanceSince?: UtcDateTime | null;
   createdAt: UtcDateTime;
   updatedAt: UtcDateTime;
+}
+
+export interface ManualLeaseResponse {
+  robotId: string;
+  active: boolean;
+  holderId: string | null;
+  holderName: string | null;
+  until: UtcDateTime | null;
+  heldByMe: boolean;
+  leaseId?: string | null;
+  sequenced?: boolean;
+  serverTime?: UtcDateTime | null;
+}
+
+export interface TeleopRobotResponse {
+  robotId: string;
+  robotCode: string;
+  linear: number;
+  angular: number;
 }
 
 /** `Fleet/Features/ListRobots/Response.cs` (paged envelope). */
@@ -550,9 +575,67 @@ export interface JobDetailResponse {
   tasks: JobTaskResponse[];
   availableActions?: ActionAvailability[];
   operatorPause?: JobOperatorPause | null;
+  activeHandoverStopId?: string | null;
 }
 
-export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE';
+export type JobRecoveryStatus = 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT';
+
+export type JobRecoveryAction =
+  | 'CLAIM'
+  | 'RELEASE'
+  | 'ASSIGN'
+  | 'UNASSIGN'
+  | 'CONFIRM'
+  | 'ARM_BUTTON'
+  | 'RESUME_SAME_ROBOT';
+
+export interface RecoveryContainerResponse {
+  containerId: string;
+  barcode: string | null;
+}
+
+export interface JobRecoveryResponse {
+  id: string;
+  jobId: string;
+  status: JobRecoveryStatus | string;
+  reason: string;
+  fromRobotId: string | null;
+  toRobotId: string | null;
+  recoveryEndpointId: string | null;
+  containerIds: string[];
+  robotArrived: boolean;
+  confirmedBy: string | null;
+  confirmedAt: UtcDateTime | null;
+  note: string | null;
+  createdAt: UtcDateTime;
+  resolvedAt: UtcDateTime | null;
+  claimedBy: string | null;
+  version: number;
+  containers: RecoveryContainerResponse[];
+  availableActions: ActionAvailability[];
+  buttonArmed?: boolean;
+  confirmedByRobotId?: string | null;
+}
+
+export interface RecoveryRobotCandidateResponse {
+  robotId: string;
+  robotCode: string;
+  maxContainers: number;
+  eligible: boolean;
+  reasons: string[];
+}
+
+export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE' | 'EXTEND' | 'CONFIRM';
+
+export interface StaffWorkZoneResponse {
+  warehouseId: string;
+  code: string;
+}
+
+export interface HandoverStopScan {
+  containerId: string;
+  barcode: string;
+}
 
 export interface HandoverStopContainerResponse {
   containerId: string;
@@ -576,6 +659,78 @@ export interface HandoverStopResponse {
   beganAt: UtcDateTime | null;
   version: number;
   availableActions: ActionAvailability[];
+  warehouseOpensAt?: UtcDateTime;
+  workDeadline?: UtcDateTime | null;
+  heartbeatIntervalSeconds?: number;
+}
+
+export type HandoverProblemCode =
+  | 'WRONG_CONTAINER'
+  | 'MISSING_CONTAINER'
+  | 'BARCODE_UNREADABLE'
+  | 'CONTAINER_DAMAGED'
+  | 'QUANTITY_MISMATCH';
+
+export type HazardType =
+  | 'LIQUID_SPILL'
+  | 'FALLEN_CARGO'
+  | 'FACILITY_WORK'
+  | 'FORKLIFT_TRAFFIC'
+  | 'OTHER';
+
+export type IssueSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface HazardLocationResponse {
+  warehouseId: string;
+  mapVersionId: string;
+  edgeId: string | null;
+  zoneId: string | null;
+  endpointId: string | null;
+  locationCode: string;
+  hazardType: HazardType | string;
+}
+
+export type IssueStatus = 'OPEN' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+
+export interface IssueEvidenceDto {
+  kind: string;
+  uri: string | null;
+  mimeType: string | null;
+  note: string | null;
+  addedBy: string | null;
+  addedAt: UtcDateTime | null;
+}
+
+export interface IssueReportResponse {
+  id: string;
+  code: string;
+  issueType: string;
+  severity: string;
+  status: IssueStatus | string;
+  description: string;
+  reportedBy: string;
+  assigneeId: string | null;
+  containerId: string | null;
+  transportRequestId: string | null;
+  jobId: string | null;
+  jobStepId: string | null;
+  storageLocationId: string | null;
+  robotId: string | null;
+  evidence: IssueEvidenceDto[];
+  version: number;
+  reportedAt: UtcDateTime;
+  updatedAt: UtcDateTime;
+  resolvedAt: UtcDateTime | null;
+  resolvedBy: string | null;
+  resolution: string | null;
+  allowedTransitions: string[];
+  problemCode: HandoverProblemCode | string | null;
+  hazard?: HazardLocationResponse | null;
+}
+
+export interface ListIssuesResponse {
+  total: number;
+  items: IssueReportResponse[];
 }
 
 export interface ReportTaskProblemBody {

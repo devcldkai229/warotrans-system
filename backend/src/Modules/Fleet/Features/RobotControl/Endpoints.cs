@@ -9,7 +9,7 @@ namespace WaroTrans.Fleet.Features.RobotControl;
 
 public sealed record StopRobotRequest(string? Mode = null, string? Reason = null);
 
-public sealed record AcquireLeaseRequest(bool Takeover = false, string? Reason = null);
+public sealed record AcquireLeaseRequest(bool Takeover = false, string? Reason = null, bool Sequenced = false, Guid? LeaseId = null);
 
 public sealed record StartMaintenanceRequest(string Reason);
 
@@ -52,15 +52,15 @@ public static class RobotControlEndpoints
             .WithName("GetManualLease");
 
         group.MapPost("/robots/{id:guid}/manual/lease", async (Guid id, AcquireLeaseRequest? request, RobotControlService control, CancellationToken ct) =>
-                Results.Ok(await control.AcquireLeaseAsync(id, request?.Takeover ?? false, request?.Reason, ct)))
+                Results.Ok(await control.AcquireLeaseAsync(id, request ?? new(), ct)))
             .RequirePermission(Permissions.RobotManualDrive)
             .RequireRobotScope()
             .WithName("AcquireManualLease")
             .WithDescription("Grants or renews (30 s) the exclusive right to drive this robot by hand. Renew every ~10 s while driving. 409 manual_lease_held when someone else holds it; an Admin may take over with a reason.");
 
-        group.MapDelete("/robots/{id:guid}/manual/lease", async (Guid id, RobotControlService control, CancellationToken ct) =>
+        group.MapDelete("/robots/{id:guid}/manual/lease", async (Guid id, Guid? leaseId, RobotControlService control, CancellationToken ct) =>
             {
-                await control.ReleaseLeaseAsync(id, ct);
+                await control.ReleaseLeaseAsync(id, ct, leaseId);
                 return Results.NoContent();
             })
             .RequirePermission(Permissions.RobotManualDrive)

@@ -101,6 +101,16 @@ public interface IFleetModule
         Guid endpointId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> ArmHandoverStopButtonAsync(
+        Guid robotId, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId,
+        Guid requestId, WaroTrans.BuildingBlocks.Mqtt.Messages.RobotHandoverStop handoverStop, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
+    Task<bool> ArmRecoveryButtonAsync(
+        Guid robotId, Guid jobId, Guid moveStepId, Guid containerId, Guid endpointId,
+        Guid requestId, WaroTrans.BuildingBlocks.Mqtt.Messages.RobotRecoveryTransfer recoveryTransfer, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
     /// <summary>
     /// Publishes business acceptance/rejection of an interaction_confirm (MQTT interaction_result).
     /// </summary>
@@ -152,7 +162,8 @@ public sealed record RobotSnapshot(
     bool MotionHeld = false,
     bool InManualMode = false,
     DateTimeOffset? BatteryMeasuredAt = null,
-    int? MaxContainers = null);
+    int? MaxContainers = null,
+    IReadOnlyList<string>? Capabilities = null);
 
 /// <summary>
 /// FL-06: whether a robot still holds a Job that is going on. Fleet owns this contract and WorkflowExecution implements it, because
