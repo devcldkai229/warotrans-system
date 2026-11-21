@@ -211,6 +211,24 @@ interface StepPayload {
 
 export const STEP_EVENT_TYPE = 'job.step-status-changed'
 
+/**
+ * The Recorder returns the whole core envelope as the event payload: correlation fields on top (jobStepId,
+ * sourceStatusCode …) and the core's own event under `payload`. Flatten both, the core event winning, so a payload
+ * that is already flat (older shapes) reads the same.
+ */
+function stepPayload(raw: unknown): StepPayload {
+  const envelope = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const inner = (envelope.payload && typeof envelope.payload === 'object' ? envelope.payload : {}) as StepPayload
+  const top = envelope as StepPayload & { sourceStatusCode?: string }
+  return {
+    ...top,
+    ...inner,
+    status: inner.status ?? top.status ?? top.sourceStatusCode,
+    jobStepId: inner.jobStepId ?? top.jobStepId,
+    jobId: inner.jobId ?? top.jobId,
+  }
+}
+
 const STEP_DONE = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'])
 
 /** One step of a trip as it ran: from its first status to its end (or the next step when it never said so). */
@@ -240,7 +258,7 @@ export function stepTimeline(events: { eventType: string; occurredAtUtc: string;
   const byStep = new Map<string, StepSpan>()
   const sorted = events.filter((e) => e.eventType === STEP_EVENT_TYPE).sort((a, b) => Date.parse(a.occurredAtUtc) - Date.parse(b.occurredAtUtc))
   for (const e of sorted) {
-    const p = (e.payload ?? {}) as StepPayload
+    const p = stepPayload(e.payload)
     if (!p.jobStepId) continue
     const at = Date.parse(e.occurredAtUtc)
     const status = p.status ?? ''

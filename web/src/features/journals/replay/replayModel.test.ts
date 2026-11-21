@@ -191,4 +191,47 @@ describe('step timeline', () => {
     expect(stepJump(spans, T0 + 20_500, -1)).toBe(T0)
     expect(stepJump(spans, T0 + 50_000, 1)).toBeNull()
   })
+
+  it('reads the envelope the Recorder returns (core event under payload, status as sourceStatusCode)', () => {
+    // Shape copied from GET /api/evidence/journals/{id}/events of the real RBT-001 trip R211126002.
+    const envelope = (offsetMs: number, status: string, inner: Record<string, unknown>) => ({
+      eventType: STEP_EVENT_TYPE,
+      occurredAtUtc: iso(offsetMs),
+      payload: {
+        jobId: 'J1',
+        jobNo: 'J211126002',
+        source: 'warotrans-core',
+        jobStepId: 'S1',
+        sourceStatusCode: status,
+        eventType: STEP_EVENT_TYPE,
+        payload: { jobId: 'J1', jobStepId: 'S1', status, stepKey: 'MOVE_TO_PICKUP', ...inner },
+      },
+    })
+    const spans = stepTimeline([
+      envelope(0, 'EXECUTING', { stepName: 'Move to Pickup', stepType: 'MOVE', stepPosition: 1, stepCount: 4, targetEndpointCode: 'EP-SHELF-C-1', targetEndpointName: 'Shelf C 1' }),
+      envelope(24_000, 'COMPLETED', { stepName: 'Move to Pickup', stepType: 'MOVE', stepPosition: 1, stepCount: 4 }),
+    ])
+    expect(spans).toHaveLength(1)
+    expect(spans[0]).toMatchObject({
+      stepId: 'S1',
+      jobId: 'J1',
+      name: 'Move to Pickup',
+      type: 'MOVE',
+      position: 1,
+      count: 4,
+      targetCode: 'EP-SHELF-C-1',
+      targetName: 'Shelf C 1',
+      status: 'COMPLETED',
+    })
+    expect(spans[0]!.endMs! - spans[0]!.startMs).toBe(24_000)
+  })
+
+  it('takes the status from sourceStatusCode when the core event has none', () => {
+    const spans = stepTimeline([
+      { eventType: STEP_EVENT_TYPE, occurredAtUtc: iso(0), payload: { jobStepId: 'S9', sourceStatusCode: 'EXECUTING', payload: { stepKey: 'X' } } },
+      { eventType: STEP_EVENT_TYPE, occurredAtUtc: iso(5000), payload: { jobStepId: 'S9', sourceStatusCode: 'COMPLETED', payload: { stepKey: 'X' } } },
+    ])
+    expect(spans[0]).toMatchObject({ name: 'X', status: 'COMPLETED' })
+    expect(spans[0]!.endMs! - spans[0]!.startMs).toBe(5000)
+  })
 })

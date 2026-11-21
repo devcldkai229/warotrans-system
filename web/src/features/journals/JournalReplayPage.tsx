@@ -85,49 +85,6 @@ export function JournalReplayPage() {
   const [rate, setRate] = useState(1)
   const [mainRun, setMainRun] = useState<string | null>(params.get('run'))
   const [tab, setTab] = useState<Tab>('events')
-  const cursorMs = Math.min(Math.max(cursor ?? fromMs, fromMs), toMs)
-
-  // The global clock: real time × rate while playing. It belongs to the page, never to a video player.
-  const last = useRef<number | null>(null)
-  useEffect(() => {
-    if (!playing) {
-      last.current = null
-      return
-    }
-    let frame = 0
-    const step = (now: number) => {
-      const before = last.current ?? now
-      last.current = now
-      setCursor((c) => {
-        const next = (c ?? fromMs) + (now - before) * rate
-        if (next >= toMs) {
-          setPlaying(false)
-          return toMs
-        }
-        return next
-      })
-      frame = requestAnimationFrame(step)
-    }
-    frame = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(frame)
-  }, [playing, rate, fromMs, toMs])
-
-  // Deep link kept current (rounded to 100 ms, written at most twice a second).
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current)
-          next.set('t', String(Math.round(cursorMs / 100) * 100))
-          if (mainRun) next.set('run', mainRun)
-          return next
-        },
-        { replace: true },
-      )
-    }, 500)
-    return () => clearTimeout(id)
-  }, [cursorMs, mainRun, setParams])
-
   const trajectories = useQueries({
     queries: runs.map((run) => ({
       queryKey: ['evidence-trajectory', run.id],
@@ -148,6 +105,56 @@ export function JournalReplayPage() {
     recordings.forEach((r, i) => (out[r.id] = spans[i]?.data))
     return out
   }, [recordings, spans])
+  // Until the technician moves it (or a deep link sets it), the cursor sits on the first frame of video: the journal
+  // opens a moment before the camera starts, and opening on "No video at this time" looked broken.
+  const firstFootageMs = useMemo(() => {
+    const starts = Object.values(spansByRecording).flatMap((r) => (r?.spans ?? []).map((sp) => Date.parse(sp.utcStart)))
+    const first = starts.length > 0 ? Math.min(...starts) : null
+    return first != null && first > fromMs && first < toMs ? first : fromMs
+  }, [spansByRecording, fromMs, toMs])
+  const cursorMs = Math.min(Math.max(cursor ?? firstFootageMs, fromMs), toMs)
+
+  // The global clock: real time × rate while playing. It belongs to the page, never to a video player.
+  const last = useRef<number | null>(null)
+  useEffect(() => {
+    if (!playing) {
+      last.current = null
+      return
+    }
+    let frame = 0
+    const step = (now: number) => {
+      const before = last.current ?? now
+      last.current = now
+      setCursor((c) => {
+        const next = (c ?? firstFootageMs) + (now - before) * rate
+        if (next >= toMs) {
+          setPlaying(false)
+          return toMs
+        }
+        return next
+      })
+      frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [playing, rate, fromMs, toMs, firstFootageMs])
+
+  // Deep link kept current (rounded to 100 ms, written at most twice a second).
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          next.set('t', String(Math.round(cursorMs / 100) * 100))
+          if (mainRun) next.set('run', mainRun)
+          return next
+        },
+        { replace: true },
+      )
+    }, 500)
+    return () => clearTimeout(id)
+  }, [cursorMs, mainRun, setParams])
+
   const eventsQuery = useQuery({ queryKey: ['evidence-events', journalId], queryFn: () => evidenceApi.events(journalId), enabled: Boolean(manifest) })
   const notesQuery = useQuery({ queryKey: ['evidence-notes', journalId], queryFn: () => evidenceApi.annotations(journalId), enabled: Boolean(manifest) })
   const mapVersionId = runs.find((r) => r.mapVersionId)?.mapVersionId ?? null
