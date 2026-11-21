@@ -65,7 +65,6 @@ import {
   endpointJobRole,
   endpointPriority,
   selectVisibleEndpointLabels,
-  visibleZoneLabels,
   zoneShortBadge,
   type MapJobContext,
 } from './mapLabels';
@@ -551,20 +550,6 @@ function MapCanvas({
     ],
   );
 
-  const zoneLabels = useMemo(
-    () =>
-      layers.zones && layers.labels
-        ? visibleZoneLabels(
-            map,
-            frame,
-            camera.settledZoom,
-            inspected?.kind === 'zone' ? inspected.zone.id : null,
-            labelObstacles,
-          )
-        : [],
-    [layers.zones, layers.labels, map, frame, camera.settledZoom, inspected, labelObstacles],
-  );
-
   const floorAreaLabels = useMemo(() => {
     if (!model || layers.scan || !layers.labels || !labelsDetailed) return [];
     return (model.floorPaint || [])
@@ -863,33 +848,6 @@ function MapCanvas({
                 </View>
               </MapAnchor>
             ))}
-
-            {zoneLabels.map(z => {
-              const zColor = zoneColor(z.zone.zoneType);
-              return (
-                <MapAnchor
-                  key={`zone-lbl-${z.id}`}
-                  point={{ x: z.x, y: z.y }}
-                  camera={camera}
-                  width={116}
-                  height={20}
-                  passThrough
-                >
-                  <Text
-                    variant="caption"
-                    fontWeight="700"
-                    numberOfLines={1}
-                    maxFontSizeMultiplier={1.15}
-                    style={[
-                      styles.zoneFloorLabel,
-                      { color: zColor, opacity: isDark ? 0.85 : 0.78 },
-                    ]}
-                  >
-                    {z.name}
-                  </Text>
-                </MapAnchor>
-              );
-            })}
 
             {layers.stations
               ? visibleEndpoints.map(({ x, y, endpoint: item }) => (
@@ -1887,15 +1845,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       lineHeight: 12,
       fontFamily: typography.fontMono,
       color: colors.textSecondary,
-    },
-    zoneFloorLabel: {
-      fontSize: 9.5,
-      lineHeight: 13,
-      letterSpacing: 0.4,
-      textAlign: 'center',
-      textShadowColor: isDark ? 'rgba(10, 12, 16, 0.85)' : 'rgba(248, 250, 252, 0.95)',
-      textShadowOffset: { width: 0, height: 0 },
-      textShadowRadius: 3,
     },
 
     stationLabelBelow: {
