@@ -171,8 +171,11 @@ export function setStorageLocationStatus(id: string, isActive: boolean) {
 
 /** INBOUND = phiếu nhập (PN-), OUTBOUND = phiếu xuất (PX-). */
 export type StockVoucherType = 'INBOUND' | 'OUTBOUND'
-/** Set by people only; robot progress is `doneCount`, read from the Containers. */
-export type StockVoucherStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
+/**
+ * DRAFT → CONFIRMED by people; CONFIRMED → COMPLETED by itself when its last Container is done (on a shelf for inbound,
+ * issued at an Outbound gate for outbound), or by people closing it short. Robot progress is `doneCount`.
+ */
+export type StockVoucherStatus = 'DRAFT' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
 
 export interface StockVoucherListItem {
   id: string
@@ -189,6 +192,9 @@ export interface StockVoucherListItem {
   containerCount: number
   /** Containers already on a shelf (inbound) or issued (outbound). */
   doneCount: number
+  completedAt?: string | null
+  /** Lines dropped when the voucher was closed short. */
+  closedShortCount?: number
 }
 
 export interface StockVoucherLine {
@@ -205,6 +211,8 @@ export interface StockVoucherLine {
   currentEndpointId: string | null
   currentLevelNo: number | null
   done: boolean
+  /** The voucher was closed short before this Container got done: it left the voucher. */
+  closedShort?: boolean
 }
 
 export interface StockVoucherProductSummary {
@@ -222,6 +230,8 @@ export interface StockVoucherDetail extends StockVoucherListItem {
   confirmedBy: string | null
   cancelledBy: string | null
   cancelledAt: string | null
+  closedShortAt?: string | null
+  closedShortReason?: string | null
   products: StockVoucherProductSummary[]
   lines: StockVoucherLine[]
 }
@@ -246,18 +256,23 @@ export function getStockVoucher(id: string) {
   return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}`)
 }
 
-export function createStockVoucher(body: { warehouseId: string; type: StockVoucherType; referenceNo?: string; note?: string }) {
+/**
+ * Opens a voucher. With `containerIds` they are added in the same call; `confirm: true` also confirms it, so it is
+ * born CONFIRMED. Inbound takes received Containers (CREATED/PACKED); outbound takes Containers STORED on a shelf.
+ */
+export function createStockVoucher(body: {
+  warehouseId: string
+  type: StockVoucherType
+  referenceNo?: string
+  note?: string
+  containerIds?: string[]
+  confirm?: boolean
+}) {
   return apiRequest<StockVoucherDetail>('/api/warehouse/stock-vouchers', { method: 'POST', body: JSON.stringify(body) })
 }
 
-/**
- * Either name Containers, or (outbound only) ask for `count` stored Containers of a product, oldest first.
- * Rejects with `voucher_container_on_other_voucher` (409), `not_enough_stored_containers`, `voucher_not_draft` (400).
- */
-export function addStockVoucherLines(
-  id: string,
-  body: { containerIds: string[] } | { productId: string; count: number },
-) {
+/** Rejects with `voucher_container_on_other_voucher` (409), `voucher_container_not_on_shelf`, `voucher_not_draft` (400). */
+export function addStockVoucherLines(id: string, body: { containerIds: string[] }) {
   return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/lines`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -278,9 +293,21 @@ export function issueContainerLabels(count: number) {
   return apiRequest<{ codes: string[]; issuedAt: string }>('/api/warehouse/container-labels', { method: 'POST', body: JSON.stringify({ count }) })
 }
 
-/** Only a DRAFT can be cancelled. */
+/** Only a DRAFT can be cancelled; a CONFIRMED voucher is closed short instead. */
 export function cancelStockVoucher(id: string) {
   return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/cancel`, { method: 'POST' })
+}
+
+/**
+ * Stops waiting for the Containers of a CONFIRMED voucher that are not done: their lines close and they leave the
+ * voucher. COMPLETED when at least one line is done, CANCELLED otherwise. 409 `voucher_container_in_transport` /
+ * `voucher_container_in_transit` while one is still moving or recorded on a robot.
+ */
+export function closeStockVoucherShort(id: string, reason: string) {
+  return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/close-short`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
 }
 
 /** WH-01: names the shelf of an IN_TRANSIT or HOLD Container. 409 `container_in_active_transport` while a request moves it. */

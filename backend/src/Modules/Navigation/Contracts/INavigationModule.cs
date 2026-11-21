@@ -35,9 +35,26 @@ public interface INavigationModule
 
     Task<IReadOnlyList<string>> GetWorkZoneCodesAtEndpointAsync(Guid endpointId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>([]);
+
+    /// <summary>
+    /// An EndpointGroup with its member Endpoints (ordered by code), or null when the id is not a group. A workflow may
+    /// name a group where it names an Endpoint; the runtime then picks a free member. Default: none (test doubles).
+    /// </summary>
+    Task<EndpointGroupSnapshot?> GetEndpointGroupAsync(Guid groupId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<EndpointGroupSnapshot?>(null);
 }
 
 public sealed record WorkZoneSnapshot(Guid Id, Guid MapVersionId, string Code);
+
+/// <summary>FIRST_AVAILABLE: the first free member by code; NEAREST: the free member closest to the robot.</summary>
+public sealed record EndpointGroupSnapshot(
+    Guid Id,
+    Guid MapVersionId,
+    string Code,
+    string Name,
+    EndpointSelectionPolicy SelectionPolicy,
+    bool IsActive,
+    IReadOnlyList<EndpointPoseWithType> Members);
 
 public sealed record EndpointPoseSnapshot(
     Guid Id,

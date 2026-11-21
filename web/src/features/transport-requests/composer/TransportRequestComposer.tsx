@@ -8,6 +8,7 @@ import { mapDetailToGeometry } from '@/shared/map/mapVersionGeometry'
 import type { MapCallout, MapMovement } from '@/shared/map/WarehouseMap'
 import { MovementBuilderPanel } from './MovementBuilderPanel'
 import { RequestSetupPanel } from './RequestSetupPanel'
+import { applyFixedStops } from './fixedStops'
 import { buildComposerMapPreview } from './mapPreview'
 import { submitTransportRequest } from './submitTransportRequest'
 import { mapsForWarehouse, useTransportRequestComposerData } from './useTransportRequestComposerData'
@@ -65,6 +66,15 @@ export function TransportRequestComposer({
   const [submitting, setSubmitting] = useState(false)
 
   const showPanel2 = Boolean(draft.workflowId)
+
+  // The workflow's own gate wins over whatever was picked or prefilled (INBOUND: From; OUTBOUND_RETRIEVAL: To).
+  const { fixedPickupEndpointId, fixedDropoffEndpointId } = data
+  useEffect(() => {
+    setDraft((current) => {
+      const movements = applyFixedStops(current.movements, fixedPickupEndpointId, fixedDropoffEndpointId)
+      return movements === current.movements ? current : { ...current, movements }
+    })
+  }, [draft.movements, fixedPickupEndpointId, fixedDropoffEndpointId])
 
   // One warehouse / one published map: choose it, so the containers can be listed without a manual pick first.
   useEffect(() => {

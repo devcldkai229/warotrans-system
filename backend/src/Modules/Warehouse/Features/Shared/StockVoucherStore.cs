@@ -17,7 +17,8 @@ internal static class StockVoucherStore
         ?? throw new NotFoundException($"Stock voucher '{id}' was not found.", "stock_voucher_not_found");
 
     /// <summary>
-    /// A Container may be on one live (not CANCELLED) voucher of each type, so two phiếu xuất cannot claim it.
+    /// A Container may be on one live (not CANCELLED) voucher of each type, so two phiếu xuất cannot claim it. A line
+    /// closed short has let its Container go.
     /// </summary>
     public static async Task EnsureNotOnOtherVoucherAsync(
         WarehouseDbContext db,
@@ -30,7 +31,8 @@ internal static class StockVoucherStore
             .Where(l => containerIds.Contains(l.ContainerId)
                 && l.StockVoucherId != voucher.Id
                 && l.StockVoucher.Type == voucher.Type
-                && l.StockVoucher.Status != StockVoucherStatus.CANCELLED)
+                && l.StockVoucher.Status != StockVoucherStatus.CANCELLED
+                && l.ClosedShortAt == null)
             .Select(l => new { l.Container!.Barcode, l.StockVoucher.Code })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -42,7 +44,6 @@ internal static class StockVoucherStore
         }
     }
 
-    /// <summary>Outbound Containers must sit on a shelf of the voucher's warehouse; inbound ones on no other warehouse's shelf.</summary>
     /// <summary>
     /// A Container a robot is already moving (open TransportRequest) cannot go on a voucher: once the voucher is
     /// CONFIRMED it could not be dispatched, nor taken off the voucher again.

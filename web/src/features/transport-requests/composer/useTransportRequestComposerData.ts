@@ -230,6 +230,8 @@ export function useTransportRequestComposerData(options: {
     workflowKind,
     storageLocations,
     endpoints,
+    fixedPickupEndpointId: (options.workflowId && schemaQuery.data?.fixedPickupEndpointId) || null,
+    fixedDropoffEndpointId: (options.workflowId && schemaQuery.data?.fixedDropoffEndpointId) || null,
     requestedByName: account?.fullName ?? account?.username ?? '—',
     isLoading,
     warehouseSelected: Boolean(options.warehouseId),

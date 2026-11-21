@@ -176,7 +176,7 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL AND contents_unit IS NOT NULL)");
 
-                            t.HasCheckConstraint("ck_containers_endpoint_custody", "(current_endpoint_id IS NULL AND status <> 'STAGED_OUTBOUND') OR (current_endpoint_id IS NOT NULL AND status = 'STAGED_OUTBOUND' AND warehouse_id IS NOT NULL AND current_storage_location_id IS NULL AND current_level_no IS NULL AND inventory_storage_location_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_containers_endpoint_custody", "current_endpoint_id IS NULL");
 
                             t.HasCheckConstraint("ck_containers_stock_receipt", "(inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0 AND warehouse_id IS NOT NULL)");
                         });
@@ -425,11 +425,28 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("cancelled_by");
 
+                    b.Property<DateTimeOffset?>("ClosedShortAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_short_at");
+
+                    b.Property<Guid?>("ClosedShortBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_short_by");
+
+                    b.Property<string>("ClosedShortReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("closed_short_reason");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("code");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
 
                     b.Property<DateTimeOffset?>("ConfirmedAt")
                         .HasColumnType("timestamp with time zone")
@@ -494,7 +511,7 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
                     b.ToTable("stock_vouchers", "warehouse", t =>
                         {
-                            t.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR status = 'CONFIRMED'");
+                            t.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR status IN ('CONFIRMED', 'COMPLETED')");
                         });
                 });
 
@@ -504,6 +521,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ClosedShortAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_short_at");
 
                     b.Property<Guid>("ContainerId")
                         .HasColumnType("uuid")

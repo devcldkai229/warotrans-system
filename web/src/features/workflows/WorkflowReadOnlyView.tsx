@@ -3,6 +3,8 @@ import type { OperationMetadata, WorkflowMetadata, WorkflowUpsert } from '@/shar
 import { t } from '@/shared/i18n'
 import { Button } from '@/shared/ui/Button'
 import { InfoTip } from '@/shared/ui/InfoTip'
+import { EndpointLabel } from './EndpointValuePicker'
+import { isEndpointField, variableTypeChoice, WAYPOINT_GROUP_TYPE, WAYPOINT_TYPE } from './endpointOptions'
 import { inputRows, valueText, variableValue } from './readOnlyView'
 import { ScopeBadge } from './scope-badge'
 
@@ -87,10 +89,20 @@ export function WorkflowReadOnlyView({
                       <code>{variable.key}</code>
                     </td>
                     <td>{variable.name || '—'}</td>
-                    <td>{variable.dataType}</td>
+                    <td>{variableTypeChoice(variable)}</td>
                     <td>{variable.source}</td>
                     <td>{variable.isRequired ? t('Yes') : t('No')}</td>
-                    <td>{variableValue(variable)}</td>
+                    <td>
+                      {variable.source === 'ADMIN_INPUT' &&
+                      (variable.format === WAYPOINT_TYPE ||
+                        variable.format === WAYPOINT_GROUP_TYPE ||
+                        isEndpointField(variable.key, variable.dataType)) &&
+                      typeof variable.configuredValue === 'string' ? (
+                        <EndpointLabel id={variable.configuredValue} group={variable.format === WAYPOINT_GROUP_TYPE} />
+                      ) : (
+                        variableValue(variable)
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -245,7 +257,15 @@ export function WorkflowReadOnlyView({
                                             <td className="wf-view__io-type">{input.dataType ?? '—'}</td>
                                             <td>
                                               <span className="wf-view__io-kind">{input.source.kind}</span>
-                                              {input.source.value !== null ? <code className="wf-view__io-value">{input.source.value}</code> : null}
+                                              {input.source.value !== null ? (
+                                                <code className="wf-view__io-value">
+                                                  {input.source.kind === t('Constant') && isEndpointField(input.key, input.dataType) ? (
+                                                    <EndpointLabel id={input.source.value} />
+                                                  ) : (
+                                                    input.source.value
+                                                  )}
+                                                </code>
+                                              ) : null}
                                               {input.source.note ? <span className="wf-view__io-note">{input.source.note}</span> : null}
                                             </td>
                                           </tr>

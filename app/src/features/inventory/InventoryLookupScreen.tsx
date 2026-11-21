@@ -163,11 +163,8 @@ export function InventoryLookupScreen() {
     }
   };
 
-  const stagedOutboundCount = !serverSearch && containersQuery.isSuccess && containers.length === containerTotal
-    ? containers.filter(item => item.status === 'STAGED_OUTBOUND').length
-    : 0;
-  const endpointLabel = (endpointId: string, fallbackCode?: string | null, status?: string) =>
-    places.endpoints.find(ep => ep.id === endpointId)?.name ?? fallbackCode ?? (status === 'STAGED_OUTBOUND' ? t('Outbound Gate') : t('At Station'));
+  const endpointLabel = (endpointId: string, fallbackCode?: string | null, _status?: string) =>
+    places.endpoints.find(ep => ep.id === endpointId)?.name ?? fallbackCode ?? t('At Station');
   const locationOptions = useMemo(() => containerLocationFilters(containers), [containers]);
   const locationLabel = (key: string) => {
     if (key === 'ALL') return t('All locations');
@@ -381,11 +378,6 @@ export function InventoryLookupScreen() {
               <StatusText variant="caption" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textSecondary'}>Unallocated</StatusText>
             </View>
           </View>
-          {stagedOutboundCount > 0 && (
-            <StatusText variant="caption" color="primaryText" style={styles.stockSubNote}>
-              {t('{count} staged at Outbound gate', { count: stagedOutboundCount })}
-            </StatusText>
-          )}
         </View>
       )}
 

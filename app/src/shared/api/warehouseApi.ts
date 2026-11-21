@@ -209,6 +209,7 @@ export async function createContainerBatch(body: CreateContainerBatchBody, signa
 export interface StockVoucherListItem {
   id: string; code: string; type: StockVoucherType; status: StockVoucherStatus; referenceNo: string | null; note: string | null;
   createdAt: string; confirmedAt: string | null; containerCount: number; doneCount: number;
+  completedAt?: string | null; closedShortCount?: number;
 }
 export interface StockVoucherPage { items: StockVoucherListItem[]; total: number }
 export interface StockVoucherLine {
@@ -217,6 +218,8 @@ export interface StockVoucherLine {
   contentsQuantity?: number | null; contentsUnit?: string | null;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentLevelNo: number | null; done: boolean;
+  /** The voucher was closed short before this Container got done: it left the voucher. */
+  closedShort?: boolean;
 }
 export async function addStockVoucherLines(voucherId: string, containerIds: string[], signal?: AbortSignal): Promise<StockVoucherDetail> {
   requireMobileCapability('createStockVoucherDraft');
@@ -243,6 +246,7 @@ export async function addStockVoucherLines(voucherId: string, containerIds: stri
 export interface StockVoucherDetail extends StockVoucherListItem {
   warehouseId: string; warehouseCode: string; warehouseName: string; createdBy: string; updatedAt: string;
   confirmedBy: string | null; cancelledBy: string | null; cancelledAt: string | null; stockPostedAt?: string | null;
+  closedShortAt?: string | null; closedShortReason?: string | null;
   products: { productId: string; productSku: string; productName: string; containerCount: number; doneCount: number }[];
   lines: StockVoucherLine[];
 }
@@ -252,7 +256,7 @@ export function listStockVouchers(params: { warehouseId: string; type?: StockVou
 function validVoucherDetail(result: StockVoucherDetail | null): result is StockVoucherDetail {
   return !!result && typeof result.id === 'string' && !!result.id && typeof result.code === 'string'
     && typeof result.warehouseId === 'string' && ['INBOUND', 'OUTBOUND'].includes(result.type)
-    && ['DRAFT', 'CONFIRMED', 'CANCELLED'].includes(result.status) && Number.isInteger(result.containerCount) && result.containerCount >= 0
+    && ['DRAFT', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].includes(result.status) && Number.isInteger(result.containerCount) && result.containerCount >= 0
     && Array.isArray(result.lines) && result.containerCount === result.lines.length && result.lines.every(line => line && typeof line.id === 'string' && !!line.id
       && typeof line.containerId === 'string' && !!line.containerId.trim()
       && typeof line.containerBarcode === 'string' && !!line.containerBarcode.trim() && typeof line.containerStatus === 'string'
@@ -269,6 +273,34 @@ export async function getStockVoucher(id: string, signal?: AbortSignal) {
 }
 export interface CreateStockVoucherDraftBody {
   warehouseId: string; type: StockVoucherType; referenceNo?: string; note?: string;
+}
+export interface CreateStockVoucherBody extends CreateStockVoucherDraftBody {
+  /** Containers added in the same call: received ones for inbound, ones on a shelf for outbound. */
+  containerIds: string[];
+  /** True: the voucher is born CONFIRMED. False: a DRAFT holding these Containers. */
+  confirm: boolean;
+}
+/** Creates a voucher with its Containers in one transaction, as a DRAFT or already CONFIRMED. */
+export async function createStockVoucher(body: CreateStockVoucherBody, signal?: AbortSignal) {
+  requireMobileCapability('createStockVoucherDraft');
+  if (body.confirm) requireMobileCapability('confirmStockVoucher');
+  const ids = body.containerIds.map(id => id.trim()).filter(Boolean);
+  if (!ids.length || ids.length > 200 || new Set(ids).size !== ids.length) {
+    throw new ApiError(400, 'validation_failed', 'Select between 1 and 200 unique containers for this voucher.');
+  }
+  const result = await apiFetch<StockVoucherDetail>('/api/warehouse/stock-vouchers', {
+    method: 'POST', signal,
+    body: JSON.stringify({
+      warehouseId: body.warehouseId, type: body.type, referenceNo: body.referenceNo?.trim() || null, note: body.note?.trim() || null,
+      containerIds: ids, confirm: body.confirm,
+    }),
+  }, getAccessToken());
+  const saved = new Set(result?.lines?.map(line => line.containerId) ?? []);
+  if (!validVoucherDetail(result) || !result.code || result.warehouseId !== body.warehouseId || result.type !== body.type
+    || result.status !== (body.confirm ? 'CONFIRMED' : 'DRAFT') || ids.some(id => !saved.has(id))) {
+    throw new ApiError(502, 'voucher_creation_unverified', 'Could not verify the created voucher. Check the voucher list before creating again.');
+  }
+  return result;
 }
 /** Creates only document metadata. No stock is posted and no Container codes are allocated. */
 export async function createStockVoucherDraft(body: CreateStockVoucherDraftBody, signal?: AbortSignal) {
@@ -295,9 +327,24 @@ export async function confirmStockVoucher(id: string, type?: StockVoucherType, s
   const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}/confirm`, {
     method: 'POST', signal,
   }, getAccessToken());
-  if (!validVoucherDetail(result) || result.id !== id || result.type !== type || result.status !== 'CONFIRMED'
+  if (!validVoucherDetail(result) || result.id !== id || result.type !== type || !['CONFIRMED', 'COMPLETED'].includes(result.status)
     || typeof result.stockPostedAt !== 'string' || !result.stockPostedAt.trim()) {
     throw new ApiError(502, 'voucher_confirmation_unverified', 'Could not verify the voucher confirmation. Refresh and try again.');
+  }
+  return result;
+}
+/**
+ * Stops waiting for the Containers of a CONFIRMED voucher that are not done: their lines close and they leave the
+ * voucher. COMPLETED when at least one line is done, CANCELLED otherwise. 409 while one is still moving or on a robot.
+ */
+export async function closeStockVoucherShort(id: string, reason: string, signal?: AbortSignal): Promise<StockVoucherDetail> {
+  const why = reason.trim();
+  if (!why) throw new ApiError(400, 'voucher_close_reason_required', 'Say why the voucher is closed short.');
+  const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}/close-short`, {
+    method: 'POST', signal, body: JSON.stringify({ reason: why }),
+  }, getAccessToken());
+  if (!validVoucherDetail(result) || result.id !== id || !['COMPLETED', 'CANCELLED'].includes(result.status)) {
+    throw new ApiError(502, 'voucher_close_unverified', 'Could not verify that the voucher was closed. Refresh and try again.');
   }
   return result;
 }

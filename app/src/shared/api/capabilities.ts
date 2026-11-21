@@ -5,7 +5,8 @@ import { ApiError } from './client';
 export const mobileCapabilities = {
   createContainer: true,
   createStockVoucherDraft: true,
-  // Inbound and Outbound voucher confirmations post stock atomically via ConfirmStockVoucher (stockPostedAt).
+  // ConfirmStockVoucher: inbound admits the Containers, outbound reserves them (stockPostedAt). Stock itself moves as
+  // robots deliver each Container, and the voucher becomes COMPLETED with the last one.
   confirmStockVoucher: true,
   // Warehouse maps ResolveProduct with warehouse.read + StaffOrAdmin; wire contract is exactMatch/items.
   resolveProduct: true,

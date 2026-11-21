@@ -17,7 +17,9 @@ public static class ConfirmStockVoucherEndpoint
         .RequirePermission(Permissions.VoucherWrite)
         .WithName("ConfirmStockVoucher")
         .WithSummary("Confirm a DRAFT stock voucher")
-        .WithDescription("Posts warehouse admission for INBOUND or issues the selected Containers staged at Outbound. Retrying a posted confirmation returns the existing receipt.");
+        .WithDescription("INBOUND admits the received Containers; OUTBOUND reserves Containers on their shelves. No stock moves here: " +
+            "it follows each Container as robots put it on a shelf (+1) or deliver it to an Outbound gate (-1, ISSUED), and the " +
+            "voucher becomes COMPLETED with its last Container. Retrying a confirmation returns the voucher.");
 
         return group;
     }

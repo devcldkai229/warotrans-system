@@ -12,7 +12,9 @@ namespace WaroTrans.Warehouse.Services;
 /// <summary>
 /// Confirmed inbound boxes retain their accounting slot while carried; delivery/recovery transfers that balance.
 /// Physical custody (CurrentStorageLocationId) is cleared at pickup. Legacy unposted boxes retain their previous
-/// shelf-counter behavior. A movement's unique key and its balance changes commit together.
+/// shelf-counter behavior. A box delivered to an Outbound gate for a CONFIRMED phiếu xuất is ISSUED and its stock comes
+/// off its accounting slot right there. Every delivery or recovery that finishes the last open line of a CONFIRMED
+/// voucher completes it. A movement's unique key, its balance changes and the voucher completion commit together.
 /// </summary>
 public sealed class ContainerMovementRecorder(
     WarehouseDbContext dbContext,
@@ -93,6 +95,7 @@ public sealed class ContainerMovementRecorder(
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
             OccurredAt = now
         });
+        await CompleteFinishedVouchersAsync(container, now, cancellationToken);
 
         try
         {
@@ -146,7 +149,7 @@ public sealed class ContainerMovementRecorder(
             return;
         }
 
-        if (container.Status is ContainerStatus.IN_TRANSIT or ContainerStatus.ISSUED or ContainerStatus.STAGED_OUTBOUND)
+        if (container.Status is ContainerStatus.IN_TRANSIT or ContainerStatus.ISSUED)
         {
             logger.LogWarning(
                 "Container {Barcode} picked up while {Status}; stock unchanged",
@@ -157,8 +160,10 @@ public sealed class ContainerMovementRecorder(
 
         var now = DateTimeOffset.UtcNow;
         var movement = NewMovement(ContainerMovementType.PICKED_UP, container, key, pickup.JobId, pickup.TransportRequestId, now);
+        // Bound for an Outbound gate: pin the slot its stock is counted on, so the stock stays there while it is carried
+        // and comes off that slot when it is issued at the gate.
         if (pickup.OutboundEndpointId.HasValue)
-            await HoldStagingBalanceAsync(container, pickup.WarehouseId, cancellationToken);
+            await PinAccountingSlotAsync(container, pickup.WarehouseId, cancellationToken);
         if (!HasAdmissionOrBalance(container) && container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
         {
             await AdjustStockAsync(container, source, container.CurrentLevelNo ?? 1, -1, now, cancellationToken);
@@ -197,21 +202,19 @@ public sealed class ContainerMovementRecorder(
         var now = DateTimeOffset.UtcNow;
         var movement = NewMovement(ContainerMovementType.DELIVERED, container, key, delivery.JobId, delivery.TransportRequestId, now);
 
-        if (container.Status is ContainerStatus.ISSUED or ContainerStatus.STAGED_OUTBOUND)
+        if (container.Status is ContainerStatus.ISSUED)
             return;
 
-        if (delivery.OutboundEndpointId is { } outboundGate && destination is null)
+        if (delivery.OutboundEndpointId.HasValue && destination is null)
         {
-            await HoldStagingBalanceAsync(container, delivery.WarehouseId, cancellationToken);
-            container.Status = ContainerStatus.STAGED_OUTBOUND;
-            container.CurrentStorageLocationId = null;
-            container.CurrentLevelNo = null;
-            container.CurrentEndpointId = outboundGate;
+            await IssueAtOutboundGateAsync(delivery, container, movement, now, cancellationToken);
         }
         else
         {
             await DeliverToStorageOrOffShelfAsync(delivery, container, movement, level, now, cancellationToken);
         }
+
+        await CompleteFinishedVouchersAsync(container, now, cancellationToken);
 
         container.UpdatedAt = now;
         movement.ToStatus = container.Status;
@@ -284,7 +287,55 @@ public sealed class ContainerMovementRecorder(
         }
     }
 
-    private async Task HoldStagingBalanceAsync(Container container, Guid? warehouseId, CancellationToken ct)
+    /// <summary>
+    /// Delivered to an Outbound gate. On a CONFIRMED phiếu xuất (an open line) it leaves the warehouse: ISSUED, one
+    /// Container off the slot its stock is counted on. Without one (a Transport Request created before vouchers were
+    /// required) it is HOLD at no shelf, its stock untouched, until people recover it or put it on a voucher.
+    /// </summary>
+    private async Task IssueAtOutboundGateAsync(
+        ContainerDelivery delivery, Container container, ContainerMovement movement, DateTimeOffset now, CancellationToken ct)
+    {
+        await PinAccountingSlotAsync(container, delivery.WarehouseId, ct);
+        container.CurrentStorageLocationId = null;
+        container.CurrentLevelNo = null;
+        container.CurrentEndpointId = null;
+        if (!await IsOnConfirmedOutboundVoucherAsync(container.Id, ct))
+        {
+            container.Status = ContainerStatus.HOLD;
+            logger.LogWarning("Container {Barcode} delivered to an Outbound gate without a confirmed phiếu xuất: now HOLD", container.Barcode);
+            return;
+        }
+
+        await InventoryAccounting.AdjustAsync(
+            dbContext, container.ProductId, container.InventoryStorageLocationId!.Value, container.InventoryLevelNo!.Value, -1, now, ct);
+        movement.Type = ContainerMovementType.ISSUED;
+        container.Status = ContainerStatus.ISSUED;
+        container.InventoryStorageLocationId = null;
+        container.InventoryLevelNo = null;
+    }
+
+    /// <summary>
+    /// Every CONFIRMED voucher with an open line for this Container whose open lines are now all done becomes
+    /// COMPLETED. Lines are loaded with their Containers through this context, so the change not saved yet counts.
+    /// </summary>
+    private async Task CompleteFinishedVouchersAsync(Container container, DateTimeOffset now, CancellationToken ct)
+    {
+        var vouchers = await dbContext.StockVouchers
+            .Include(v => v.Lines).ThenInclude(l => l.Container)
+            .Where(v => v.Status == StockVoucherStatus.CONFIRMED
+                && v.Lines.Any(l => l.ContainerId == container.Id && l.ClosedShortAt == null))
+            .ToListAsync(ct);
+        foreach (var voucher in vouchers)
+        {
+            var type = voucher.Type;
+            if (voucher.CompleteIfFinished(l => l.Container is { } box && StockVoucherProgress.IsDone(type, box.Status), now))
+            {
+                logger.LogInformation("Stock voucher {Code} completed: every Container is done", voucher.Code);
+            }
+        }
+    }
+
+    private async Task PinAccountingSlotAsync(Container container, Guid? warehouseId, CancellationToken ct)
     {
         var locationId = container.InventoryStorageLocationId ?? container.CurrentStorageLocationId;
         var level = container.InventoryLevelNo ?? container.CurrentLevelNo ?? 1;
@@ -295,7 +346,7 @@ public sealed class ContainerMovementRecorder(
             || (container.WarehouseId.HasValue && container.WarehouseId != warehouseId)
             || !await dbContext.InventoryStocks.AnyAsync(s => s.ProductId == container.ProductId
                 && s.StorageLocationId == location.Id && s.LevelNo == level && s.ContainerCount > 0, ct))
-            throw new ConflictException("A Container must have booked warehouse stock before staging for outbound.", "inventory_balance_missing");
+            throw new ConflictException("A Container must have booked warehouse stock before it is shipped.", "inventory_balance_missing");
 
         container.WarehouseId = warehouseId;
         container.InventoryStorageLocationId = location.Id;
@@ -318,6 +369,7 @@ public sealed class ContainerMovementRecorder(
     private Task<bool> IsOnConfirmedOutboundVoucherAsync(Guid containerId, CancellationToken cancellationToken) =>
         dbContext.StockVoucherLines.AnyAsync(
             l => l.ContainerId == containerId
+                && l.ClosedShortAt == null
                 && l.StockVoucher.Type == StockVoucherType.OUTBOUND
                 && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED,
             cancellationToken);

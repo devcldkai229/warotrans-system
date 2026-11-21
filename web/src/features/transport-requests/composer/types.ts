@@ -105,6 +105,9 @@ export interface ComposerData {
   workflowKind: WorkflowKind
   storageLocations: ComposerStorageLocation[]
   endpoints: Endpoint[]
+  /** Set by the workflow (WorkflowFixedStops): the From / To of every movement is this Endpoint and cannot be changed. */
+  fixedPickupEndpointId: string | null
+  fixedDropoffEndpointId: string | null
   requestedByName: string
   isLoading: boolean
   /** A warehouse is chosen, so its containers can be listed. */

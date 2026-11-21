@@ -150,7 +150,8 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     private async Task<Dictionary<string, Guid>> SeedWorkflowsAsync()
     {
         await using var scope = Factory.Services.CreateAsyncScope();
-        var outcomes = await scope.ServiceProvider.GetRequiredService<StandardWorkflowSeeder>().SeedAsync(false, CancellationToken.None);
+        var outcomes = await scope.ServiceProvider.GetRequiredService<StandardWorkflowSeeder>()
+            .SeedAsync(WaroTrans.IntegrationTests.WorkflowExecution.StandardWorkflows.StandardWorkflowFixtures.Definitions(), new WorkflowSeedOptions(Publish: true), CancellationToken.None);
         Assert.All(outcomes, o => Assert.Equal(WorkflowStatus.PUBLISHED, o.Status));
         return outcomes.ToDictionary(o => o.Code, o => o.WorkflowId);
     }

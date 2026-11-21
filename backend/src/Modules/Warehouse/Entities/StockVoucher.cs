@@ -4,11 +4,15 @@ using WaroTrans.Warehouse.Enums;
 namespace WaroTrans.Warehouse.Entities;
 
 /// <summary>
-/// Phiếu nhập/xuất. One line per Container, so the quantity is a Container count (rules/00). Its status is a
-/// document status set by people (DRAFT → CONFIRMED | CANCELLED); robot progress is read from the Containers.
+/// Phiếu nhập/xuất. One line per Container, so the quantity is a Container count (rules/00).
+/// DRAFT → CONFIRMED by people; CONFIRMED → COMPLETED when the last open line is done (see
+/// <see cref="StockVoucherProgress"/>); people may also close a CONFIRMED voucher short. Stock follows each Container
+/// when a robot delivers it, never a status change of the voucher.
 /// </summary>
 public sealed class StockVoucher
 {
+    public const int ClosedShortReasonMaxLength = 500;
+
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
     public StockVoucherType Type { get; set; }
@@ -20,9 +24,20 @@ public sealed class StockVoucher
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? ConfirmedBy { get; set; }
     public DateTimeOffset? ConfirmedAt { get; set; }
+
+    /// <summary>
+    /// When the confirmation took effect on the Containers (inbound: admitted; outbound: reserved for issue). Not a
+    /// stock movement: stock moves when robots deliver.
+    /// </summary>
     public DateTimeOffset? StockPostedAt { get; set; }
     public Guid? CancelledBy { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
+
+    /// <summary>The last open line got done, or people closed the voucher short with at least one line done.</summary>
+    public DateTimeOffset? CompletedAt { get; set; }
+    public Guid? ClosedShortBy { get; set; }
+    public DateTimeOffset? ClosedShortAt { get; set; }
+    public string? ClosedShortReason { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
     public ICollection<StockVoucherLine> Lines { get; set; } = [];
@@ -31,7 +46,7 @@ public sealed class StockVoucher
     public static ContainerStatus[] EligibleContainerStatuses(StockVoucherType type) =>
         type == StockVoucherType.INBOUND
             ? [ContainerStatus.CREATED, ContainerStatus.PACKED]
-            : [ContainerStatus.STAGED_OUTBOUND];
+            : [ContainerStatus.STORED];
 
     public static StockVoucher Create(
         string code,
@@ -107,11 +122,13 @@ public sealed class StockVoucher
         Status = StockVoucherStatus.CONFIRMED;
         ConfirmedBy = accountId;
         ConfirmedAt = now;
+        StockPostedAt = now;
         UpdatedAt = now;
     }
 
     /// <summary>
-    /// Only a DRAFT can be cancelled: a CONFIRMED voucher may already have robots moving its Containers.
+    /// Only a DRAFT can be cancelled outright: a CONFIRMED voucher may already have robots moving its Containers, so it
+    /// is closed short instead (<see cref="CloseShort"/>).
     /// </summary>
     public void Cancel(Guid accountId, DateTimeOffset now)
     {
@@ -123,6 +140,78 @@ public sealed class StockVoucher
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// A CONFIRMED voucher whose open lines are all done becomes COMPLETED. <paramref name="isDone"/> tells, per line,
+    /// whether its Container is done (<see cref="StockVoucherProgress.IsDone"/>).
+    /// </summary>
+    /// <returns>True when this call completed the voucher.</returns>
+    public bool CompleteIfFinished(Func<StockVoucherLine, bool> isDone, DateTimeOffset now)
+    {
+        if (Status != StockVoucherStatus.CONFIRMED)
+        {
+            return false;
+        }
+
+        var open = Lines.Where(l => l.IsOpen).ToList();
+        if (open.Count == 0 || !open.All(isDone))
+        {
+            return false;
+        }
+
+        Status = StockVoucherStatus.COMPLETED;
+        CompletedAt = now;
+        UpdatedAt = now;
+        return true;
+    }
+
+    /// <summary>
+    /// People stop waiting for the lines that are not done: those lines are closed (their Containers leave the
+    /// voucher). With at least one line done the voucher is COMPLETED; with none it is CANCELLED, as if never confirmed.
+    /// </summary>
+    /// <returns>The lines that were closed.</returns>
+    public IReadOnlyList<StockVoucherLine> CloseShort(Guid accountId, string reason, Func<StockVoucherLine, bool> isDone, DateTimeOffset now)
+    {
+        if (Status != StockVoucherStatus.CONFIRMED)
+        {
+            throw new ConflictException(
+                $"Voucher {Code} is {Status}; only a CONFIRMED voucher can be closed short.",
+                "voucher_not_confirmed");
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new DomainValidationException("Say why the voucher is closed short.", "voucher_close_reason_required");
+        }
+
+        var open = Lines.Where(l => l.IsOpen).ToList();
+        var closing = open.Where(l => !isDone(l)).ToList();
+        foreach (var line in closing)
+        {
+            line.ClosedShortAt = now;
+        }
+
+        ClosedShortBy = accountId;
+        ClosedShortAt = now;
+        ClosedShortReason = reason.Trim().Length > ClosedShortReasonMaxLength
+            ? reason.Trim()[..ClosedShortReasonMaxLength]
+            : reason.Trim();
+        if (open.Count > closing.Count)
+        {
+            Status = StockVoucherStatus.COMPLETED;
+            CompletedAt = now;
+        }
+        else
+        {
+            Status = StockVoucherStatus.CANCELLED;
+            CancelledBy = accountId;
+            CancelledAt = now;
+            StockPostedAt = null;
+        }
+
+        UpdatedAt = now;
+        return closing;
+    }
+
     private void EnsureDraft()
     {
         if (Status != StockVoucherStatus.DRAFT)
@@ -132,4 +221,13 @@ public sealed class StockVoucher
                 "voucher_not_draft");
         }
     }
+}
+
+/// <summary>What "done" means for a voucher line: on a shelf for inbound, issued for outbound.</summary>
+public static class StockVoucherProgress
+{
+    public static bool IsDone(StockVoucherType type, ContainerStatus status) =>
+        type == StockVoucherType.INBOUND
+            ? status is ContainerStatus.STORED or ContainerStatus.ISSUED
+            : status == ContainerStatus.ISSUED;
 }

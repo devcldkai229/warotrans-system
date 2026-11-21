@@ -8,7 +8,7 @@ public sealed class StockVoucherConfiguration : IEntityTypeConfiguration<StockVo
 {
     public void Configure(EntityTypeBuilder<StockVoucher> builder)
     {
-        builder.ToTable("stock_vouchers", table => table.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR status = 'CONFIRMED'"));
+        builder.ToTable("stock_vouchers", table => table.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR status IN ('CONFIRMED', 'COMPLETED')"));
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
@@ -16,6 +16,7 @@ public sealed class StockVoucherConfiguration : IEntityTypeConfiguration<StockVo
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(x => x.ReferenceNo).HasMaxLength(100);
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.ClosedShortReason).HasMaxLength(StockVoucher.ClosedShortReasonMaxLength);
         builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
 
         builder.HasIndex(x => x.Code).IsUnique();

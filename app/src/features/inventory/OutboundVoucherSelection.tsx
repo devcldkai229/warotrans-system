@@ -47,7 +47,7 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
           <Text variant="caption" color={selected.length ? 'primaryText' : 'textSecondary'} style={[styles.tabular, { fontWeight: '600' }]}>{t('{count} selected', { count: selected.length })}</Text>
         </View>
       </View>
-      {!visible.length && <EmptyState compact title={term ? 'No Matching Containers' : 'No Containers At Outbound'} />}
+      {!visible.length && <EmptyState compact title={term ? 'No Matching Containers' : 'No Containers On Shelves'} />}
       {visible.slice(0, limit).map((item, index, list) => {
         const checked = !!value.selected[item.id];
         return <Pressable key={item.id} disabled={!editable}
@@ -66,7 +66,8 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
             <Text variant="caption" color="textSecondary" numberOfLines={1}>
               {item.productSku}
               {item.contentsQuantity != null && item.contentsUnit ? ` · ${item.contentsQuantity} ${item.contentsUnit}` : ''}
-              {` · ${item.currentEndpointCode || item.currentStorageLocationCode || 'None'}`}
+              {` · ${item.currentStorageLocationCode || item.currentEndpointCode || 'None'}`}
+              {item.currentLevelNo != null ? ` ${t('· Level {level}', { level: item.currentLevelNo })}` : ''}
             </Text>
           </View>
           <View style={[styles.checkCircle, checked && styles.checkCircleActive]}>

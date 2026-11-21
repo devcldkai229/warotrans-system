@@ -77,6 +77,13 @@ public static class WorkflowDefinitionValidator
                 result.Add($"{path}.dataType", $"Unknown data type '{variable.DataType}'.");
             }
 
+            if (variable.Format is not null
+                && !(variable.Format is WorkflowVariableDefinition.WaypointFormat or WorkflowVariableDefinition.WaypointGroupFormat
+                     && variable.DataType == WorkflowDataType.UUID))
+            {
+                result.Add($"{path}.format", $"Format '{variable.Format}' is only allowed as WAYPOINT or WAYPOINT_GROUP on a UUID variable.");
+            }
+
             if (!Enum.IsDefined(variable.Source))
             {
                 result.Add($"{path}.source", $"Unknown source '{variable.Source}'.");
@@ -93,7 +100,12 @@ public static class WorkflowDefinitionValidator
                     if (variable.ConfiguredValue is null
                         || variable.ConfiguredValue.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
                     {
-                        result.Add($"{path}.configuredValue", "ADMIN_INPUT requires configuredValue.");
+                        // An optional Admin setting may stay empty (e.g. no parking group: any PARK endpoint); a step
+                        // input that needs it is checked in ValidateBinding.
+                        if (variable.IsRequired)
+                        {
+                            result.Add($"{path}.configuredValue", "ADMIN_INPUT requires configuredValue.");
+                        }
                     }
                     else if (!WorkflowDataTypeCompatibility.TryParse(
                                  variable.ConfiguredValue.Value,
@@ -344,7 +356,8 @@ public static class WorkflowDefinitionValidator
                 stepIndex,
                 result,
                 scopeDef,
-                resolvedStopAction);
+                resolvedStopAction,
+                full);
         }
 
         foreach (var required in operation.Inputs.Where(i => i.Required))
@@ -368,7 +381,8 @@ public static class WorkflowDefinitionValidator
         IReadOnlyDictionary<string, (int TaskSeq, int StepSeq, StepType StepType, string OperationCode)> stepIndex,
         WorkflowDefinitionValidationResult result,
         OperationExecutionScopeDefinition scopeDef,
-        JobStopAction? resolvedStopAction)
+        JobStopAction? resolvedStopAction,
+        bool full = false)
     {
         if (!Enum.IsDefined(binding.SourceType))
         {
@@ -399,6 +413,11 @@ public static class WorkflowDefinitionValidator
                     result.Add(
                         path,
                         $"Variable '{variable.Key}' type {variable.DataType} is incompatible with input {inputDef.DataType}.");
+                }
+
+                if (full && inputDef.Required && variable.Source == WorkflowVariableSource.ADMIN_INPUT && !HasJsonValue(variable.ConfiguredValue))
+                {
+                    result.Add(path, $"ADMIN_INPUT '{variable.Key}' is empty but required input '{inputKey}' uses it: set its value.");
                 }
 
                 break;
