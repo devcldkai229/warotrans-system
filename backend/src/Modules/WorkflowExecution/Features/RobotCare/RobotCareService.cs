@@ -29,8 +29,10 @@ public sealed class FleetIdleOptions
     public int IdleSeconds { get; set; } = 300;
 
     /// <summary>
-    /// Where an idle robot goes when every parking place is taken: endpoint codes, comma separated, tried nearest first.
-    /// Empty: it stays where it is. A robot already standing on one of them stays there until a parking place frees up.
+    /// More wait points (= queue = recovery points), comma separated, besides the endpoints coded or named as one
+    /// (<see cref="Services.WaitPoints"/>). An idle robot goes to the nearest free wait point when every parking place is
+    /// taken; with none on the map it stays where it is. A robot already standing on one stays there until a parking
+    /// place frees up.
     /// </summary>
     public string FallbackEndpointCodes { get; set; } = "EP-QUEUE-POINT";
 
@@ -63,8 +65,13 @@ public sealed class RobotCareService(
     TimeProvider clock,
     ILogger<RobotCareService> logger,
     WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator? traffic = null,
-    Services.FreeEndpointSelector? freeEndpoints = null)
+    Services.FreeEndpointSelector? freeEndpoints = null,
+    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? trafficOptions = null)
 {
+    /// <summary>Codes configured as wait points (FleetIdle fallback + Traffic deadlock retreat), see <see cref="Services.WaitPoints"/>.</summary>
+    private IReadOnlyList<string> WaitPointCodes() =>
+        Services.WaitPoints.ConfiguredCodes(idle.Value.FallbackEndpointCodes, trafficOptions?.Value.DeadlockRetreatEndpointCodes);
+
     /// <summary>A robot waits this long behind an idle robot before that robot is asked to make way.</summary>
     public const double YieldAfterSeconds = 5;
 
@@ -279,7 +286,7 @@ public sealed class RobotCareService(
                 }
             }
 
-            var fallbackCodes = idle.Value.FallbackCodes();
+            var waitPointCodes = WaitPointCodes();
             var endpoints = await navigation.GetEndpointsOnMapAsync(blocker.CurrentMapVersionId, cancellationToken);
             var others = (await fleet.GetDispatchCandidatesAsync(blocker.CurrentMapVersionId, cancellationToken))
                 .Where(r => r.Id != blockerId && r.LocalizationStatus == LocalizationStatus.LOCALIZED)
@@ -297,15 +304,32 @@ public sealed class RobotCareService(
                 return d;
             }
 
-            var target = endpoints
-                .Where(e => e.IsEnabled
-                            && (e.EndpointType == EndpointType.PARK || fallbackCodes.Contains(e.Code, StringComparer.Ordinal)
-                                || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal))
-                            && Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
+            // Off the way the waiting robot planned (what traffic holds it to), else it would only block it further on.
+            var waiterPath = snapshot.Robots.FirstOrDefault(r => r.RobotId == waiterId) is { ProposedPath.IsDefaultOrEmpty: false } view
+                ? view.ProposedPath.Select(p => (p.X, p.Y)).ToList()
+                : [];
+            bool OffItsPath(EndpointPoseWithType e) =>
+                waiterPath.All(p => Math.Sqrt(Math.Pow(e.X - p.X, 2) + Math.Pow(e.Y - p.Y, 2)) >= Execution.JobExecutionEngine.PathClearanceMeters);
+            var headedTo = await db.JobSteps.AsNoTracking()
+                .Where(s => s.StepType == StepType.MOVE && s.TargetEndpointId != null
+                            && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING || s.Status == JobStepStatus.READY)
+                            && s.JobTask.Job.Status == JobStatus.RUNNING)
+                .Select(s => s.TargetEndpointId!.Value)
+                .ToListAsync(cancellationToken);
+            EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool) => pool
+                .Where(e => Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
                             && !targets.Contains(e.Id)
                             && others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)))
-                .OrderByDescending(Away)
+                .OrderByDescending(e => OffItsPath(e))
+                .ThenByDescending(Away)
                 .FirstOrDefault();
+            // A parking place or wait point first; on a map with too few, any free endpoint off the waiting robot's way
+            // that no live Job is headed to (a charger never).
+            var standAside = endpoints.Where(e => Services.WaitPoints.IsStandAside(e, waitPointCodes)).ToList();
+            var target = Pick(standAside.Where(OffItsPath))
+                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
+                                                      && !headedTo.Contains(e.Id) && OffItsPath(e)))
+                         ?? Pick(standAside);
             // Any free place beats standing in the way of a robot with work (the cooldown stops ping-pong).
             if (target is null || Away(target) <= 0.30)
             {
@@ -384,15 +408,15 @@ public sealed class RobotCareService(
                 continue;
             }
 
-            // A parking place first; when all are taken, the fallback (the queue point), unless the robot already stands on it.
-            var fallbackCodes = idle.Value.FallbackCodes();
+            // A parking place first; when all are taken, a wait point (= queue = recovery point), unless the robot
+            // already stands on one.
             var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
-                var atFallback = endpoints.Any(e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal) && Distance(robot, e) <= ParkedRadius(e));
+                var atFallback = endpoints.Any(e => IsRecoveryPoint(e) && Distance(robot, e) <= ParkedRadius(e));
                 target = atFallback
                     ? null
-                    : await ChooseFreeEndpointAsync(robot, e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal), cancellationToken);
+                    : await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, cancellationToken);
                 if (target is not null)
                 {
                     logger.LogInformation("Robot {RobotCode}: every parking place is taken, going to the fallback endpoint", robot.Code);
@@ -427,31 +451,10 @@ public sealed class RobotCareService(
 
     /// <summary>
     /// Wait = Queue = Recovery Point: an enabled, non-charger endpoint named or coded as one (EP-QUEUE*, EP-WAIT*,
-    /// EP-RECOVERY*, "wait" / "queue" / "recovery" in its name) or listed in FleetIdle:FallbackEndpointCodes.
+    /// EP-RECOVERY*, "wait" / "queue" / "recovery" in its name) or listed in FleetIdle:FallbackEndpointCodes or
+    /// Traffic:DeadlockRetreatEndpointCodes. The same rule decides where robots make way and back off (WaitPoints).
     /// </summary>
-    public bool IsRecoveryPoint(EndpointPoseWithType e)
-    {
-        if (!e.IsEnabled || e.EndpointType == EndpointType.CHARGER)
-        {
-            return false;
-        }
-
-        if (idle.Value.FallbackCodes().Contains(e.Code, StringComparer.Ordinal))
-        {
-            return true;
-        }
-
-        var code = e.Code.ToUpperInvariant();
-        if (code.StartsWith("EP-QUEUE", StringComparison.Ordinal) || code.StartsWith("EP-WAIT", StringComparison.Ordinal)
-            || code.StartsWith("EP-RECOVERY", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        var name = e.Name ?? string.Empty;
-        return name.Contains("wait", StringComparison.OrdinalIgnoreCase) || name.Contains("queue", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("recovery", StringComparison.OrdinalIgnoreCase);
-    }
+    public bool IsRecoveryPoint(EndpointPoseWithType e) => Services.WaitPoints.Is(e, WaitPointCodes());
 
     /// <summary>The recovery points on the robot's map, free ones first, nearest first.</summary>
     public async Task<IReadOnlyList<RecoveryPointView>> RecoveryPointsAsync(Guid robotId, CancellationToken cancellationToken)

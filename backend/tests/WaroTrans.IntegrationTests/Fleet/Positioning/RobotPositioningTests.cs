@@ -342,12 +342,29 @@ public sealed class RobotPositioningTests(WaroTransWebApplicationFactory factory
     }
 
     [Fact]
-    public async Task No_fallback_configured_means_the_robot_stays_when_parking_is_full()
+    public async Task With_parking_full_a_queue_point_is_used_without_being_configured()
+    {
+        // Wait point = queue point = recovery point: an EP-QUEUE* endpoint is one by its code, nothing to configure.
+        var seed = await SeedAsync();
+        await AddParkAsync(seed, 0.5);
+        await SeedRobotAsync(seed, x: 0.5, y: 4.0);
+        var queue = await AddEndpointAsync(seed, "EP-QUEUE-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(), EndpointType.WAYPOINT, 3.0, 1.0);
+        var waiting = await SeedRobotAsync(seed);
+
+        Assert.Equal(1, await AutoReturnAsync(string.Empty));
+        await using var check = Services.CreateAsyncScope();
+        var intent = Assert.Single(await check.ServiceProvider.GetRequiredService<FleetDbContext>().RobotPositioningIntents
+            .Where(i => i.RobotId == waiting.Id).ToListAsync());
+        Assert.Equal(queue.Id, intent.TargetEndpointId);
+    }
+
+    [Fact]
+    public async Task With_parking_full_and_no_wait_point_on_the_map_the_robot_stays()
     {
         var seed = await SeedAsync();
         await AddParkAsync(seed, 0.5);
         await SeedRobotAsync(seed, x: 0.5, y: 4.0);
-        await AddEndpointAsync(seed, "EP-QUEUE-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(), EndpointType.WAYPOINT, 3.0, 1.0);
+        await AddEndpointAsync(seed, "EP-SHELF-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(), EndpointType.WAYPOINT, 3.0, 1.0);
         await SeedRobotAsync(seed);
 
         Assert.Equal(0, await AutoReturnAsync(string.Empty));

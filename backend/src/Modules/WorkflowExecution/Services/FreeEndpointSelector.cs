@@ -20,6 +20,9 @@ public sealed class FreeEndpointSelector(
     IFleetModule fleet,
     IOptions<FleetIdleOptions> idle)
 {
+    /// <summary>Configured extra wait points (FleetIdle:FallbackEndpointCodes), see <see cref="WaitPoints"/>.</summary>
+    public string? FallbackEndpointCodes => idle.Value.FallbackEndpointCodes;
+
     private static readonly JobStatus[] Live =
         [JobStatus.CREATED, JobStatus.QUEUED, JobStatus.ASSIGNED, JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.REASSIGNING, JobStatus.RECOVERY_REQUIRED];
 
