@@ -1,4 +1,2 @@
-import { Platform } from 'react-native';
-
-// Native rollout stays opt-in until gesture/performance checks on a real device.
-export const interactiveMapEnabled = Platform.OS === 'web' || process.env.EXPO_PUBLIC_INTERACTIVE_MAP === 'true';
+// Interactive MapViewport enabled by default on iOS, Android, and Web; opt out via EXPO_PUBLIC_INTERACTIVE_MAP=false.
+export const interactiveMapEnabled = process.env.EXPO_PUBLIC_INTERACTIVE_MAP !== 'false';

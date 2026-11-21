@@ -18,6 +18,7 @@ import { LANE_ARROW_PATH, laneGlyphs } from '../../shared/maps/laneGlyphs';
 import { LANE_BAND_OPACITY, LANE_BLUE, LANE_CHEVRON_OPACITY, ZONE_FILL_OPACITY } from '../../shared/maps/mapStyle';
 import { EndpointIcon, EndpointTile } from '../../shared/maps/EndpointGlyph';
 import { MapViewport } from '../../shared/maps/MapViewport';
+import type { MapJobContext } from '../../shared/maps/mapLabels';
 import { interactiveMapEnabled } from '../../shared/maps/mapFeatures';
 import { mapRobotState, mapUpdateLabel, type MapUpdateMode } from '../../shared/maps/mapTelemetry';
 
@@ -28,6 +29,7 @@ interface Props {
   onSelectRobot: (code: string) => void;
   bottomInset: number;
   updateMode?: MapUpdateMode;
+  jobContext?: MapJobContext;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
   onManualDrive?: (robotId: string) => void;
 }
@@ -36,7 +38,7 @@ interface Props {
 export function OperationalMap(props: Props) {
   return interactiveMapEnabled ? <MapViewport map={props.map} robots={props.fleet} selectedRobot={props.selectedRobotId}
     onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={{top:0,bottom:props.bottomInset}} showHeader={false} fullBleed={true}
-    onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}/> : <LegacyOperationalMap {...props}/>;
+    jobContext={props.jobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}/> : <LegacyOperationalMap {...props}/>;
 }
 
 function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bottomInset, updateMode = 'polling' }: Props) {

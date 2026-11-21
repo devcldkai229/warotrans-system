@@ -48,6 +48,7 @@ export interface EdgeDto {
   id: string;
   mapVersionId: string;
   code: string;
+  name?: string;
   geometry: { type: string; coordinates: number[][] };
   widthMeters: number;
   direction: 'ONE_WAY' | 'BIDIRECTIONAL' | string;

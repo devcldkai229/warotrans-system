@@ -31,6 +31,30 @@ export const ZONE_LABEL: Record<string, string> = {
   JUNCTION: 'Junction',
 };
 
+export const ZONE_DESCRIPTION: Record<string, string> = {
+  KEEP_OUT: 'Robots must not enter this area',
+  SPEED: 'Reduced robot speed area',
+  NO_STOP: 'Keep clear — robots pass through without stopping',
+  SINGLE_OCCUPANCY: 'Only one robot allowed inside at a time',
+  JUNCTION: 'Shared traffic intersection',
+};
+
+/** OTTO electric cyan first, matching web console plan swath palette. */
+export const PLAN_COLORS = ['#00d2ff', '#ec5b9a', '#2dc7b4', '#a66cff', '#f7b928', '#45bd62'] as const;
+
+export const JOB_HIGHLIGHT_COLOR = {
+  pickup: '#10b981',
+  dropoff: '#f59e0b',
+} as const;
+
+export function laneArrowColor(isDark: boolean): string {
+  return isDark ? '#e0f2fe' : '#1d4ed8';
+}
+
+export function laneBandOpacity(isDark: boolean): number {
+  return isDark ? 0.30 : 0.20;
+}
+
 /** WAYPOINT black, CHARGER green, PARK deep orange. */
 export const ENDPOINT_COLOR: Record<string, string> = {
   WAYPOINT: '#121317',

@@ -10,6 +10,7 @@ import { hasMapCalibration } from '../../shared/utils/mapCoordinates';
 import { OperationalMap } from './OperationalMap';
 import type { RobotDto } from '../../shared/api';
 import type { StyleProp, ViewStyle } from 'react-native';
+import type { MapJobContext } from '../../shared/maps/mapLabels';
 import type { MapUpdateMode } from '../../shared/maps/mapTelemetry';
 
 interface Props {
@@ -20,6 +21,8 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   bottomInset: number;
   onOpenJobs: () => void;
+  jobContext?: MapJobContext;
+  jobMapVersionId?: string;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
   onManualDrive?: (robotId: string) => void;
 }
@@ -35,10 +38,13 @@ export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props
     || operating.error || detail.isEnabled && detail.error;
   const loading = operating.isPending || detail.isEnabled && detail.isPending;
   const map = detail.data?.id === active?.id && detail.data?.warehouseId === warehouseId ? detail.data : null;
+  const scopedJobContext = props.jobContext && map && (!props.jobMapVersionId || props.jobMapVersionId === map.id)
+    ? props.jobContext
+    : undefined;
 
   return <View style={style}>
     {map && !error ? <OperationalMap map={map} fleet={props.fleet || []} updateMode={props.updateMode} selectedRobotId={props.selectedRobotId}
-      onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive} /> : <View style={[styles.state, { bottom: bottomInset }]}>
+      onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} jobContext={scopedJobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive} /> : <View style={[styles.state, { bottom: bottomInset }]}>
       {loading ? <><ActivityIndicator color={colors.primary} /><Text variant="body">Loading Warehouse Map…</Text></> : <>
         <View style={styles.icon}><MapPin size={24} color={colors.primaryText} /></View>
         <Text variant="headline" textAlign="center">{error ? 'Map Could Not Be Loaded' : warehouseId ? 'No Published Map' : 'Your Warehouse Map'}</Text>

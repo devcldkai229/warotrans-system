@@ -136,6 +136,12 @@ export function HomeScreen() {
         onOpenJobs={() => navigate('jobs')}
         fleet={onlineFleet}
         updateMode={fleetQuery.updateMode}
+        jobContext={activeJob.id ? {
+          pickupCode: activeJob.sourceEndpointCode,
+          dropoffCode: activeJob.destinationEndpointCode,
+          robotCode: activeJob.robot,
+        } : undefined}
+        jobMapVersionId={activeJob.id ? activeJob.mapVersionId : undefined}
         onLocalizeRobot={onLocalizeRobot}
         onManualDrive={onManualDrive}
         selectedRobotId={selectedRobotId}

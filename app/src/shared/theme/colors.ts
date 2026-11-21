@@ -95,8 +95,16 @@ export const lightColors = {
   mapBackground: '#e9eefa',
   mapGrid: '#d5dcee',
   mapLine: '#bccae2',
-  mapRack: '#c4c8d0',
+  mapRack: '#64748b',
   mapZoneBg: 'rgba(255, 255, 255, 0.92)',
+  mapVoid: '#dfe5ef',
+  mapFloor: '#f8fafc',
+  mapUnknown: '#e6ebf3',
+  mapWall: '#2c3442',
+  mapShelfStroke: '#1e293b',
+  mapHudBg: 'rgba(255, 255, 255, 0.94)',
+  mapHudBorder: 'rgba(15, 23, 42, 0.12)',
+  mapLabelBg: 'rgba(255, 255, 255, 0.92)',
 
   /* ---------------------------------------------------------------- */
   /* Legacy aliases — remove as callers migrate                        */
@@ -178,11 +186,19 @@ export const darkColors: ThemeColors = {
   /* ---------------------------------------------------------------- */
   /* Warehouse Map                                                    */
   /* ---------------------------------------------------------------- */
-  mapBackground: '#141619',
+  mapBackground: '#0a0c10',
   mapGrid: '#262930',
   mapLine: '#3d4654',
-  mapRack: '#343842',
+  mapRack: '#3a4150',
   mapZoneBg: 'rgba(36, 37, 38, 0.92)',
+  mapVoid: '#0a0c10',
+  mapFloor: '#232730',
+  mapUnknown: '#11141a',
+  mapWall: '#b9c3d4',
+  mapShelfStroke: '#7c889b',
+  mapHudBg: 'rgba(20, 24, 32, 0.90)',
+  mapHudBorder: 'rgba(255, 255, 255, 0.14)',
+  mapLabelBg: 'rgba(15, 19, 26, 0.88)',
 
   /* ---------------------------------------------------------------- */
   /* Legacy aliases                                                   */

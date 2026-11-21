@@ -11,6 +11,7 @@ import { Button, Text } from '../ui';
 import { ThemeColors } from '../theme/colors';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { MapViewport } from '../maps/MapViewport';
+import type { MapJobContext } from '../maps/mapLabels';
 import { interactiveMapEnabled } from '../maps/mapFeatures';
 import { mapRobotState, type MapUpdateMode } from '../maps/mapTelemetry';
 
@@ -22,6 +23,7 @@ interface Props {
   loading?: boolean;
   contentInsets?: { top: number; bottom: number };
   updateMode?: MapUpdateMode;
+  jobContext?: MapJobContext;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
   onManualDrive?: (robotId: string) => void;
 }
@@ -29,7 +31,8 @@ interface Props {
 /** Actual map raster and surveyed geometry. Robot poses use the map's origin, rotation and resolution. */
 export function WarehouseMapLayer(props: Props) {
   return interactiveMapEnabled && props.map && hasMapCalibration(props.map) ? <MapViewport map={props.map} robots={props.robots}
-    selectedRobot={props.selectedRobot} onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={props.contentInsets} title="Job Map"
+    selectedRobot={props.selectedRobot} onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={props.contentInsets}
+    showHeader={false} fullBleed={true} jobContext={props.jobContext}
     onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}/> : <LegacyWarehouseMapLayer {...props}/>;
 }
 

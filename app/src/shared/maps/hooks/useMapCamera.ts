@@ -7,7 +7,13 @@ import { cameraForPoint, clampCamera, FIT_CAMERA, zoomAtPoint, type MapCamera, t
 const transition = { duration: 180, reduceMotion: ReduceMotion.System };
 
 /** Gestures stay on the UI runtime. React only receives a settled zoom for LOD. */
-export function useMapCamera(frame: MapFrame, identity: string, reducedMotion: boolean, onManualChange: () => void) {
+export function useMapCamera(
+  frame: MapFrame,
+  identity: string,
+  reducedMotion: boolean,
+  onManualChange: () => void,
+  onSingleTap?: (screenPoint: MapPoint, basePoint: MapPoint) => void,
+) {
   const zoom = useSharedValue(1), x = useSharedValue(0), y = useSharedValue(0);
   const panX = useSharedValue(0), panY = useSharedValue(0), startZoom = useSharedValue(1);
   const pinching = useSharedValue(false);
@@ -74,8 +80,16 @@ export function useMapCamera(frame: MapFrame, identity: string, reducedMotion: b
         y.set(reducedMotion ? target.y : withTiming(target.y,transition));
         scheduleOnRN(onManualChange); scheduleOnRN(committed,target.zoom);
       });
-    return Gesture.Simultaneous(pan,pinch,doubleTap);
-  }, [frame,reducedMotion,zoom,x,y,panX,panY,pinching,startZoom,anchorX,anchorY,committed,onManualChange]);
+    const singleTap = Gesture.Tap().numberOfTaps(1).maxDistance(8)
+      .onEnd((event, success) => {
+        if (!success || !onSingleTap) return;
+        const z = zoom.get() || 1;
+        const screen = { x: event.x, y: event.y };
+        const base = { x: (event.x - x.get()) / z, y: (event.y - y.get()) / z };
+        scheduleOnRN(onSingleTap, screen, base);
+      });
+    return Gesture.Simultaneous(pan,pinch,doubleTap,singleTap);
+  }, [frame,reducedMotion,zoom,x,y,panX,panY,pinching,startZoom,anchorX,anchorY,committed,onManualChange,onSingleTap]);
 
   const sceneStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: x.get() }, { translateY: y.get() }, { scale: zoom.get() }],
