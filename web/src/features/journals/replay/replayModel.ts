@@ -142,6 +142,50 @@ export function fraction(t: number, from: number, to: number): number {
   return to <= from ? 0 : Math.min(1, Math.max(0, (t - from) / (to - from)))
 }
 
+/** Elapsed time on the player: m:ss, or h:mm:ss past an hour. */
+export function formatElapsed(totalMs: number): string {
+  const s = Math.max(0, Math.floor(totalMs / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = String(s % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+interface TimedEvent {
+  id: string
+  severity: string
+  occurredAtUtc: string
+}
+
+/** Incidents (anything above INFO) in time order. */
+export function incidents<T extends TimedEvent>(events: T[]): T[] {
+  return events.filter((e) => e.severity !== 'INFO').sort((a, b) => Date.parse(a.occurredAtUtc) - Date.parse(b.occurredAtUtc))
+}
+
+/**
+ * Where "next / previous incident" jumps: a few seconds before it, so the lead-up is seen. Incidents within half a
+ * second of the cursor are skipped (the one being looked at). Null when there is none in that direction.
+ */
+export function incidentJump<T extends TimedEvent>(events: T[], cursorMs: number, direction: 1 | -1, leadMs = 3000): number | null {
+  const times = incidents(events).map((e) => Date.parse(e.occurredAtUtc))
+  if (direction === 1) {
+    const next = times.find((t) => t - leadMs > cursorMs + 500)
+    return next == null ? null : next - leadMs
+  }
+  const previous = [...times].reverse().find((t) => t - leadMs < cursorMs - 500)
+  return previous == null ? null : previous - leadMs
+}
+
+/** The event the cursor is at: the last one at or before it, within a window. */
+export function currentEventId<T extends TimedEvent>(events: T[], cursorMs: number, windowMs = 4000): string | null {
+  let best: T | null = null
+  for (const e of events) {
+    const at = Date.parse(e.occurredAtUtc)
+    if (at <= cursorMs && cursorMs - at <= windowMs && (!best || at >= Date.parse(best.occurredAtUtc))) best = e
+  }
+  return best?.id ?? null
+}
+
 /** Ranges with video of one recording, as fractions of the timeline (gaps are what is not covered). */
 export function footage(spans: PlaybackSpan[], from: number, to: number): [number, number][] {
   return spans

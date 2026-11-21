@@ -1,6 +1,8 @@
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Annotation, EvidenceEvent, RecordingSpans, ReplayRun } from '@/shared/api/evidence'
 import { t } from '@/shared/i18n'
-import { footage, fraction, ms } from './replayModel'
+import { cx } from '@/shared/lib/cx'
+import { footage, formatElapsed, fraction, ms } from './replayModel'
 
 interface JourneyTimelineProps {
   fromMs: number
@@ -11,90 +13,204 @@ interface JourneyTimelineProps {
   spansByRecording: Record<string, RecordingSpans | undefined>
   events: EvidenceEvent[]
   annotations: Annotation[]
+  selectedRunId: string | null
+  onSelectRun: (runId: string) => void
   onSeek: (t: number) => void
 }
 
-const SEVERITY_COLOR: Record<string, string> = {
-  CRITICAL: '#b91c1c',
+/** Plain colours: the theme has no amber-500 / red-600 classes. */
+export const SEVERITY_COLOR: Record<string, string> = {
+  CRITICAL: '#e11d48',
   ERROR: '#dc2626',
-  WARNING: '#d97706',
-  INFO: '#94a3b8',
+  WARNING: '#f59e0b',
 }
 
-function label(t0: number): string {
-  return new Date(t0).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
+export const NOTE_COLOR = '#9333ea'
+
+const clock = (time: number) =>
+  new Date(time).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 /**
- * One UTC time ruler for every robot (spec §11.3): per robot, the run (thin bar), the video it has (thick bar: what
- * is not covered is a gap), incidents and notes as marks. Click anywhere to put the global cursor there.
+ * One UTC time ruler for every robot (spec §11.3). Per robot: the trip (thin bar), the video it has (thick bar; what is
+ * not covered is a gap) and its incidents as marks; notes on their own row. Click or drag anywhere to move the global
+ * cursor; hovering shows the time under the pointer. Arrow keys move 5 s (Shift: 1 s), Home / End jump to the ends.
  */
-export function JourneyTimeline({ fromMs, toMs, cursorMs, runs, colors, spansByRecording, events, annotations, onSeek }: JourneyTimelineProps) {
-  const laneHeight = 30
-  const top = 22
-  const height = top + runs.length * laneHeight + 26
-  const ticks = Array.from({ length: 7 }, (_, i) => fromMs + ((toMs - fromMs) * i) / 6)
-  const x = (time: number) => `${fraction(time, fromMs, toMs) * 100}%`
+export function JourneyTimeline({
+  fromMs,
+  toMs,
+  cursorMs,
+  runs,
+  colors,
+  spansByRecording,
+  events,
+  annotations,
+  selectedRunId,
+  onSelectRun,
+  onSeek,
+}: JourneyTimelineProps) {
+  const track = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+  const [hover, setHover] = useState<number | null>(null)
+  const span = Math.max(1, toMs - fromMs)
+  const left = (time: number) => `${fraction(time, fromMs, toMs) * 100}%`
+  const ticks = Array.from({ length: 6 }, (_, i) => fromMs + (span * i) / 5)
+
+  const timeAt = (clientX: number) => {
+    const box = track.current?.getBoundingClientRect()
+    if (!box || box.width <= 0) return fromMs
+    return fromMs + Math.min(1, Math.max(0, (clientX - box.left) / box.width)) * span
+  }
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('[data-mark]')) return
+    dragging.current = true
+    event.currentTarget.setPointerCapture(event.pointerId)
+    onSeek(timeAt(event.clientX))
+  }
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const time = timeAt(event.clientX)
+    setHover(time)
+    if (dragging.current) onSeek(time)
+  }
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    dragging.current = false
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 1000 : 5000
+    if (event.key === 'ArrowRight') onSeek(cursorMs + step)
+    else if (event.key === 'ArrowLeft') onSeek(cursorMs - step)
+    else if (event.key === 'Home') onSeek(fromMs)
+    else if (event.key === 'End') onSeek(toMs)
+    else return
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   return (
-    <svg
-      role="slider"
-      aria-label={t('Timeline')}
-      aria-valuemin={fromMs}
-      aria-valuemax={toMs}
-      aria-valuenow={cursorMs}
-      tabIndex={0}
-      className="w-full cursor-pointer select-none"
-      height={height}
-      onClick={(event) => {
-        const box = event.currentTarget.getBoundingClientRect()
-        onSeek(fromMs + ((event.clientX - box.left) / box.width) * (toMs - fromMs))
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowRight') onSeek(cursorMs + 1000)
-        if (event.key === 'ArrowLeft') onSeek(cursorMs - 1000)
-      }}
-    >
-      {ticks.map((tick) => (
-        <g key={tick}>
-          <line x1={x(tick)} x2={x(tick)} y1={14} y2={height - 20} stroke="currentColor" className="text-outline-soft" />
-          <text x={x(tick)} y={10} fontSize={10} textAnchor="middle" className="fill-ink-2">
-            {label(tick)}
-          </text>
-        </g>
-      ))}
-      {runs.map((run, lane) => {
-        const y = top + lane * laneHeight
-        const start = ms(run.startedAtUtc) ?? fromMs
-        const end = ms(run.endedAtUtc) ?? toMs
-        const color = colors[lane % colors.length]
-        return (
-          <g key={run.id}>
-            <text x={2} y={y + 9} fontSize={10} className="fill-ink-2">
-              {run.robotCode}
-            </text>
-            <rect x={x(start)} y={y + 12} width={`${(fraction(end, fromMs, toMs) - fraction(start, fromMs, toMs)) * 100}%`} height={3} fill={color} opacity={0.35} />
-            {run.recordings.flatMap((recording) =>
-              footage(spansByRecording[recording.id]?.spans ?? [], fromMs, toMs).map(([a, b], i) => (
-                <rect key={`${recording.id}-${i}`} x={`${a * 100}%`} y={y + 10} width={`${(b - a) * 100}%`} height={7} rx={2} fill={color} />
-              )),
+    <div className="flex select-none gap-3 text-xs">
+      {/* Lane labels: one per robot; choosing one makes it the main camera. */}
+      <div className="flex w-36 shrink-0 flex-col pt-6">
+        {runs.map((run, lane) => (
+          <button
+            key={run.id}
+            type="button"
+            onClick={() => onSelectRun(run.id)}
+            aria-pressed={run.id === selectedRunId}
+            className={cx(
+              'flex h-9 items-center gap-2 rounded-sm px-2 text-left transition-colors',
+              run.id === selectedRunId ? 'bg-surface font-semibold text-ink' : 'text-ink-2 hover:bg-surface',
             )}
-            {events
-              .filter((e) => e.runId === run.id && e.severity !== 'INFO')
-              .map((e) => (
-                <rect key={e.id} x={x(Date.parse(e.occurredAtUtc))} y={y + 19} width={3} height={8} fill={SEVERITY_COLOR[e.severity]}>
-                  <title>{e.message ?? e.eventType}</title>
-                </rect>
-              ))}
-          </g>
-        )
-      })}
-      {annotations.map((a) => (
-        <circle key={a.id} cx={x(Date.parse(a.atUtc))} cy={height - 12} r={4} fill="#7c3aed">
-          <title>{a.note}</title>
-        </circle>
-      ))}
-      <line x1={x(cursorMs)} x2={x(cursorMs)} y1={12} y2={height - 6} stroke="#0f172a" strokeWidth={2} />
-    </svg>
+          >
+            <span className="size-2.5 shrink-0 rounded-full" style={{ background: colors[lane % colors.length] }} />
+            <span className="truncate font-mono">{run.robotCode}</span>
+          </button>
+        ))}
+        {annotations.length > 0 ? <span className="flex h-6 items-center px-2 text-muted">{t('Notes')}</span> : null}
+      </div>
+
+      <div
+        ref={track}
+        role="slider"
+        tabIndex={0}
+        aria-label={t('Timeline')}
+        aria-valuemin={fromMs}
+        aria-valuemax={toMs}
+        aria-valuenow={Math.round(cursorMs)}
+        aria-valuetext={`${formatElapsed(cursorMs - fromMs)} / ${formatElapsed(span)}`}
+        className="relative min-w-0 flex-1 cursor-pointer touch-none rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={() => setHover(null)}
+        onKeyDown={onKeyDown}
+      >
+        {/* Ruler */}
+        <div className="relative h-6">
+          {ticks.map((tick, i) => (
+            <span
+              key={tick}
+              className={cx(
+                'absolute top-0.5 whitespace-nowrap font-mono text-[11px] text-muted',
+                i === 0 ? '' : i === ticks.length - 1 ? '-translate-x-full' : '-translate-x-1/2',
+              )}
+              style={{ left: left(tick) }}
+            >
+              {clock(tick)}
+            </span>
+          ))}
+        </div>
+
+        {runs.map((run, lane) => {
+          const color = colors[lane % colors.length]
+          const start = ms(run.startedAtUtc) ?? fromMs
+          const end = ms(run.endedAtUtc) ?? toMs
+          return (
+            <div key={run.id} className="relative h-9 border-t border-outline-variant/60">
+              {/* The trip */}
+              <div
+                className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full opacity-30"
+                style={{ left: left(start), width: `${(fraction(end, fromMs, toMs) - fraction(start, fromMs, toMs)) * 100}%`, background: color }}
+              />
+              {/* Video */}
+              {run.recordings.flatMap((recording) =>
+                footage(spansByRecording[recording.id]?.spans ?? [], fromMs, toMs).map(([a, b], i) => (
+                  <div
+                    key={`${recording.id}-${i}`}
+                    className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"
+                    style={{ left: `${a * 100}%`, width: `${Math.max(0.2, (b - a) * 100)}%`, background: color }}
+                    title={t('Video')}
+                  />
+                )),
+              )}
+              {/* Incidents */}
+              {events
+                .filter((e) => e.runId === run.id && e.severity !== 'INFO')
+                .map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    data-mark
+                    title={`${clock(Date.parse(e.occurredAtUtc))} · ${e.message ?? e.eventType}`}
+                    onClick={() => onSeek(Date.parse(e.occurredAtUtc) - 3000)}
+                    className="absolute bottom-0.5 size-2.5 -translate-x-1/2 rotate-45 rounded-[2px] ring-2 ring-container hover:scale-125"
+                    style={{ left: left(Date.parse(e.occurredAtUtc)), background: SEVERITY_COLOR[e.severity] ?? '#94a3b8' }}
+                  />
+                ))}
+            </div>
+          )
+        })}
+
+        {annotations.length > 0 ? (
+          <div className="relative h-6 border-t border-outline-variant/60">
+            {annotations.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                data-mark
+                title={`${clock(Date.parse(a.atUtc))} · ${a.note}`}
+                onClick={() => onSeek(Date.parse(a.atUtc))}
+                className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-container hover:scale-125"
+                style={{ left: left(Date.parse(a.atUtc)), background: NOTE_COLOR }}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {/* Hover line + time */}
+        {hover != null ? (
+          <div className="pointer-events-none absolute top-6 bottom-0 w-px bg-ink/30" style={{ left: left(hover) }}>
+            <span className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-1.5 py-0.5 font-mono text-[11px] text-surface">
+              {clock(hover)}
+            </span>
+          </div>
+        ) : null}
+
+        {/* Cursor */}
+        <div className="pointer-events-none absolute top-5 bottom-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: left(cursorMs) }}>
+          <span className="absolute -top-1 left-1/2 size-3 -translate-x-1/2 rounded-full bg-primary ring-2 ring-container" />
+        </div>
+      </div>
+    </div>
   )
 }

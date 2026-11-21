@@ -107,6 +107,20 @@ public sealed class CloudFrontPlaybackSigner(IOptions<PlaybackOptions> options, 
         return new PlaybackGrant("query", master, query, null, expires);
     }
 
+    /// <summary>
+    /// The AWS SDK's CloudFront signers read only PKCS#1 ("BEGIN RSA PRIVATE KEY"); <c>openssl genpkey</c> (our key
+    /// script) writes PKCS#8 ("BEGIN PRIVATE KEY"), and the SDK then fails with "Invalid RSA Private Key" on every grant
+    /// (found by the AWS replay E2E, 2026-11-21). Either form is accepted and handed over as PKCS#1.
+    /// </summary>
+    internal static string ToPkcs1Pem(string pem)
+    {
+        // A value pasted with literal "\n" escapes (SSM console) is accepted too.
+        var text = pem.Replace("\\n", "\n").Replace("\r\n", "\n").Trim();
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(text);
+        return rsa.ExportRSAPrivateKeyPem();
+    }
+
     private async Task<string> PrivateKeyAsync(CancellationToken cancellationToken)
     {
         if (_privateKey is not null)
@@ -120,7 +134,7 @@ public sealed class CloudFrontPlaybackSigner(IOptions<PlaybackOptions> options, 
             var o = options.Value;
             if (!string.IsNullOrWhiteSpace(o.PrivateKeyFile))
             {
-                _privateKey = await File.ReadAllTextAsync(o.PrivateKeyFile, cancellationToken);
+                _privateKey = ToPkcs1Pem(await File.ReadAllTextAsync(o.PrivateKeyFile, cancellationToken));
             }
             else
             {
@@ -134,7 +148,7 @@ public sealed class CloudFrontPlaybackSigner(IOptions<PlaybackOptions> options, 
                     Name = o.PrivateKeyParameterName ?? throw new InvalidOperationException($"{PlaybackOptions.SectionName}:PrivateKeyParameterName is required."),
                     WithDecryption = true
                 }, cancellationToken);
-                _privateKey = parameter.Parameter.Value;
+                _privateKey = ToPkcs1Pem(parameter.Parameter.Value);
             }
 
             return _privateKey;

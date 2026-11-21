@@ -21,3 +21,25 @@ export const VIDEO_TONE: Record<string, Tone> = {
   PARTIAL: 'amber',
   MISSING: 'grey',
 }
+
+/** Words a technician reads instead of the codes (translated with t()). */
+export const EVIDENCE_LABEL: Record<string, string> = {
+  OPEN: 'Recording',
+  FINALIZING: 'Finishing',
+  FINALIZED: 'Complete',
+  PARTIAL: 'Incomplete',
+}
+
+export const VIDEO_LABEL: Record<string, string> = {
+  READY: 'Video ready',
+  PROCESSING: 'Video processing',
+  PARTIAL: 'Partial video',
+  MISSING: 'No video',
+}
+
+export const SEVERITY_LABEL: Record<string, string> = {
+  INFO: 'Info',
+  WARNING: 'Warning',
+  ERROR: 'Error',
+  CRITICAL: 'Critical',
+}

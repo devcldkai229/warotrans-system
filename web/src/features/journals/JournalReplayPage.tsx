@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/authContext'
@@ -6,25 +6,38 @@ import { evidenceApi, type EvidenceEvent, type RecordingSpans, type ReplayRecord
 import { getMapVersionDetail } from '@/shared/api/navigation'
 import { hasPermission, PERMISSIONS } from '@/shared/auth/permissions'
 import { t } from '@/shared/i18n'
-import { formatDateTimeFull } from '@/shared/lib/format'
+import { cx } from '@/shared/lib/cx'
+import { formatDateTimeFull, humanize } from '@/shared/lib/format'
 import { WarehouseMap, type MapCallout, type MapRobot, type MapTrail } from '@/shared/map/WarehouseMap'
 import { mapDetailToGeometry } from '@/shared/map/mapVersionGeometry'
 import { usePaths } from '@/shared/routing/usePaths'
 import { Button } from '@/shared/ui/Button'
 import { controlClass } from '@/shared/ui/controlClass'
+import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
-import { EVIDENCE_TONE, SEVERITY_TONE } from './journalTones'
+import { EVIDENCE_LABEL, EVIDENCE_TONE, SEVERITY_LABEL, SEVERITY_TONE } from './journalTones'
 import { CameraPlayer } from './replay/CameraPlayer'
-import { JourneyTimeline } from './replay/JourneyTimeline'
-import { cameraState, mediaAt, ms, pathUntil, planAt, poseAt } from './replay/replayModel'
+import { JourneyTimeline, NOTE_COLOR, SEVERITY_COLOR } from './replay/JourneyTimeline'
+import { cameraState, currentEventId, formatElapsed, incidentJump, incidents, mediaAt, ms, pathUntil, planAt, poseAt } from './replay/replayModel'
 
 const COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed']
+const RATES = [0.5, 1, 2, 4]
+const SKIP_MS = 5000
 
 interface Camera {
   run: ReplayRun
   rec: ReplayRecording | null
 }
-const RATES = [0.5, 1, 2, 4]
+
+type Tab = 'events' | 'notes' | 'details'
+
+const CAMERA_TEXT: Record<string, string> = {
+  PLAYING: 'Video',
+  NO_VIDEO_AT_TIME: 'No video at this time',
+  PROCESSING: 'Video still processing',
+  SYNC_UNCERTAIN: 'Sync uncertain',
+  NO_CAMERA: 'No camera recording',
+}
 
 /** Opens the journal of a transport request (links from the trip and request screens). */
 export function JournalByRequestRedirect() {
@@ -32,15 +45,13 @@ export function JournalByRequestRedirect() {
   const paths = usePaths()
   const journal = useQuery({ queryKey: ['evidence-journal-by-request', transportRequestId], queryFn: () => evidenceApi.journalByRequest(transportRequestId) })
   if (journal.data) return <Navigate to={paths.journals(journal.data.id)} replace />
-  return (
-    <div className="p-10 text-sm text-ink-2">{journal.isError ? t('No evidence journal for this request yet.') : t('Loading…')}</div>
-  )
+  return <div className="p-10 text-sm text-ink-2">{journal.isError ? t('No evidence journal for this request yet.') : t('Loading…')}</div>
 }
 
 /**
  * Journey Replay (spec §11.3–11.5): every robot of a transport request on one UTC timeline. One global cursor drives
- * the map (actual path up to now, the plan of the moment, the robot where it really was), every camera (each mapped
- * through its own measured spans) and the incident list. Deep link: ?t=<epoch ms>&run=<run id>.
+ * the main camera, the map (path so far, plan of the moment, the robot where it really was) and the event list.
+ * Keyboard: Space plays / pauses, ← → move 5 s, [ ] jump to the previous / next incident. Deep link: ?t=<ms>&run=<id>.
  */
 export function JournalReplayPage() {
   const { journalId = '' } = useParams()
@@ -58,6 +69,7 @@ export function JournalReplayPage() {
   const [playing, setPlaying] = useState(false)
   const [rate, setRate] = useState(1)
   const [mainRun, setMainRun] = useState<string | null>(params.get('run'))
+  const [tab, setTab] = useState<Tab>('events')
   const cursorMs = Math.min(Math.max(cursor ?? fromMs, fromMs), toMs)
 
   // The global clock: real time × rate while playing. It belongs to the page, never to a video player.
@@ -126,6 +138,42 @@ export function JournalReplayPage() {
   const mapVersionId = runs.find((r) => r.mapVersionId)?.mapVersionId ?? null
   const mapQuery = useQuery({ queryKey: ['map-detail', mapVersionId], queryFn: () => getMapVersionDetail(mapVersionId!), enabled: Boolean(mapVersionId), staleTime: 300_000 })
   const geometry = useMemo(() => mapDetailToGeometry(mapQuery.data), [mapQuery.data])
+  const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data])
+
+  const seek = useCallback((time: number) => setCursor(Math.min(Math.max(time, fromMs), toMs)), [fromMs, toMs])
+  const jump = useCallback(
+    (direction: 1 | -1) => {
+      const target = incidentJump(events, cursorMs, direction)
+      if (target != null) seek(target)
+    },
+    [events, cursorMs, seek],
+  )
+
+  // Keyboard shortcuts, except while typing a note.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return
+      if (event.key === ' ') {
+        event.preventDefault()
+        setPlaying((p) => !p)
+      } else if (event.key === 'ArrowRight' && target?.getAttribute('role') !== 'slider') seek(cursorMs + (event.shiftKey ? 1000 : SKIP_MS))
+      else if (event.key === 'ArrowLeft' && target?.getAttribute('role') !== 'slider') seek(cursorMs - (event.shiftKey ? 1000 : SKIP_MS))
+      else if (event.key === ']') jump(1)
+      else if (event.key === '[') jump(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cursorMs, seek, jump])
+
+  const addNote = useMutation({
+    mutationFn: (body: { category: string; note: string }) =>
+      evidenceApi.addAnnotation(journalId, { atUtc: new Date(cursorMs).toISOString(), runId: selectedRunId, ...body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['evidence-notes', journalId] }),
+  })
+  const [noteText, setNoteText] = useState('')
+  const [noteCategory, setNoteCategory] = useState('OBSERVATION')
+  const [showAllEvents, setShowAllEvents] = useState(false)
 
   const robots: MapRobot[] = []
   const trails: MapTrail[] = []
@@ -145,33 +193,24 @@ export function JournalReplayPage() {
     }
   })
 
-  const events = eventsQuery.data ?? []
-  const [severityFilter, setSeverityFilter] = useState<'issues' | 'all'>('issues')
-  const visibleEvents = events.filter((e) => severityFilter === 'all' || e.severity !== 'INFO')
   const selectedRunId = mainRun ?? runs[0]?.id ?? null
   const selectedIndex = Math.max(0, runs.findIndex((r) => r.id === selectedRunId))
   const selectedRun = runs[selectedIndex]
   const cameras: Camera[] = runs.flatMap((run): Camera[] => (run.recordings.length > 0 ? run.recordings.map((rec) => ({ run, rec })) : [{ run, rec: null }]))
-  const ordered = [...cameras].sort((a, b) => (a.run.id === selectedRunId ? -1 : 0) - (b.run.id === selectedRunId ? -1 : 0))
   // The camera of a run that covers the cursor; when a run has several recordings (reboot) the one holding the cursor.
   const pickRecording = (runId: string) => {
-    const options = ordered.filter((c) => c.run.id === runId && c.rec)
+    const options = cameras.filter((c) => c.run.id === runId && c.rec)
     return options.find((c) => c.rec && spansByRecording[c.rec.id] && mediaAt(spansByRecording[c.rec.id]!.spans, cursorMs)) ?? options[0] ?? null
   }
-  const shown: Camera[] = runs.map((run) => pickRecording(run.id) ?? { run, rec: null })
+  const others = runs.filter((run) => run.id !== selectedRunId)
+  const activeEvent = currentEventId(events, cursorMs)
+  const visibleEvents = showAllEvents ? events : events.filter((e) => e.severity !== 'INFO')
+  const incidentCount = incidents(events).length
+  const notes = notesQuery.data ?? []
 
-  const addNote = useMutation({
-    mutationFn: (body: { category: string; note: string }) =>
-      evidenceApi.addAnnotation(journalId, { atUtc: new Date(cursorMs).toISOString(), runId: selectedRunId, ...body }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['evidence-notes', journalId] }),
-  })
-  const [noteText, setNoteText] = useState('')
-  const [noteCategory, setNoteCategory] = useState('OBSERVATION')
-
-  if (manifestQuery.isError) return <div className="p-10 text-sm text-red-700">{(manifestQuery.error as Error).message}</div>
+  if (manifestQuery.isError) return <div className="p-10 text-sm text-red-ink">{(manifestQuery.error as Error).message}</div>
   if (!manifest) return <div className="p-10 text-sm text-ink-2">{t('Loading…')}</div>
 
-  const seek = (time: number) => setCursor(Math.min(Math.max(time, fromMs), toMs))
   const selectedPose = selectedRun ? poseAt(trajectories[selectedIndex]?.data?.points ?? [], cursorMs) : null
   const selectedPlan = selectedRun ? planAt(plans[selectedIndex]?.data ?? [], cursorMs) : null
   const selectedCam = selectedRun ? pickRecording(selectedRun.id) : null
@@ -183,192 +222,390 @@ export function JournalReplayPage() {
   )
   const canAnnotate = hasPermission(capabilities, PERMISSIONS.evidenceAnnotate)
   const canExport = hasPermission(capabilities, PERMISSIONS.evidenceExport)
+  const duration = toMs - fromMs
+  const atEnd = cursorMs >= toMs
 
   return (
     <div className="h-full overflow-auto">
-      <div className="mx-auto max-w-[1600px] px-6 pt-6 pb-16">
-        <header className="mb-4 flex flex-wrap items-center gap-3">
-          <Link to={paths.journals()} className="text-sm text-ink-2 hover:underline">
-            ← {t('Transport journals')}
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 pt-5 pb-16 sm:px-6">
+        {/* Header */}
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Link to={paths.journals()} className="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-sm text-ink-2 hover:bg-container-high hover:text-ink">
+            <Icon name="arrowLeft" size={14} />
+            {t('Transport journals')}
           </Link>
-          <h1 className="text-xl font-book">{manifest.requestCode}</h1>
-          <span className="text-sm text-ink-2">{t('{count} containers', { count: manifest.requestedContainerCount })}</span>
-          <StatusBadge tone="grey">{`${t('Request')}: ${manifest.sourceTransportStatus ?? '—'}`}</StatusBadge>
-          <StatusBadge tone={EVIDENCE_TONE[manifest.evidenceStatus] ?? 'grey'}>{`${t('Evidence')}: ${manifest.evidenceStatus}`}</StatusBadge>
-          <span className="text-sm text-ink-2">
-            {formatDateTimeFull(manifest.fromUtc)} → {formatDateTimeFull(manifest.toUtc)}
-          </span>
+          <div className="flex min-w-0 flex-col">
+            <h1 className="truncate text-xl font-semibold">{manifest.requestCode}</h1>
+            <span className="text-xs text-ink-2">
+              {formatDateTimeFull(manifest.fromUtc)} · {formatElapsed(duration)} · {t('{count} containers', { count: manifest.requestedContainerCount })}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone="grey">{`${t('Request')}: ${manifest.sourceTransportStatus ? humanize(manifest.sourceTransportStatus) : '—'}`}</StatusBadge>
+            <StatusBadge tone={EVIDENCE_TONE[manifest.evidenceStatus] ?? 'grey'}>
+              {`${t('Evidence')}: ${t(EVIDENCE_LABEL[manifest.evidenceStatus] ?? manifest.evidenceStatus)}`}
+            </StatusBadge>
+            {incidentCount > 0 ? <StatusBadge tone="amber">{t('{count} incidents', { count: incidentCount })}</StatusBadge> : null}
+          </div>
           {canExport ? (
             <Button size="sm" variant="outline" className="ml-auto" onClick={() => void evidenceApi.exportPacket(journalId, manifest.requestCode)}>
+              <Icon name="download" size={14} />
               {t('Export evidence')}
             </Button>
           ) : null}
         </header>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
-          <section className="relative h-[520px] overflow-hidden rounded-lg border border-outline-soft bg-container">
-            <WarehouseMap
-              yawUnit="rad"
-              endpoints={geometry.endpoints}
-              edges={geometry.edges}
-              zones={geometry.zones}
-              bounds={geometry.bounds}
-              occupancyImageUrl={geometry.occupancyImageUrl}
-              layers={{ occupancy: true }}
-              labels="focus"
-              robots={robots}
-              trails={trails}
-              callouts={callouts}
-              focusRobotCodes={selectedRun ? [selectedRun.robotCode] : []}
-            />
-          </section>
-          <section className="grid content-start gap-3">
-            {shown.map(({ run, rec }, i) => (
-              <button
-                key={run.id}
-                type="button"
-                className="text-left"
-                onClick={() => setMainRun(run.id)}
-                aria-pressed={run.id === selectedRunId}
-              >
-                <CameraPlayer
-                  robotCode={run.robotCode}
-                  spans={rec ? spansByRecording[rec.id] ?? null : null}
-                  hasRecording={Boolean(rec)}
-                  cursorMs={cursorMs}
-                  playing={playing}
-                  rate={rate}
-                  secondary={run.id !== selectedRunId && i > 0}
-                />
-              </button>
-            ))}
-          </section>
-        </div>
+        {runs.length === 0 ? (
+          <div className="rounded-lg bg-container p-8 text-center text-sm text-ink-2">{t('No robot has taken a trip of this request yet.')}</div>
+        ) : (
+          <>
+            {/* Camera + map */}
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+              <section className="flex flex-col gap-3">
+                {selectedRun ? (
+                  <CameraPlayer
+                    robotCode={selectedRun.robotCode}
+                    spans={selectedSpans}
+                    hasRecording={Boolean(selectedCam?.rec)}
+                    cursorMs={cursorMs}
+                    playing={playing}
+                    rate={rate}
+                  />
+                ) : null}
+                {others.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {others.map((run) => {
+                      const cam = pickRecording(run.id)
+                      return (
+                        <button key={run.id} type="button" className="text-left" onClick={() => setMainRun(run.id)} title={t('Show this camera large')}>
+                          <CameraPlayer
+                            robotCode={run.robotCode}
+                            spans={cam?.rec ? spansByRecording[cam.rec.id] ?? null : null}
+                            hasRecording={Boolean(cam?.rec)}
+                            cursorMs={cursorMs}
+                            playing={playing}
+                            rate={rate}
+                            secondary
+                          />
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </section>
 
-        <section className="mt-4 rounded-lg border border-outline-soft bg-container p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="primary" onClick={() => setPlaying((p) => !p)}>
-              {playing ? t('Pause') : t('Play')}
-            </Button>
-            <select className={controlClass('pill')} aria-label={t('Speed')} value={rate} onChange={(e) => setRate(Number(e.target.value))}>
-              {RATES.map((r) => (
-                <option key={r} value={r}>
-                  {r}×
-                </option>
-              ))}
-            </select>
-            <span className="font-mono text-sm">{new Date(cursorMs).toLocaleTimeString(undefined, { hour12: false })}.{String(Math.floor(cursorMs % 1000)).padStart(3, '0')}</span>
-            <span className="text-xs text-ink-2">{t('Local time; recorded in UTC')}</span>
-          </div>
-          <JourneyTimeline
-            fromMs={fromMs}
-            toMs={toMs}
-            cursorMs={cursorMs}
-            runs={runs}
-            colors={COLORS}
-            spansByRecording={spansByRecording}
-            events={events}
-            annotations={notesQuery.data ?? []}
-            onSeek={seek}
-          />
-        </section>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <section className="rounded-lg border border-outline-soft bg-container p-4 lg:col-span-1">
-            <h2 className="mb-3 text-base font-medium">{t('Diagnostics')}</h2>
-            {selectedRun ? (
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-                <dt className="text-ink-2">{t('Robot')}</dt>
-                <dd>{selectedRun.robotCode}</dd>
-                <dt className="text-ink-2">{t('Trip')}</dt>
-                <dd>{selectedRun.sourceJobNo ?? '—'} ({selectedRun.startReason ?? '—'})</dd>
-                <dt className="text-ink-2">{t('Containers')}</dt>
-                <dd>{selectedRun.assignedContainerIds.length}</dd>
-                <dt className="text-ink-2">{t('Trip status')}</dt>
-                <dd>{selectedRun.sourceRunStatus ?? '—'}</dd>
-                <dt className="text-ink-2">{t('Evidence')}</dt>
-                <dd>{selectedRun.evidenceStatus}</dd>
-                <dt className="text-ink-2">{t('Map')}</dt>
-                <dd>{selectedRun.mapVersion ?? '—'}</dd>
-                <dt className="text-ink-2">{t('Position')}</dt>
-                <dd className="font-mono">{selectedPose ? `${selectedPose.x.toFixed(2)}, ${selectedPose.y.toFixed(2)}, ${((selectedPose.yaw * 180) / Math.PI).toFixed(0)}°` : t('N/A')}</dd>
-                <dt className="text-ink-2">{t('Planned route')}</dt>
-                <dd>{selectedPlan ? `v${selectedPlan.planVersion} (${selectedPlan.reason ?? '—'})` : t('N/A')}</dd>
-                <dt className="text-ink-2">{t('Camera')}</dt>
-                <dd>{selectedCamState}</dd>
-                <dt className="text-ink-2">{t('Clock sync bound')}</dt>
-                <dd>{selectedRun.timeSyncErrorBoundMs == null ? t('N/A') : selectedRun.timeSyncErrorBoundMs > 1e6 ? t('Not synchronized') : `±${Math.round(selectedRun.timeSyncErrorBoundMs)} ms`}</dd>
-              </dl>
-            ) : (
-              <p className="text-sm text-ink-2">{t('No robot has taken a trip of this request yet.')}</p>
-            )}
-          </section>
-
-          <section className="rounded-lg border border-outline-soft bg-container p-4 lg:col-span-1">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-medium">{t('Incidents and events')}</h2>
-              <select className={controlClass('pill')} aria-label={t('Show')} value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value as 'issues' | 'all')}>
-                <option value="issues">{t('Warnings and errors')}</option>
-                <option value="all">{t('All events')}</option>
-              </select>
+              <section className="flex flex-col gap-3">
+                <div className="relative h-[360px] overflow-hidden rounded-lg border border-outline-soft bg-container xl:h-[420px]">
+                  <WarehouseMap
+                    yawUnit="rad"
+                    endpoints={geometry.endpoints}
+                    edges={geometry.edges}
+                    zones={geometry.zones}
+                    bounds={geometry.bounds}
+                    occupancyImageUrl={geometry.occupancyImageUrl}
+                    layers={{ occupancy: true }}
+                    labels="focus"
+                    robots={robots}
+                    trails={trails}
+                    callouts={callouts}
+                    focusRobotCodes={selectedRun ? [selectedRun.robotCode] : []}
+                  />
+                </div>
+                <div className="-mt-1 flex flex-wrap gap-4 px-1 text-[11px] text-ink-2">
+                  <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded" style={{ background: COLORS[selectedIndex % COLORS.length] }} />{t('Driven path')}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-0 w-5 border-t-2 border-dashed" style={{ borderColor: COLORS[selectedIndex % COLORS.length] }} />
+                    {t('Planned route')}
+                  </span>
+                </div>
+                {selectedRun ? (
+                  <dl className="grid grid-cols-2 gap-2 text-xs">
+                    <Fact icon="crosshair" label={t('Position')} mono>
+                      {selectedPose ? `${selectedPose.x.toFixed(2)}, ${selectedPose.y.toFixed(2)} · ${((selectedPose.yaw * 180) / Math.PI).toFixed(0)}°` : t('Unknown')}
+                    </Fact>
+                    <Fact icon="route" label={t('Planned route')}>
+                      {selectedPlan ? `v${selectedPlan.planVersion}${selectedPlan.reason ? ` · ${humanize(selectedPlan.reason)}` : ''}` : t('None')}
+                    </Fact>
+                    <Fact icon="play" label={t('Camera')}>{t(CAMERA_TEXT[selectedCamState] ?? selectedCamState)}</Fact>
+                    <Fact icon="clock" label={t('Clock sync')}>
+                      {selectedRun.timeSyncErrorBoundMs == null
+                        ? t('Unknown')
+                        : selectedRun.timeSyncErrorBoundMs > 1e6
+                          ? t('Not synchronized')
+                          : `±${Math.round(selectedRun.timeSyncErrorBoundMs)} ms`}
+                    </Fact>
+                  </dl>
+                ) : null}
+              </section>
             </div>
-            <ol className="max-h-[360px] space-y-1 overflow-auto text-sm">
-              {visibleEvents.length === 0 ? <li className="text-ink-2">{t('Nothing recorded.')}</li> : null}
-              {visibleEvents.map((e: EvidenceEvent) => (
-                <li key={e.id}>
-                  <button type="button" className="flex w-full items-start gap-2 rounded px-1 py-0.5 text-left hover:bg-surface" onClick={() => seek(Date.parse(e.occurredAtUtc) - 3000)}>
-                    <StatusBadge tone={SEVERITY_TONE[e.severity] ?? 'grey'}>{e.severity}</StatusBadge>
-                    <span className="shrink-0 font-mono text-xs text-ink-2">{new Date(e.occurredAtUtc).toLocaleTimeString(undefined, { hour12: false })}</span>
-                    <span>{e.message ?? e.eventType}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </section>
 
-          <section className="rounded-lg border border-outline-soft bg-container p-4 lg:col-span-1">
-            <h2 className="mb-3 text-base font-medium">{t('Notes')}</h2>
-            <ol className="mb-3 max-h-[240px] space-y-2 overflow-auto text-sm">
-              {(notesQuery.data ?? []).map((n) => (
-                <li key={n.id}>
-                  <button type="button" className="text-left hover:underline" onClick={() => seek(Date.parse(n.atUtc))}>
-                    <span className="font-mono text-xs text-ink-2">{new Date(n.atUtc).toLocaleTimeString(undefined, { hour12: false })}</span>{' '}
-                    <strong>{n.category}</strong> {n.note}
+            {/* Player controls + timeline */}
+            <section className="rounded-lg border border-outline-soft bg-container p-3 sm:p-4" aria-label={t('Player')}>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <ControlButton icon="undo" label={t('Back 5 s')} shortcut="←" onClick={() => seek(cursorMs - SKIP_MS)} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (atEnd) seek(fromMs)
+                    setPlaying((p) => !p)
+                  }}
+                  className="inline-flex size-10 items-center justify-center rounded-full bg-primary text-white shadow-sm transition-colors hover:bg-primary-hover"
+                  aria-label={playing ? t('Pause') : t('Play')}
+                  title={`${playing ? t('Pause') : t('Play')} (Space)`}
+                >
+                  <Icon name={playing ? 'pause' : 'play'} size={18} />
+                </button>
+                <ControlButton icon="redo" label={t('Forward 5 s')} shortcut="→" onClick={() => seek(cursorMs + SKIP_MS)} />
+                <div className="mx-1 h-6 w-px bg-outline-variant" />
+                <ControlButton icon="chevronLeft" label={t('Previous incident')} shortcut="[" onClick={() => jump(-1)} disabled={incidentJump(events, cursorMs, -1) == null} />
+                <ControlButton icon="chevronRight" label={t('Next incident')} shortcut="]" onClick={() => jump(1)} disabled={incidentJump(events, cursorMs, 1) == null} />
+                <div className="ml-1 flex items-baseline gap-2">
+                  <span className="font-mono text-sm font-semibold tabular-nums">{formatElapsed(cursorMs - fromMs)}</span>
+                  <span className="font-mono text-xs text-muted tabular-nums">/ {formatElapsed(duration)}</span>
+                  <span className="hidden font-mono text-xs text-ink-2 tabular-nums sm:inline">
+                    {new Date(cursorMs).toLocaleTimeString(undefined, { hour12: false })}.{String(Math.floor(cursorMs % 1000)).padStart(3, '0')}
+                  </span>
+                </div>
+                <div className="ml-auto flex items-center rounded-full bg-surface p-0.5" role="radiogroup" aria-label={t('Speed')}>
+                  {RATES.map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      role="radio"
+                      aria-checked={rate === r}
+                      onClick={() => setRate(r)}
+                      className={cx(
+                        'h-7 min-w-10 rounded-full px-2 font-mono text-xs transition-colors',
+                        rate === r ? 'bg-primary text-white' : 'text-ink-2 hover:text-ink',
+                      )}
+                    >
+                      {r}×
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <JourneyTimeline
+                fromMs={fromMs}
+                toMs={toMs}
+                cursorMs={cursorMs}
+                runs={runs}
+                colors={COLORS}
+                spansByRecording={spansByRecording}
+                events={events}
+                annotations={notes}
+                selectedRunId={selectedRunId}
+                onSelectRun={setMainRun}
+                onSeek={seek}
+              />
+              <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-sm bg-ink-2/70" />{t('Video')}</span>
+                <span className="flex items-center gap-1.5"><span className="h-1 w-4 rounded-full bg-ink-2/30" />{t('Trip')}</span>
+                <span className="flex items-center gap-1.5"><span className="size-2 rotate-45" style={{ background: SEVERITY_COLOR.WARNING }} />{t('Incident')}</span>
+                <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: NOTE_COLOR }} />{t('Note')}</span>
+                <span className="ml-auto">{t('Local time; recorded in UTC')} · {t('Space: play / pause · ← →: 5 s · [ ]: incidents')}</span>
+              </p>
+            </section>
+
+            {/* Events / notes / details */}
+            <section className="rounded-lg border border-outline-soft bg-container">
+              <div className="flex flex-wrap items-center gap-1 border-b border-outline-variant px-3 pt-2" role="tablist">
+                {(
+                  [
+                    ['events', t('Events'), incidentCount],
+                    ['notes', t('Notes'), notes.length],
+                    ['details', t('Trip details'), null],
+                  ] as [Tab, string, number | null][]
+                ).map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === key}
+                    onClick={() => setTab(key)}
+                    className={cx(
+                      '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors',
+                      tab === key ? 'border-primary font-semibold text-ink' : 'border-transparent text-ink-2 hover:text-ink',
+                    )}
+                  >
+                    {label}
+                    {count ? <span className="rounded-full bg-container-high px-1.5 text-[11px] tabular-nums">{count}</span> : null}
                   </button>
-                  <div className="text-xs text-ink-2">{n.authorName ?? ''}</div>
-                </li>
-              ))}
-            </ol>
-            {canAnnotate ? (
-              <form
-                className="grid gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  if (noteText.trim()) addNote.mutate({ category: noteCategory, note: noteText.trim() }, { onSuccess: () => setNoteText('') })
-                }}
-              >
-                <select className={controlClass()} aria-label={t('Kind')} value={noteCategory} onChange={(e) => setNoteCategory(e.target.value)}>
-                  <option value="NOTE">{t('Note')}</option>
-                  <option value="OBSERVATION">{t('Observation')}</option>
-                  <option value="ROOT_CAUSE">{t('Root cause')}</option>
-                  <option value="ACTION">{t('Action')}</option>
-                </select>
-                <textarea
-                  className={controlClass()}
-                  rows={3}
-                  maxLength={4000}
-                  placeholder={t('What happened at this moment?')}
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                />
-                <Button type="submit" size="sm" variant="tonal" disabled={addNote.isPending || !noteText.trim()}>
-                  {t('Add note at the cursor')}
-                </Button>
-              </form>
-            ) : null}
-          </section>
-        </div>
+                ))}
+                {tab === 'events' ? (
+                  <label className="ml-auto flex items-center gap-2 pb-1 text-xs text-ink-2">
+                    <input type="checkbox" checked={showAllEvents} onChange={(e) => setShowAllEvents(e.target.checked)} />
+                    {t('Show info events too')}
+                  </label>
+                ) : null}
+              </div>
+
+              <div className="p-3 sm:p-4">
+                {tab === 'events' ? (
+                  <EventList events={visibleEvents} runs={runs} activeId={activeEvent} onSeek={seek} empty={showAllEvents ? t('Nothing recorded.') : t('No warnings or errors on this journey.')} />
+                ) : null}
+
+                {tab === 'notes' ? (
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                    <ol className="flex max-h-[320px] flex-col gap-2 overflow-auto text-sm">
+                      {notes.length === 0 ? <li className="text-ink-2">{t('No notes yet. Pause at a moment and write what you see.')}</li> : null}
+                      {notes.map((n) => (
+                        <li key={n.id}>
+                          <button type="button" className="w-full rounded-sm px-2 py-1.5 text-left hover:bg-surface" onClick={() => seek(Date.parse(n.atUtc))}>
+                            <div className="flex items-center gap-2 text-xs text-ink-2">
+                              <span className="font-mono">{new Date(n.atUtc).toLocaleTimeString(undefined, { hour12: false })}</span>
+                              <StatusBadge tone="purple">{t(humanize(n.category))}</StatusBadge>
+                              <span>{n.authorName ?? ''}</span>
+                            </div>
+                            <p className="mt-0.5">{n.note}</p>
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                    {canAnnotate ? (
+                      <form
+                        className="flex flex-col gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          if (noteText.trim()) addNote.mutate({ category: noteCategory, note: noteText.trim() }, { onSuccess: () => setNoteText('') })
+                        }}
+                      >
+                        <span className="text-xs text-ink-2">
+                          {t('Note at {time}', { time: new Date(cursorMs).toLocaleTimeString(undefined, { hour12: false }) })}
+                        </span>
+                        <select className={controlClass()} aria-label={t('Kind')} value={noteCategory} onChange={(e) => setNoteCategory(e.target.value)}>
+                          <option value="NOTE">{t('Note')}</option>
+                          <option value="OBSERVATION">{t('Observation')}</option>
+                          <option value="ROOT_CAUSE">{t('Root cause')}</option>
+                          <option value="ACTION">{t('Action')}</option>
+                        </select>
+                        <textarea
+                          className={controlClass('area')}
+                          rows={3}
+                          maxLength={4000}
+                          placeholder={t('What happened at this moment?')}
+                          value={noteText}
+                          onChange={(e) => setNoteText(e.target.value)}
+                        />
+                        <Button type="submit" size="sm" variant="primary" disabled={addNote.isPending || !noteText.trim()}>
+                          {t('Add note at the cursor')}
+                        </Button>
+                      </form>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {tab === 'details' ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {runs.map((run, i) => (
+                      <dl key={run.id} className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-sm bg-surface p-3 text-sm">
+                        <dt className="col-span-2 mb-1 flex items-center gap-2 font-semibold">
+                          <span className="size-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                          <span className="font-mono">{run.robotCode}</span>
+                        </dt>
+                        <dt className="text-ink-2">{t('Trip')}</dt>
+                        <dd>{run.sourceJobNo ?? '—'}</dd>
+                        <dt className="text-ink-2">{t('Trip status')}</dt>
+                        <dd>{run.sourceRunStatus ? humanize(run.sourceRunStatus) : '—'}</dd>
+                        <dt className="text-ink-2">{t('Containers')}</dt>
+                        <dd>{run.assignedContainerIds.length}</dd>
+                        <dt className="text-ink-2">{t('Evidence')}</dt>
+                        <dd>{t(EVIDENCE_LABEL[run.evidenceStatus] ?? humanize(run.evidenceStatus))}</dd>
+                        <dt className="text-ink-2">{t('Map')}</dt>
+                        <dd>{run.mapVersion ?? '—'}</dd>
+                        <dt className="text-ink-2">{t('Started')}</dt>
+                        <dd>{run.startedAtUtc ? formatDateTimeFull(run.startedAtUtc) : '—'}</dd>
+                        <dt className="text-ink-2">{t('Camera')}</dt>
+                        <dd>
+                          {run.recordings.length === 0
+                            ? t('No camera recording')
+                            : run.recordings.map((r) => `${r.cameraModel}${r.nominalFovDegrees ? ` · ${r.nominalFovDegrees}°` : ''}`).join(', ')}
+                        </dd>
+                      </dl>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </div>
+  )
+}
+
+function Fact({ icon, label, mono, children }: { icon: IconName; label: string; mono?: boolean; children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-sm bg-container px-3 py-2">
+      <Icon name={icon} size={14} className="mt-0.5 shrink-0 text-ink-2" />
+      <div className="min-w-0">
+        <dt className="text-muted">{label}</dt>
+        <dd className={cx('truncate text-ink', mono && 'font-mono')}>{children}</dd>
+      </div>
+    </div>
+  )
+}
+
+function ControlButton({ icon, label, shortcut, onClick, disabled }: { icon: IconName; label: string; shortcut: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={`${label} (${shortcut})`}
+      className="inline-flex size-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-container-high hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+    >
+      <Icon name={icon} size={16} />
+    </button>
+  )
+}
+
+function EventList({
+  events,
+  runs,
+  activeId,
+  onSeek,
+  empty,
+}: {
+  events: EvidenceEvent[]
+  runs: ReplayRun[]
+  activeId: string | null
+  onSeek: (t: number) => void
+  empty: string
+}) {
+  const list = useRef<HTMLOListElement>(null)
+  // Keep the event under the cursor in view while playing.
+  useEffect(() => {
+    if (!activeId || !list.current) return
+    list.current.querySelector(`[data-event="${activeId}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [activeId])
+  const robotOf = (runId: string | null) => runs.find((r) => r.id === runId)?.robotCode ?? null
+
+  if (events.length === 0) return <p className="text-sm text-ink-2">{empty}</p>
+  return (
+    <ol ref={list} className="flex max-h-[320px] flex-col gap-0.5 overflow-auto text-sm">
+      {events.map((e) => (
+        <li key={e.id} data-event={e.id}>
+          <button
+            type="button"
+            onClick={() => onSeek(Date.parse(e.occurredAtUtc) - 3000)}
+            className={cx(
+              'grid w-full grid-cols-[72px_88px_minmax(0,1fr)] items-start gap-3 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-surface sm:grid-cols-[72px_88px_96px_minmax(0,1fr)]',
+              e.id === activeId && 'bg-primary/10 ring-1 ring-primary/30',
+            )}
+          >
+            <span className="font-mono text-xs text-ink-2 tabular-nums">{new Date(e.occurredAtUtc).toLocaleTimeString(undefined, { hour12: false })}</span>
+            <span>
+              <StatusBadge tone={SEVERITY_TONE[e.severity] ?? 'grey'}>{t(SEVERITY_LABEL[e.severity] ?? e.severity)}</StatusBadge>
+            </span>
+            <span className="hidden truncate font-mono text-xs text-ink-2 sm:inline">{robotOf(e.runId) ?? humanize(e.sourceSystem)}</span>
+            <span className="min-w-0">
+              <span className="block truncate">{e.message ?? humanize(e.eventType)}</span>
+              <span className="block truncate text-xs text-muted">{e.eventType}</span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ol>
   )
 }
