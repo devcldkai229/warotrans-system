@@ -298,7 +298,7 @@ export function MapViewport({
             }
           : {
               top: contentInsets.top + 54,
-              right: 14,
+              right: 22,
               bottom: contentInsets.bottom + 48,
               left: 14,
             }
@@ -521,10 +521,13 @@ function MapCanvas({
     [robots, map, frame],
   );
 
-  const labelObstacles = useMemo(
-    () => [...robotPoints, ...visibleEndpoints.map(e => ({ x: e.x, y: e.y }))],
-    [robotPoints, visibleEndpoints],
-  );
+  const labelObstacles = useMemo(() => {
+    const tagOffsetY = 18 / Math.max(1, camera.settledZoom);
+    return [
+      ...robotPoints.flatMap(p => [p, { x: p.x, y: p.y + tagOffsetY }]),
+      ...visibleEndpoints.map(e => ({ x: e.x, y: e.y })),
+    ];
+  }, [robotPoints, visibleEndpoints, camera.settledZoom]);
 
   const visibleEndpointLabels = useMemo(
     () =>
@@ -767,7 +770,7 @@ function MapCanvas({
                 cy="1"
                 r="0.8"
                 fill={colors.borderStrong}
-                opacity={isDark ? 0.25 : 0.35}
+                opacity={isDark ? 0.14 : 0.35}
               />
             </Pattern>
           </Defs>

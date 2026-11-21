@@ -70,12 +70,21 @@ export function useMapPreviewSource(
     });
   }, []);
 
+  const prevSourceKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
+    const nextSourceKey = `${mapId ?? ''}|${previewImageUri ?? ''}|${enabled}|${isBackendAsset}`;
+    const isSourceChange =
+      prevSourceKeyRef.current !== null && prevSourceKeyRef.current !== nextSourceKey;
+    prevSourceKeyRef.current = nextSourceKey;
+
     controllerRef.current?.resetCycle();
-    setImageLoadedKey('');
-    setImageFailedKey('');
-    setAuthError(false);
+    if (isSourceChange) {
+      setImageLoadedKey('');
+      setImageFailedKey('');
+      setAuthError(false);
+    }
 
     if (!enabled || !isBackendAsset) {
       setIsRefreshingToken(false);

@@ -4,6 +4,7 @@ import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import type { RobotResponse } from '../../types/contracts';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { ThemeColors } from '../../theme/colors';
+import { ThemeShadows } from '../../theme/shadows';
 import { useTheme, useThemedStyles } from '../../theme/ThemeContext';
 import { Text } from '../../ui';
 import { MapAnchor } from '../MapAnchor';
@@ -55,9 +56,9 @@ const RobotMarker = memo(function RobotMarker({
 }: RobotMarkerProps) {
   const styles = useThemedStyles(createStyles);
 
-  const chassisFill = isDark ? '#f8fafc' : '#1e293b';
-  const chassisStroke = isDark ? '#0f172a' : '#ffffff';
-  const deckFill = isDark ? '#cbd5e1' : '#334155';
+  const chassisFill = isDark ? '#ffffff' : '#1e293b';
+  const chassisStroke = isDark ? '#0b0f17' : '#ffffff';
+  const deckFill = isDark ? '#dbe2ec' : '#334155';
   const deckStroke = isDark ? '#94a3b8' : '#475569';
 
   return (
@@ -76,7 +77,7 @@ const RobotMarker = memo(function RobotMarker({
             <Circle
               r={isSelected ? 17.5 : 14}
               fill={isError ? ROBOT_COLOR.ERROR : tone}
-              opacity={isSelected ? 0.2 : 0.12}
+              opacity={isSelected ? (isDark ? 0.28 : 0.2) : isDark ? 0.18 : 0.12}
             />
             {isSelected ? (
               <Circle
@@ -198,7 +199,7 @@ export function RobotLayer({
   );
 }
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     hit: { flex: 1, alignItems: 'center' },
     hitPressed: { opacity: 0.84, transform: [{ scale: 0.95 }] },
@@ -215,7 +216,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     tagDefault: {
       backgroundColor: colors.mapLabelBg,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : colors.mapHudBorder,
     },
     tagDot: { width: 4.5, height: 4.5, borderRadius: 2.25 },
     tagText: { fontSize: 9.5, lineHeight: 12, color: colors.textPrimary },

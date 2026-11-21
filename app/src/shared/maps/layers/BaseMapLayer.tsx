@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { Image, Platform, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { useTheme } from '../../theme/ThemeContext';
@@ -65,7 +65,7 @@ export const BaseMapLayer = memo(function BaseMapLayer({
         }}
       >
         {raster && uri ? (
-          <>
+          <View style={[StyleSheet.absoluteFill, isDark ? styles.darkRasterFilter : null]}>
             <Image
               key={`${map.id}:${uri}:${imageAttempt}`}
               source={{ uri }}
@@ -73,27 +73,16 @@ export const BaseMapLayer = memo(function BaseMapLayer({
               onLoad={onImageLoad}
               onError={onImageError}
               resizeMode="stretch"
-              style={[
-                {
-                  position: 'absolute',
-                  width: map.imageWidthPixels * frame.scale,
-                  height: map.imageHeightPixels * frame.scale,
-                  left: (frame.mapWidth - map.imageWidthPixels * frame.scale) / 2,
-                  top: (frame.mapHeight - map.imageHeightPixels * frame.scale) / 2,
-                  transform: [{ rotate: frame.rotated ? '90deg' : '0deg' }],
-                },
-                Platform.OS === 'web' && isDark
-                  ? ({ filter: 'invert(0.92) contrast(1.35) brightness(0.66)' } as any)
-                  : null,
-              ]}
+              style={{
+                position: 'absolute',
+                width: map.imageWidthPixels * frame.scale,
+                height: map.imageHeightPixels * frame.scale,
+                left: (frame.mapWidth - map.imageWidthPixels * frame.scale) / 2,
+                top: (frame.mapHeight - map.imageHeightPixels * frame.scale) / 2,
+                transform: [{ rotate: frame.rotated ? '90deg' : '0deg' }],
+              }}
             />
-            {Platform.OS !== 'web' && isDark ? (
-              <View
-                pointerEvents="none"
-                style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10, 12, 16, 0.45)' }]}
-              />
-            ) : null}
-          </>
+          </View>
         ) : null}
       </View>
 
@@ -184,10 +173,16 @@ export const BaseMapLayer = memo(function BaseMapLayer({
           width={frame.mapWidth}
           height={frame.mapHeight}
           fill="none"
-          stroke={colors.borderStrong}
-          strokeWidth={1.2 / safeZoom}
+          stroke={isDark ? 'rgba(255, 255, 255, 0.22)' : colors.borderStrong}
+          strokeWidth={(isDark ? 1 : 1.2) / safeZoom}
         />
       </Svg>
     </View>
   );
+});
+
+const styles = StyleSheet.create({
+  darkRasterFilter: {
+    filter: 'invert(0.78) contrast(1.10) brightness(1.02)',
+  },
 });

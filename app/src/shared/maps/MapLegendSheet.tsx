@@ -9,15 +9,17 @@ import { Text } from '../ui';
 import { EndpointTile } from './EndpointGlyph';
 import {
   JOB_HIGHLIGHT_COLOR,
-  LANE_BLUE,
   PLAN_COLORS,
   ROBOT_COLOR,
   ZONE_COLOR,
   ZONE_DESCRIPTION,
   ZONE_LABEL,
   laneArrowColor,
+  laneBandColor,
   laneBandOpacity,
+  laneEdgeColor,
   zoneFillOpacity,
+  zoneStrokeColor,
 } from './mapStyle';
 
 const ROBOT_LEGEND_ITEMS = [
@@ -54,9 +56,9 @@ function MiniAmrGlyph({
   isDark: boolean;
   stale?: boolean;
 }) {
-  const chassisFill = isDark ? '#f8fafc' : '#1e293b';
-  const chassisStroke = isDark ? '#0f172a' : '#ffffff';
-  const deckFill = isDark ? '#cbd5e1' : '#334155';
+  const chassisFill = isDark ? '#ffffff' : '#1e293b';
+  const chassisStroke = isDark ? '#0b0f17' : '#ffffff';
+  const deckFill = isDark ? '#dbe2ec' : '#334155';
   const deckStroke = isDark ? '#94a3b8' : '#475569';
 
   return (
@@ -90,6 +92,7 @@ function MiniAmrGlyph({
 
 function MiniZoneSwatch({ type, isDark }: { type: string; isDark: boolean }) {
   const color = ZONE_COLOR[type] ?? ZONE_COLOR.JUNCTION;
+  const strokeColor = zoneStrokeColor(type, isDark);
   const fillOpacity = zoneFillOpacity(type, isDark);
   const isKeepOut = type === 'KEEP_OUT';
   const patternId = `legend-hatch-${type}`;
@@ -109,8 +112,8 @@ function MiniZoneSwatch({ type, isDark }: { type: string; isDark: boolean }) {
             y1={0}
             x2={0}
             y2={5}
-            stroke={ZONE_COLOR.KEEP_OUT}
-            strokeOpacity={0.55}
+            stroke={zoneStrokeColor('KEEP_OUT', isDark)}
+            strokeOpacity={isDark ? 0.68 : 0.55}
             strokeWidth={1.6}
           />
         </Pattern>
@@ -123,8 +126,8 @@ function MiniZoneSwatch({ type, isDark }: { type: string; isDark: boolean }) {
         rx={4}
         fill={color}
         fillOpacity={fillOpacity}
-        stroke={color}
-        strokeOpacity={0.72}
+        stroke={strokeColor}
+        strokeOpacity={isDark ? 0.85 : 0.72}
         strokeWidth={1.3}
         strokeDasharray={isKeepOut ? undefined : '4 2.5'}
       />
@@ -143,6 +146,8 @@ function MiniLaneSwatch({
   isDark: boolean;
 }) {
   const arrow = laneArrowColor(isDark);
+  const bandColor = laneBandColor(isDark);
+  const edgeColor = laneEdgeColor(isDark);
   const bandOp = Math.min(0.32, laneBandOpacity(isDark) + 0.08);
   const cyan = PLAN_COLORS[0];
 
@@ -193,12 +198,12 @@ function MiniLaneSwatch({
 
   return (
     <Svg width={36} height={20} viewBox="0 0 36 20">
-      <Rect x={1} y={2} width={34} height={16} rx={3} fill={LANE_BLUE} fillOpacity={bandOp} />
-      <Line x1={1} y1={2} x2={35} y2={2} stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={0.9} />
-      <Line x1={1} y1={18} x2={35} y2={18} stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={0.9} />
+      <Rect x={1} y={2} width={34} height={16} rx={3} fill={bandColor} fillOpacity={bandOp} />
+      <Line x1={1} y1={2} x2={35} y2={2} stroke={edgeColor} strokeOpacity={isDark ? 0.56 : 0.45} strokeWidth={0.9} />
+      <Line x1={1} y1={18} x2={35} y2={18} stroke={edgeColor} strokeOpacity={isDark ? 0.56 : 0.45} strokeWidth={0.9} />
       {kind === 'one-way' ? (
         <>
-          <Line x1={3} y1={10} x2={33} y2={10} stroke={arrow} strokeOpacity={0.3} strokeWidth={0.9} />
+          <Line x1={3} y1={10} x2={33} y2={10} stroke={edgeColor} strokeOpacity={isDark ? 0.45 : 0.3} strokeWidth={0.9} />
           <Path d="M13 8.8 L19 8.8 L19 6 L25 10 L19 14 L19 11.2 L13 11.2 Z" fill={arrow} />
         </>
       ) : (
@@ -208,8 +213,8 @@ function MiniLaneSwatch({
             y1={10}
             x2={35}
             y2={10}
-            stroke={LANE_BLUE}
-            strokeOpacity={0.58}
+            stroke={edgeColor}
+            strokeOpacity={isDark ? 0.62 : 0.58}
             strokeWidth={0.9}
             strokeDasharray="3 2.5"
           />

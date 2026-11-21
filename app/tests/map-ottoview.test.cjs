@@ -359,3 +359,32 @@ test('endpointVisualKind classifies waypoint, inbound, outbound, charger, and pa
   assert.equal(endpointVisualKind('CHARGER', 'CHG-01', 'Charger'), 'CHARGER');
   assert.equal(endpointVisualKind('PARKING', 'PK-01', 'Parking A'), 'PARK');
 });
+
+test('dark-mode OTTO map style helpers provide high-contrast colors without altering fixed palette tokens', () => {
+  const load = createLoader();
+  const {
+    LANE_BLUE,
+    ZONE_COLOR,
+    laneBandColor,
+    laneEdgeColor,
+    laneBandOpacity,
+    zoneStrokeColor,
+  } = load('src/shared/maps/mapStyle.ts');
+
+  assert.equal(LANE_BLUE, '#3279f9');
+  assert.equal(ZONE_COLOR.JUNCTION, '#5c6bc0');
+
+  assert.equal(laneBandColor(false), LANE_BLUE);
+  assert.equal(laneBandColor(true), '#1a74e2');
+  assert.equal(laneEdgeColor(false), LANE_BLUE);
+  assert.equal(laneEdgeColor(true), '#38bdf8');
+  assert.equal(laneBandOpacity(false), 0.13);
+  assert.equal(laneBandOpacity(true), 0.28);
+
+  assert.equal(zoneStrokeColor('KEEP_OUT', false), ZONE_COLOR.KEEP_OUT);
+  assert.equal(zoneStrokeColor('KEEP_OUT', true), '#f87171');
+  assert.equal(zoneStrokeColor('SPEED', true), '#fbbf24');
+  assert.equal(zoneStrokeColor('NO_STOP', true), '#38bdf8');
+  assert.equal(zoneStrokeColor('SINGLE_OCCUPANCY', true), '#c084fc');
+  assert.equal(zoneStrokeColor('JUNCTION', true), '#818cf8');
+});

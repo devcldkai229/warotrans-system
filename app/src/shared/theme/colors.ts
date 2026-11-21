@@ -186,19 +186,19 @@ export const darkColors: ThemeColors = {
   /* ---------------------------------------------------------------- */
   /* Warehouse Map                                                    */
   /* ---------------------------------------------------------------- */
-  mapBackground: '#0a0c10',
-  mapGrid: '#262930',
+  mapBackground: '#05070a',
+  mapGrid: '#3d4552',
   mapLine: '#3d4654',
   mapRack: '#3a4150',
   mapZoneBg: 'rgba(36, 37, 38, 0.92)',
-  mapVoid: '#0a0c10',
-  mapFloor: '#232730',
-  mapUnknown: '#11141a',
-  mapWall: '#b9c3d4',
-  mapShelfStroke: '#7c889b',
-  mapHudBg: 'rgba(20, 24, 32, 0.90)',
-  mapHudBorder: 'rgba(255, 255, 255, 0.14)',
-  mapLabelBg: 'rgba(15, 19, 26, 0.88)',
+  mapVoid: '#05070a',
+  mapFloor: '#31363f',
+  mapUnknown: '#0e1116',
+  mapWall: '#d6dde8',
+  mapShelfStroke: '#9aa7b8',
+  mapHudBg: 'rgba(13, 17, 23, 0.90)',
+  mapHudBorder: 'rgba(255, 255, 255, 0.16)',
+  mapLabelBg: 'rgba(11, 14, 20, 0.92)',
 
   /* ---------------------------------------------------------------- */
   /* Legacy aliases                                                   */

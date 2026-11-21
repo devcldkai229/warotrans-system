@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'rea
 import { AlertTriangle, BookOpen, Focus, Layers, LocateFixed, Minus, Plus } from 'lucide-react-native';
 import { ThemeColors } from '../theme/colors';
 import { ThemeShadows } from '../theme/shadows';
-import { useThemeColors, useThemedStyles } from '../theme/ThemeContext';
+import { useTheme, useThemeColors, useThemedStyles } from '../theme/ThemeContext';
 import { Text } from '../ui';
 import type { MapUpdateMode } from './mapTelemetry';
 
@@ -95,7 +95,7 @@ export function MapTopStatusPill({
   zonesVisible: boolean;
   onPressZonesHidden?: () => void;
 }) {
-  const colors = useThemeColors();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const dotColor =
@@ -118,7 +118,13 @@ export function MapTopStatusPill({
 
   return (
     <View style={styles.topLeftStack} pointerEvents="box-none">
-      <View style={styles.statusPill} pointerEvents="none">
+      <View
+        style={[
+          styles.statusPill,
+          isDark && updateMode === 'live' && styles.statusPillLiveDark,
+        ]}
+        pointerEvents="none"
+      >
         <View style={[styles.liveHalo, { backgroundColor: `${dotColor}33` }]}>
           <View style={[styles.liveDot, { backgroundColor: dotColor }]} />
         </View>
@@ -319,6 +325,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       borderWidth: 1,
       borderColor: colors.mapHudBorder,
       ...shadows.sm,
+    },
+    statusPillLiveDark: {
+      backgroundColor: 'rgba(13, 30, 22, 0.90)',
+      borderColor: 'rgba(69, 189, 98, 0.58)',
     },
     liveHalo: {
       width: 13,

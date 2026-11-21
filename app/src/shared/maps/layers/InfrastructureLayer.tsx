@@ -3,12 +3,13 @@ import Svg, { Circle, ClipPath, Defs, G, Line, Path, Pattern, Polyline, Rect } f
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { LANE_ARROW_PATH, laneGlyphs, type DrawPoint } from '../laneGlyphs';
 import {
-  LANE_BLUE,
-  ZONE_COLOR,
   laneArrowColor,
+  laneBandColor,
   laneBandOpacity,
+  laneEdgeColor,
   zoneColorOf,
   zoneFillOpacity,
+  zoneStrokeColor,
 } from '../mapStyle';
 import type { MapPlannedPath } from '../mapTraffic';
 import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
@@ -55,6 +56,9 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
   const pxPerMetre = frame.scale / (map.resolution || 0.05);
   const hair = 1 / Math.max(1, zoom);
   const arrowColor = laneArrowColor(isDark);
+  const bandColor = laneBandColor(isDark);
+  const edgeColor = laneEdgeColor(isDark);
+  const keepOutStroke = zoneStrokeColor('KEEP_OUT', isDark);
   const bandOpacity = laneBandOpacity(isDark);
   const point = (p: number[]) => worldToBase({ x: p[0], y: p[1] }, map, frame);
 
@@ -82,8 +86,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
             y1={0}
             x2={0}
             y2={6 * hair}
-            stroke={ZONE_COLOR.KEEP_OUT}
-            strokeOpacity={0.5}
+            stroke={keepOutStroke}
+            strokeOpacity={isDark ? 0.65 : 0.5}
             strokeWidth={1.6 * hair}
           />
         </Pattern>
@@ -99,6 +103,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                 const validRings = rings as MapPoint[][];
                 const d = ringsToPathD(validRings);
                 const color = zoneColorOf(zone.zoneType);
+                const strokeColor = zoneStrokeColor(zone.zoneType, isDark);
                 const isSelected = selectedZoneId === zone.id;
                 const isKeepOut = zone.zoneType === 'KEEP_OUT';
                 const baseOpacity = zoneFillOpacity(zone.zoneType, isDark);
@@ -111,9 +116,9 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                       fillRule="evenodd"
                       fill={color}
                       fillOpacity={fillOpacity}
-                      stroke={color}
-                      strokeOpacity={isSelected ? 0.92 : 0.62}
-                      strokeWidth={(isSelected ? 2 : 1.1) * hair}
+                      stroke={strokeColor}
+                      strokeOpacity={isSelected ? 0.96 : isDark ? 0.82 : 0.62}
+                      strokeWidth={(isSelected ? 2 : isDark ? 1.25 : 1.1) * hair}
                       strokeDasharray={isKeepOut || isSelected ? undefined : `${4 * hair} ${3 * hair}`}
                       strokeLinejoin="round"
                     />
@@ -138,7 +143,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                 );
                 const arrowScale = Math.min(glyphs.chevronSize, 15 * hair);
                 const isSelected = selectedEdgeId === edge.id;
-                const activeBandOpacity = isSelected ? Math.min(0.36, bandOpacity + 0.14) : bandOpacity;
+                const activeBandOpacity = isSelected ? Math.min(0.38, bandOpacity + 0.14) : bandOpacity;
 
                 return (
                   <G key={edge.id}>
@@ -156,7 +161,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                     <Polyline
                       points={toPoints(stage)}
                       fill="none"
-                      stroke={LANE_BLUE}
+                      stroke={bandColor}
                       strokeOpacity={activeBandOpacity}
                       strokeWidth={width}
                       strokeLinejoin="miter"
@@ -167,8 +172,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         key={index}
                         points={toPoints(side)}
                         fill="none"
-                        stroke={LANE_BLUE}
-                        strokeOpacity={isDark ? 0.45 : 0.34}
+                        stroke={edgeColor}
+                        strokeOpacity={isDark ? 0.52 : 0.34}
                         strokeWidth={0.85 * hair}
                       />
                     ))}
@@ -176,8 +181,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                       <Polyline
                         points={toPoints(glyphs.divider)}
                         fill="none"
-                        stroke={LANE_BLUE}
-                        strokeOpacity={isDark ? 0.58 : 0.48}
+                        stroke={edgeColor}
+                        strokeOpacity={isDark ? 0.62 : 0.48}
                         strokeWidth={0.85 * hair}
                         strokeDasharray={`${4 * hair} ${3.5 * hair}`}
                       />
@@ -185,8 +190,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                       <Polyline
                         points={toPoints(stage)}
                         fill="none"
-                        stroke={arrowColor}
-                        strokeOpacity={0.24}
+                        stroke={edgeColor}
+                        strokeOpacity={isDark ? 0.42 : 0.24}
                         strokeWidth={0.8 * hair}
                       />
                     )}
@@ -195,7 +200,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         key={index}
                         d={LANE_ARROW_PATH}
                         fill={arrowColor}
-                        fillOpacity={isDark ? 0.88 : 0.78}
+                        fillOpacity={isDark ? 0.92 : 0.78}
                         transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${arrowScale})`}
                       />
                     ))}

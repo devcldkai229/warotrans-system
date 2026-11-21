@@ -165,7 +165,7 @@ export const EndpointTile = memo(function EndpointTile({
             borderRadius: 7,
             borderWidth: 1.6,
             borderColor: accentColor,
-            backgroundColor: selected ? accentColor : surface,
+            backgroundColor: selected ? accentColor : isDark ? '#111620' : surface,
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -185,9 +185,9 @@ export const EndpointTile = memo(function EndpointTile({
             width: 18,
             height: 18,
             borderRadius: 6,
-            borderWidth: 1.3,
+            borderWidth: isDark ? 1.4 : 1.3,
             borderColor: accentColor,
-            backgroundColor: selected ? accentColor : `${baseColor}18`,
+            backgroundColor: selected ? accentColor : isDark ? '#131822' : `${baseColor}18`,
             alignItems: 'center',
             justifyContent: 'center',
           }}
