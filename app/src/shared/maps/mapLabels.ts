@@ -10,6 +10,7 @@ export interface MapJobContext {
 }
 
 export type EndpointJobRole = 'pickup' | 'dropoff';
+export type LabelPlacement = 'below' | 'above';
 
 export interface LabeledEndpoint {
   x: number;
@@ -18,6 +19,7 @@ export interface LabeledEndpoint {
   displayText: string;
   role: EndpointJobRole | null;
   priority: number;
+  placement: LabelPlacement;
 }
 
 export interface ZoneFloorLabel {
@@ -72,14 +74,16 @@ function compactEndpointLabel(endpoint: EndpointDto, detailed: boolean): string 
   const name = endpoint.name?.trim() || '';
   const code = endpoint.code?.trim() || '';
   if (detailed) return name || code;
-  if (name && name.length <= 18) return name;
+  if (name && name.length <= 16) return name;
   return code || name;
 }
 
 /**
- * Smart Auto-LOD endpoint label selector:
- * - Always keeps selected endpoint (priority 0) and active Job endpoints (priority 1).
- * - Shows non-overlapping landmark labels at zoom 1×, expanding to all stations when zoomed in (`detailed`).
+ * Smart Auto-LOD endpoint label selector with robot/station obstacle avoidance:
+ * - Always keeps selected endpoint (priority 0) and active Job endpoints (priority 1),
+ *   flipping above/below to minimize collisions.
+ * - Shows non-overlapping landmark labels at zoom 1×, suppressing crowded lower-priority labels
+ *   until zoomed in (`detailed`).
  */
 export function selectVisibleEndpointLabels(
   items: readonly { x: number; y: number; endpoint: EndpointDto }[],
@@ -87,10 +91,14 @@ export function selectVisibleEndpointLabels(
   selectedId: string | null,
   jobContext?: MapJobContext,
   detailed = false,
+  obstacles: readonly MapPoint[] = [],
 ): LabeledEndpoint[] {
   const safeZoom = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
-  const gapX = (detailed ? 52 : 76) / safeZoom;
-  const gapY = (detailed ? 22 : 28) / safeZoom;
+  const gapX = (detailed ? 48 : 66) / safeZoom;
+  const gapY = (detailed ? 19 : 24) / safeZoom;
+  const obsGapX = 32 / safeZoom;
+  const obsGapY = 18 / safeZoom;
+  const labelOffset = 17 / safeZoom;
 
   const ranked = items
     .map(item => {
@@ -107,16 +115,46 @@ export function selectVisibleEndpointLabels(
     .sort((a, b) => a.priority - b.priority || a.endpoint.code.localeCompare(b.endpoint.code));
 
   const accepted: LabeledEndpoint[] = [];
+  const acceptedPoints: MapPoint[] = [];
+
+  const countCollisions = (pt: MapPoint, selfObstacles: readonly MapPoint[]) => {
+    let count = 0;
+    for (const obs of selfObstacles) {
+      if (Math.abs(pt.x - obs.x) < obsGapX && Math.abs(pt.y - obs.y) < obsGapY) {
+        count++;
+      }
+    }
+    for (const placed of acceptedPoints) {
+      if (Math.abs(pt.x - placed.x) < gapX && Math.abs(pt.y - placed.y) < gapY) {
+        count++;
+      }
+    }
+    return count;
+  };
+
   for (const candidate of ranked) {
+    const selfObstacles = obstacles.filter(
+      obs => Math.hypot(obs.x - candidate.x, obs.y - candidate.y) > 0.5,
+    );
+    const belowPt = { x: candidate.x, y: candidate.y + labelOffset };
+    const abovePt = { x: candidate.x, y: candidate.y - labelOffset };
+
+    const belowHits = countCollisions(belowPt, selfObstacles);
+    const aboveHits = countCollisions(abovePt, selfObstacles);
+
     if (candidate.priority <= 1) {
-      accepted.push(candidate);
+      const placement: LabelPlacement = aboveHits < belowHits ? 'above' : 'below';
+      acceptedPoints.push(placement === 'above' ? abovePt : belowPt);
+      accepted.push({ ...candidate, placement });
       continue;
     }
-    const collides = accepted.some(
-      placed => Math.abs(candidate.x - placed.x) < gapX && Math.abs(candidate.y - placed.y) < gapY,
-    );
-    if (!collides) {
-      accepted.push(candidate);
+
+    if (belowHits === 0) {
+      acceptedPoints.push(belowPt);
+      accepted.push({ ...candidate, placement: 'below' });
+    } else if (aboveHits === 0) {
+      acceptedPoints.push(abovePt);
+      accepted.push({ ...candidate, placement: 'above' });
     }
   }
 
@@ -145,23 +183,35 @@ export function visibleZoneLabels(
   frame: MapFrame,
   zoom: number,
   selectedZoneId: string | null,
+  obstacles: readonly MapPoint[] = [],
 ): ZoneFloorLabel[] {
   const safeZoom = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
+  const obsGapX = 26 / safeZoom;
+  const obsGapY = 18 / safeZoom;
   const out: ZoneFloorLabel[] = [];
 
   for (const zone of map.zones || []) {
     if (zone.mapVersionId !== map.id || !zone.isActive || zone.geometry?.type !== 'Polygon') {
       continue;
     }
-    const outer = zone.geometry.coordinates[0]?.map(pt => worldToBase({ x: pt[0], y: pt[1] }, map, frame));
+    const outer = zone.geometry.coordinates[0]?.map(pt =>
+      worldToBase({ x: pt[0], y: pt[1] }, map, frame),
+    );
     if (!outer || outer.length < 3 || outer.some(p => !p)) continue;
 
     const pts = outer as MapPoint[];
     const bounds = polygonBounds(pts);
-    const fitsScreen = bounds.width * safeZoom >= 54 && bounds.height * safeZoom >= 26;
+    const fitsScreen = bounds.width * safeZoom >= 78 && bounds.height * safeZoom >= 34;
     if (!fitsScreen && zone.id !== selectedZoneId) continue;
 
     const center = polygonCentroid(pts);
+    const blocked =
+      zone.id !== selectedZoneId &&
+      obstacles.some(
+        obs => Math.abs(center.x - obs.x) < obsGapX && Math.abs(center.y - obs.y) < obsGapY,
+      );
+    if (blocked) continue;
+
     out.push({
       id: zone.id,
       zone,

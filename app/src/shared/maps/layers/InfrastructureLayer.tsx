@@ -5,10 +5,10 @@ import { LANE_ARROW_PATH, laneGlyphs, type DrawPoint } from '../laneGlyphs';
 import {
   LANE_BLUE,
   ZONE_COLOR,
-  ZONE_FILL_OPACITY,
   laneArrowColor,
   laneBandOpacity,
   zoneColorOf,
+  zoneFillOpacity,
 } from '../mapStyle';
 import type { MapPlannedPath } from '../mapTraffic';
 import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
@@ -35,7 +35,8 @@ function ringsToPathD(rings: readonly MapPoint[][]): string {
 }
 
 /**
- * Zones, traffic corridors and (when traffic.read is granted) live Nav2 planned paths in OTTO style.
+ * Zones, traffic corridors and (when traffic.read is granted) live Nav2 planned paths,
+ * tuned with airy opacities and capped arrow sizes for compact maps.
  */
 export const InfrastructureLayer = memo(function InfrastructureLayer({
   map,
@@ -82,8 +83,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
             x2={0}
             y2={6 * hair}
             stroke={ZONE_COLOR.KEEP_OUT}
-            strokeOpacity={0.55}
-            strokeWidth={2 * hair}
+            strokeOpacity={0.5}
+            strokeWidth={1.6 * hair}
           />
         </Pattern>
       </Defs>
@@ -100,8 +101,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                 const color = zoneColorOf(zone.zoneType);
                 const isSelected = selectedZoneId === zone.id;
                 const isKeepOut = zone.zoneType === 'KEEP_OUT';
-                const baseOpacity = ZONE_FILL_OPACITY[zone.zoneType] ?? 0.2;
-                const fillOpacity = isSelected ? Math.min(0.45, baseOpacity + 0.16) : baseOpacity;
+                const baseOpacity = zoneFillOpacity(zone.zoneType, isDark);
+                const fillOpacity = isSelected ? Math.min(0.36, baseOpacity + 0.14) : baseOpacity;
 
                 return (
                   <G key={zone.id}>
@@ -111,9 +112,9 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                       fill={color}
                       fillOpacity={fillOpacity}
                       stroke={color}
-                      strokeOpacity={isSelected ? 0.95 : 0.78}
-                      strokeWidth={(isSelected ? 2.4 : 1.5) * hair}
-                      strokeDasharray={isKeepOut || isSelected ? undefined : `${5 * hair} ${3.5 * hair}`}
+                      strokeOpacity={isSelected ? 0.92 : 0.62}
+                      strokeWidth={(isSelected ? 2 : 1.1) * hair}
+                      strokeDasharray={isKeepOut || isSelected ? undefined : `${4 * hair} ${3 * hair}`}
                       strokeLinejoin="round"
                     />
                     {isKeepOut ? <Path d={d} fillRule="evenodd" fill={`url(#${hatch})`} /> : null}
@@ -135,8 +136,9 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                   width,
                   edge.direction === 'ONE_WAY' ? 'ONE_WAY' : 'BIDIRECTIONAL',
                 );
+                const arrowScale = Math.min(glyphs.chevronSize, 15 * hair);
                 const isSelected = selectedEdgeId === edge.id;
-                const activeBandOpacity = isSelected ? Math.min(0.48, bandOpacity + 0.14) : bandOpacity;
+                const activeBandOpacity = isSelected ? Math.min(0.36, bandOpacity + 0.14) : bandOpacity;
 
                 return (
                   <G key={edge.id}>
@@ -145,8 +147,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(stage)}
                         fill="none"
                         stroke={arrowColor}
-                        strokeOpacity={0.35}
-                        strokeWidth={width + 4 * hair}
+                        strokeOpacity={0.32}
+                        strokeWidth={width + 3.5 * hair}
                         strokeLinejoin="round"
                         strokeLinecap="round"
                       />
@@ -166,8 +168,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(side)}
                         fill="none"
                         stroke={LANE_BLUE}
-                        strokeOpacity={isDark ? 0.62 : 0.48}
-                        strokeWidth={hair}
+                        strokeOpacity={isDark ? 0.45 : 0.34}
+                        strokeWidth={0.85 * hair}
                       />
                     ))}
                     {glyphs.divider ? (
@@ -175,17 +177,17 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(glyphs.divider)}
                         fill="none"
                         stroke={LANE_BLUE}
-                        strokeOpacity={isDark ? 0.75 : 0.62}
-                        strokeWidth={hair}
-                        strokeDasharray={`${5 * hair} ${4 * hair}`}
+                        strokeOpacity={isDark ? 0.58 : 0.48}
+                        strokeWidth={0.85 * hair}
+                        strokeDasharray={`${4 * hair} ${3.5 * hair}`}
                       />
                     ) : (
                       <Polyline
                         points={toPoints(stage)}
                         fill="none"
                         stroke={arrowColor}
-                        strokeOpacity={0.32}
-                        strokeWidth={0.9 * hair}
+                        strokeOpacity={0.24}
+                        strokeWidth={0.8 * hair}
                       />
                     )}
                     {glyphs.chevrons.map((c, index) => (
@@ -193,8 +195,8 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         key={index}
                         d={LANE_ARROW_PATH}
                         fill={arrowColor}
-                        fillOpacity={isDark ? 0.90 : 0.85}
-                        transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`}
+                        fillOpacity={isDark ? 0.88 : 0.78}
+                        transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${arrowScale})`}
                       />
                     ))}
                   </G>

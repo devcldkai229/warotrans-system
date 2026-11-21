@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { AlertTriangle, BookOpen, Focus, Layers, LocateFixed, Minus, Plus } from 'lucide-react-native';
 import { ThemeColors } from '../theme/colors';
@@ -26,7 +26,6 @@ export function MapControl({
   height?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const [focused, setFocused] = useState(false);
   const styles = useThemedStyles(createStyles);
   return (
     <Pressable
@@ -35,14 +34,11 @@ export function MapControl({
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
       onPress={onPress}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
       style={({ pressed }) => [
         styles.control,
         { width, height },
         style,
         selected && styles.selected,
-        focused && styles.focused,
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
@@ -65,7 +61,6 @@ function ClusterButton({
   disabled?: boolean;
   selected?: boolean;
 }) {
-  const [focused, setFocused] = useState(false);
   const styles = useThemedStyles(createStyles);
   return (
     <Pressable
@@ -74,13 +69,11 @@ function ClusterButton({
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
       onPress={onPress}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      hitSlop={4}
       style={({ pressed }) => [
         styles.clusterBtn,
         selected && styles.clusterBtnSelected,
-        focused && styles.focused,
-        pressed && styles.pressed,
+        pressed && styles.pressedScale,
         disabled && styles.disabled,
       ]}
     >
@@ -129,13 +122,26 @@ export function MapTopStatusPill({
         <View style={[styles.liveHalo, { backgroundColor: `${dotColor}33` }]}>
           <View style={[styles.liveDot, { backgroundColor: dotColor }]} />
         </View>
-        <Text variant="caption" fontWeight="700" color="textPrimary" numberOfLines={1}>
+        <Text
+          variant="caption"
+          fontWeight="700"
+          color="textPrimary"
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.25}
+        >
           {statusText}
         </Text>
-        <Text variant="caption" color="textMuted">
+        <Text variant="caption" color="textMuted" maxFontSizeMultiplier={1.25}>
           ·
         </Text>
-        <Text variant="caption" fontWeight="600" color="textSecondary" numberOfLines={1} style={styles.mapTagText}>
+        <Text
+          variant="caption"
+          fontWeight="600"
+          color="textSecondary"
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.25}
+          style={styles.mapTagText}
+        >
           {mapCode} · V{versionNo}
         </Text>
       </View>
@@ -146,10 +152,10 @@ export function MapTopStatusPill({
           disabled={!onPressZonesHidden}
           accessibilityRole="button"
           accessibilityLabel="Zones Hidden"
-          style={({ pressed }) => [styles.zonesWarningChip, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.zonesWarningChip, pressed && styles.pressedScale]}
         >
-          <AlertTriangle size={12} color={colors.warningText} />
-          <Text variant="caption" fontWeight="600" color="warningText">
+          <AlertTriangle size={12} color={colors.warningText} strokeWidth={1.9} />
+          <Text variant="caption" fontWeight="600" color="warningText" maxFontSizeMultiplier={1.25}>
             Zones Hidden
           </Text>
         </Pressable>
@@ -183,11 +189,15 @@ export function MapToolCluster({
   return (
     <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
       <ClusterButton label="Map layers and locations" onPress={onLayers}>
-        <Layers size={19} color={colors.textPrimary} />
+        <Layers size={17} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
       <View style={horizontal ? styles.dividerV : styles.dividerH} />
       <ClusterButton label="Map legend" selected={legendOpen} onPress={onLegend}>
-        <BookOpen size={19} color={legendOpen ? colors.primaryText : colors.textPrimary} />
+        <BookOpen
+          size={17}
+          color={legendOpen ? colors.primaryText : colors.textPrimary}
+          strokeWidth={1.85}
+        />
       </ClusterButton>
       {showFollow ? (
         <>
@@ -198,7 +208,11 @@ export function MapToolCluster({
             selected={following}
             onPress={onFollow}
           >
-            <LocateFixed size={19} color={following ? colors.primaryText : colors.textPrimary} />
+            <LocateFixed
+              size={17}
+              color={following ? colors.primaryText : colors.textPrimary}
+              strokeWidth={1.85}
+            />
           </ClusterButton>
         </>
       ) : null}
@@ -223,15 +237,15 @@ export function MapCameraCluster({
   return (
     <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
       <ClusterButton label="Zoom in" disabled={zoom >= 8} onPress={() => onZoom(2)}>
-        <Plus size={19} color={colors.textPrimary} />
+        <Plus size={17} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
       <View style={horizontal ? styles.dividerV : styles.dividerH} />
       <ClusterButton label="Zoom out" disabled={zoom <= 1} onPress={() => onZoom(0.5)}>
-        <Minus size={19} color={colors.textPrimary} />
+        <Minus size={17} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
       <View style={horizontal ? styles.dividerV : styles.dividerH} />
       <ClusterButton label="Fit map" onPress={onFit}>
-        <Focus size={19} color={colors.textPrimary} />
+        <Focus size={17} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
     </View>
   );
@@ -285,9 +299,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       borderColor: colors.mapHudBorder,
     },
     selected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-    focused: { borderColor: colors.primaryText, borderWidth: 2.5 },
     pressed: { opacity: 0.78 },
-    disabled: { opacity: 0.38 },
+    pressedScale: { opacity: 0.85, transform: [{ scale: 0.94 }] },
+    disabled: { opacity: 0.36 },
 
     topLeftStack: {
       gap: 6,
@@ -299,7 +313,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       alignItems: 'center',
       gap: 6,
       paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingVertical: 5,
       borderRadius: 999,
       backgroundColor: colors.mapHudBg,
       borderWidth: 1,
@@ -307,16 +321,16 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       ...shadows.sm,
     },
     liveHalo: {
-      width: 14,
-      height: 14,
-      borderRadius: 7,
+      width: 13,
+      height: 13,
+      borderRadius: 6.5,
       alignItems: 'center',
       justifyContent: 'center',
     },
     liveDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 3.5,
+      width: 6.5,
+      height: 6.5,
+      borderRadius: 3.25,
     },
     mapTagText: {
       flexShrink: 1,
@@ -335,7 +349,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     },
 
     clusterPill: {
-      borderRadius: 25,
+      borderRadius: 23,
       padding: 3,
       backgroundColor: colors.mapHudBg,
       borderWidth: 1,
@@ -347,9 +361,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       flexDirection: 'row',
     },
     clusterBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -357,14 +371,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       backgroundColor: colors.primaryLight,
     },
     dividerH: {
-      width: 24,
+      width: 22,
       height: 1,
       backgroundColor: colors.mapHudBorder,
       marginVertical: 1,
     },
     dividerV: {
       width: 1,
-      height: 24,
+      height: 22,
       backgroundColor: colors.mapHudBorder,
       marginHorizontal: 1,
     },

@@ -292,16 +292,16 @@ export function MapViewport({
       fullBleed
         ? compact
           ? {
-              top: contentInsets.top + 44,
-              right: 60,
+              top: contentInsets.top + 42,
+              right: 12,
               bottom: contentInsets.bottom + 36,
               left: 12,
             }
           : {
-              top: contentInsets.top + 52,
-              right: 68,
-              bottom: contentInsets.bottom + 44,
-              left: 16,
+              top: contentInsets.top + 54,
+              right: 14,
+              bottom: contentInsets.bottom + 48,
+              left: 14,
             }
         : undefined,
     [fullBleed, compact, contentInsets.top, contentInsets.bottom],
@@ -508,8 +508,24 @@ function MapCanvas({
         endpointPriority(a.endpoint, endpointId, jobContext)
         - endpointPriority(b.endpoint, endpointId, jobContext),
     );
-    return spacedLocations(ordered, [], 34 / camera.settledZoom);
+    return spacedLocations(ordered, [], 26 / camera.settledZoom);
   }, [endpoints, endpointId, jobContext, camera.settledZoom]);
+
+  const robotPoints = useMemo(
+    () =>
+      robots
+        .filter(r => r.currentMapVersionId === map.id && r.isOnline)
+        .flatMap(r => {
+          const p = worldToBase({ x: r.poseX, y: r.poseY }, map, frame);
+          return p ? [p] : [];
+        }),
+    [robots, map, frame],
+  );
+
+  const labelObstacles = useMemo(
+    () => [...robotPoints, ...visibleEndpoints.map(e => ({ x: e.x, y: e.y }))],
+    [robotPoints, visibleEndpoints],
+  );
 
   const visibleEndpointLabels = useMemo(
     () =>
@@ -520,9 +536,19 @@ function MapCanvas({
             endpointId,
             jobContext,
             labelsDetailed,
+            labelObstacles,
           )
         : [],
-    [layers.labels, layers.stations, visibleEndpoints, camera.settledZoom, endpointId, jobContext, labelsDetailed],
+    [
+      layers.labels,
+      layers.stations,
+      visibleEndpoints,
+      camera.settledZoom,
+      endpointId,
+      jobContext,
+      labelsDetailed,
+      labelObstacles,
+    ],
   );
 
   const zoneLabels = useMemo(
@@ -533,13 +559,14 @@ function MapCanvas({
             frame,
             camera.settledZoom,
             inspected?.kind === 'zone' ? inspected.zone.id : null,
+            labelObstacles,
           )
         : [],
-    [layers.zones, layers.labels, map, frame, camera.settledZoom, inspected],
+    [layers.zones, layers.labels, map, frame, camera.settledZoom, inspected, labelObstacles],
   );
 
   const floorAreaLabels = useMemo(() => {
-    if (!model || layers.scan || !layers.labels) return [];
+    if (!model || layers.scan || !layers.labels || !labelsDetailed) return [];
     return (model.floorPaint || [])
       .filter(area => area.name === 'inbound' || area.name === 'outbound')
       .flatMap(area => {
@@ -558,7 +585,7 @@ function MapCanvas({
             ]
           : [];
       });
-  }, [model, layers.scan, layers.labels, map, frame]);
+  }, [model, layers.scan, layers.labels, labelsDetailed, map, frame]);
 
   const shelfLabels = useMemo(() => {
     if (!model || layers.scan || !layers.labels || (!labelsDetailed && camera.settledZoom < 1.4)) {
@@ -572,7 +599,7 @@ function MapCanvas({
 
   useEffect(() => {
     setLabelsDetailed(value =>
-      value ? camera.settledZoom >= 1.65 : camera.settledZoom >= 1.8,
+      value ? camera.settledZoom >= 1.5 : camera.settledZoom >= 1.65,
     );
   }, [camera.settledZoom]);
 
@@ -823,8 +850,14 @@ function MapCanvas({
                 height={20}
                 passThrough
               >
-                <View style={[styles.shelfPill, { backgroundColor: colors.mapLabelBg, borderColor: colors.mapHudBorder }]}>
-                  <Text variant="caption" fontWeight="700" numberOfLines={1} style={styles.shelfText}>
+                <View style={styles.shelfPill}>
+                  <Text
+                    variant="caption"
+                    fontWeight="700"
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.15}
+                    style={styles.shelfText}
+                  >
                     {rack.code}
                   </Text>
                 </View>
@@ -838,53 +871,41 @@ function MapCanvas({
                   key={`zone-lbl-${z.id}`}
                   point={{ x: z.x, y: z.y }}
                   camera={camera}
-                  width={136}
-                  height={26}
+                  width={116}
+                  height={20}
                   passThrough
                 >
-                  <View
+                  <Text
+                    variant="caption"
+                    fontWeight="700"
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.15}
                     style={[
-                      styles.zoneLabelPill,
-                      {
-                        backgroundColor: colors.mapLabelBg,
-                        borderColor: `${zColor}80`,
-                      },
+                      styles.zoneFloorLabel,
+                      { color: zColor, opacity: isDark ? 0.85 : 0.78 },
                     ]}
                   >
-                    <View style={[styles.zoneLabelDot, { backgroundColor: zColor }]} />
-                    <Text
-                      variant="caption"
-                      fontWeight="700"
-                      numberOfLines={1}
-                      style={styles.zoneLabelName}
-                    >
-                      {z.name}
-                    </Text>
-                    <Text
-                      variant="caption"
-                      fontWeight="600"
-                      color="textSecondary"
-                      numberOfLines={1}
-                      style={styles.zoneLabelBadge}
-                    >
-                      {z.badge}
-                    </Text>
-                  </View>
+                    {z.name}
+                  </Text>
                 </MapAnchor>
               );
             })}
 
             {layers.stations
               ? visibleEndpoints.map(({ x, y, endpoint: item }) => (
-                  <MapAnchor key={item.id} point={{ x, y }} camera={camera}>
+                  <MapAnchor key={item.id} point={{ x, y }} camera={camera} width={44} height={44}>
                     <MapControl
                       label={`${item.name}, ${item.code}, ${item.endpointType}`}
                       onPress={() => selectEndpoint(item)}
                       selected={endpointId === item.id}
+                      width={44}
+                      height={44}
                       style={styles.station}
                     >
                       <EndpointTile
                         type={item.endpointType}
+                        code={item.code}
+                        name={item.name}
                         headingDeg={mapHeading(item.yaw, map.originYaw, frame.rotated) - 90}
                         selected={endpointId === item.id}
                         isDark={isDark}
@@ -896,21 +917,30 @@ function MapCanvas({
                 ))
               : null}
 
-            {visibleEndpointLabels.map(({ x, y, endpoint: item, displayText, role }) => {
+            {visibleEndpointLabels.map(({ x, y, endpoint: item, displayText, role, placement }) => {
               const roleAccent = role ? JOB_HIGHLIGHT_COLOR[role] : null;
               return (
                 <MapAnchor
                   key={`label-${item.id}`}
                   point={{ x, y }}
                   camera={camera}
-                  width={132}
-                  height={40}
+                  width={126}
+                  height={66}
                   passThrough
                 >
-                  <View style={styles.stationLabelWrap}>
+                  <View
+                    style={
+                      placement === 'above' ? styles.stationLabelAbove : styles.stationLabelBelow
+                    }
+                  >
                     {role ? (
                       <View style={[styles.jobRolePill, { backgroundColor: roleAccent! }]}>
-                        <Text variant="caption" fontWeight="700" style={styles.jobRoleText}>
+                        <Text
+                          variant="caption"
+                          fontWeight="700"
+                          maxFontSizeMultiplier={1.15}
+                          style={styles.jobRoleText}
+                        >
                           {role === 'pickup' ? 'Pickup' : 'Destination'}
                         </Text>
                       </View>
@@ -918,16 +948,14 @@ function MapCanvas({
                     <View
                       style={[
                         styles.stationLabelPill,
-                        {
-                          backgroundColor: colors.mapLabelBg,
-                          borderColor: roleAccent ?? colors.mapHudBorder,
-                        },
+                        roleAccent ? { borderColor: roleAccent } : null,
                       ]}
                     >
                       <Text
                         variant="caption"
                         fontWeight="600"
                         numberOfLines={1}
+                        maxFontSizeMultiplier={1.2}
                         style={styles.stationLabelText}
                       >
                         {displayText}
@@ -1045,8 +1073,6 @@ function MapCanvas({
             {
               bottom: inspectBottom,
               right: compact ? 66 : 74,
-              backgroundColor: colors.mapHudBg,
-              borderColor: colors.mapHudBorder,
             },
           ]}
         >
@@ -1126,34 +1152,25 @@ function MapCanvas({
           { right: compact ? 68 : 74 },
         ]}
       >
-        <View
-          style={[
-            styles.scalePill,
-            { backgroundColor: colors.mapHudBg, borderColor: colors.mapHudBorder },
-          ]}
-        >
+        <View style={styles.scalePill}>
           <View
             style={[
               styles.scaleBar,
               { width: scale.width, borderColor: colors.textSecondary },
             ]}
           />
-          <Text variant="caption" fontWeight="600" color="textPrimary">
+          <Text variant="caption" fontWeight="600" color="textPrimary" maxFontSizeMultiplier={1.2}>
             {scale.meters} m · {camera.settledZoom.toFixed(1)}×
           </Text>
         </View>
 
         {state && (following || state.lastReported) ? (
-          <View
-            style={[
-              styles.telemetryChip,
-              { backgroundColor: colors.mapHudBg, borderColor: colors.mapHudBorder },
-            ]}
-          >
+          <View style={styles.telemetryChip}>
             <Text
               variant="caption"
               color={state.lastReported ? 'warningText' : 'textSecondary'}
               numberOfLines={1}
+              maxFontSizeMultiplier={1.2}
             >
               {`${following ? 'Following · ' : ''}${state.label} · ${sampleAgeLabel(state.ageSeconds)}`}
             </Text>
@@ -1498,7 +1515,13 @@ function MapCanvas({
                                 style={[styles.stationItem, isSelected && styles.stationItemSelected]}
                               >
                                 <View style={styles.stationIconBox}>
-                                  <EndpointIcon type={e.endpointType} size={16} isDark={isDark} />
+                                  <EndpointIcon
+                                    type={e.endpointType}
+                                    code={e.code}
+                                    name={e.name}
+                                    size={16}
+                                    isDark={isDark}
+                                  />
                                 </View>
                                 <Pressable
                                   style={styles.stationInfo}
@@ -1567,7 +1590,13 @@ function MapCanvas({
               <View style={styles.detailContainer}>
                 <View style={styles.detailHeroCard}>
                   <View style={styles.detailHeroIconBox}>
-                    <EndpointIcon type={endpoint.endpointType} size={22} isDark={isDark} />
+                    <EndpointIcon
+                      type={endpoint.endpointType}
+                      code={endpoint.code}
+                      name={endpoint.name}
+                      size={22}
+                      isDark={isDark}
+                    />
                   </View>
                   <View style={styles.detailHeroText}>
                     <Text variant="title">{endpoint.name}</Text>
@@ -1850,41 +1879,38 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       paddingVertical: 1,
       borderRadius: 4,
       borderWidth: 1,
+      backgroundColor: colors.mapLabelBg,
+      borderColor: colors.mapHudBorder,
     },
     shelfText: {
-      fontSize: 10,
-      lineHeight: 13,
+      fontSize: 9.5,
+      lineHeight: 12,
       fontFamily: typography.fontMono,
       color: colors.textSecondary,
     },
-    zoneLabelPill: {
-      alignSelf: 'center',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 7,
-      paddingVertical: 2.5,
-      borderRadius: 999,
-      borderWidth: 1,
-    },
-    zoneLabelDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-    },
-    zoneLabelName: {
-      fontSize: 10.5,
-      lineHeight: 14,
-      color: colors.textPrimary,
-      flexShrink: 1,
-    },
-    zoneLabelBadge: {
-      fontSize: 10,
+    zoneFloorLabel: {
+      fontSize: 9.5,
       lineHeight: 13,
+      letterSpacing: 0.4,
+      textAlign: 'center',
+      textShadowColor: isDark ? 'rgba(10, 12, 16, 0.85)' : 'rgba(248, 250, 252, 0.95)',
+      textShadowOffset: { width: 0, height: 0 },
+      textShadowRadius: 3,
     },
 
-    stationLabelWrap: {
-      marginTop: 42,
+    stationLabelBelow: {
+      position: 'absolute',
+      top: 44,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      gap: 2,
+    },
+    stationLabelAbove: {
+      position: 'absolute',
+      bottom: 44,
+      left: 0,
+      right: 0,
       alignItems: 'center',
       gap: 2,
     },
@@ -1894,19 +1920,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderRadius: 4,
     },
     jobRoleText: {
-      fontSize: 9.5,
-      lineHeight: 12,
+      fontSize: 9,
+      lineHeight: 11,
       color: '#ffffff',
     },
     stationLabelPill: {
-      paddingHorizontal: 6,
-      paddingVertical: 2,
+      paddingHorizontal: 5,
+      paddingVertical: 1.5,
       borderRadius: 5,
       borderWidth: 1,
+      backgroundColor: colors.mapLabelBg,
+      borderColor: colors.mapHudBorder,
     },
     stationLabelText: {
-      fontSize: 10.5,
-      lineHeight: 14,
+      fontSize: 9.5,
+      lineHeight: 12.5,
       color: colors.textPrimary,
       textAlign: 'center',
     },
@@ -1922,6 +1950,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       paddingVertical: 10,
       borderRadius: radii.lg,
       borderWidth: 1,
+      backgroundColor: colors.mapHudBg,
+      borderColor: colors.mapHudBorder,
       ...shadows.md,
     },
     inspectAccent: {
@@ -1970,9 +2000,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       alignItems: 'center',
       gap: 8,
       paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
+      backgroundColor: colors.mapHudBg,
+      borderColor: colors.mapHudBorder,
       ...shadows.sm,
     },
     scaleBar: {
@@ -1983,9 +2015,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     telemetryChip: {
       flexShrink: 1,
       paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
+      backgroundColor: colors.mapHudBg,
+      borderColor: colors.mapHudBorder,
       ...shadows.sm,
     },
 

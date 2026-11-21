@@ -112,7 +112,7 @@ test('mapLabels prioritizes job and landmark endpoints, suppresses overlaps at 1
     { x: 110, y: 105, endpoint: { id: 'ep-in', mapVersionId: 'map-1', code: 'INBOUND-01', name: 'Inbound Dock 01', endpointType: 'WAYPOINT', x: 1.2, y: 1.1, yaw: 0, isEnabled: true } },
     { x: 118, y: 108, endpoint: { id: 'ep-out', mapVersionId: 'map-1', code: 'OUTBOUND-01', name: 'Outbound Gate 01', endpointType: 'WAYPOINT', x: 1.4, y: 1.2, yaw: 0, isEnabled: true } },
     { x: 250, y: 100, endpoint: { id: 'ep-chg', mapVersionId: 'map-1', code: 'CHG-01', name: 'Main Charger Station 01', endpointType: 'CHARGER', x: 5, y: 1, yaw: 0, isEnabled: true } },
-    { x: 268, y: 108, endpoint: { id: 'ep-wp2', mapVersionId: 'map-1', code: 'WP-02', name: 'Waypoint 02', endpointType: 'WAYPOINT', x: 5.2, y: 1.1, yaw: 0, isEnabled: true } },
+    { x: 268, y: 118, endpoint: { id: 'ep-wp2', mapVersionId: 'map-1', code: 'WP-02', name: 'Waypoint 02', endpointType: 'WAYPOINT', x: 5.2, y: 1.1, yaw: 0, isEnabled: true } },
   ];
 
   const labels1x = selectVisibleEndpointLabels(
@@ -139,6 +139,26 @@ test('mapLabels prioritizes job and landmark endpoints, suppresses overlaps at 1
   const labelsZoomed = selectVisibleEndpointLabels(items, 4, 'ep-wp2', { pickupCode: 'INBOUND-01' }, true);
   assert.equal(labelsZoomed.find(l => l.endpoint.id === 'ep-chg').displayText, 'Main Charger Station 01');
   assert.ok(labelsZoomed.some(l => l.endpoint.id === 'ep-wp2'));
+
+  // Obstacle avoidance: robot below charger flips label above; blocked both sides suppresses lower-priority waypoint
+  const chgOnly = [
+    { x: 250, y: 100, endpoint: items[3].endpoint },
+    { x: 350, y: 100, endpoint: items[4].endpoint },
+  ];
+  const withObstacles = selectVisibleEndpointLabels(
+    chgOnly,
+    1,
+    null,
+    undefined,
+    false,
+    [
+      { x: 250, y: 114 }, // blocks below ep-chg -> flips above
+      { x: 350, y: 114 }, // blocks below ep-wp2
+      { x: 350, y: 84 },  // blocks above ep-wp2 -> suppresses ep-wp2
+    ],
+  );
+  assert.equal(withObstacles.find(l => l.endpoint.id === 'ep-chg')?.placement, 'above');
+  assert.equal(withObstacles.some(l => l.endpoint.id === 'ep-wp2'), false);
 
   // Zone visibility & badges
   const map = {
@@ -172,6 +192,12 @@ test('mapLabels prioritizes job and landmark endpoints, suppresses overlaps at 1
   const zLabels1x = visibleZoneLabels(map, frame, 1, null);
   assert.deepEqual([...zLabels1x.map(z => z.id)], ['z-big']);
   assert.equal(zLabels1x[0].badge, '≤ 0.5 m/s');
+
+  // Zone floor label suppresses when a robot/station obstacle overlaps centroid, unless selected
+  const blockedZones = visibleZoneLabels(map, frame, 1, null, [{ x: zLabels1x[0].x, y: zLabels1x[0].y }]);
+  assert.equal(blockedZones.length, 0);
+  const selectedOverObstacle = visibleZoneLabels(map, frame, 1, 'z-big', [{ x: zLabels1x[0].x, y: zLabels1x[0].y }]);
+  assert.equal(selectedOverObstacle.length, 1);
 
   const zLabelsSelected = visibleZoneLabels(map, frame, 1, 'z-tiny');
   assert.equal(zLabelsSelected.length, 2);
@@ -277,18 +303,30 @@ test('interactiveMapEnabled defaults to true on native and web, opting out only 
   assert.equal(disabledLoad('src/shared/maps/mapFeatures.ts').interactiveMapEnabled, false);
 });
 
-test('Vietnamese i18n translates new OTTO map legend and quick-inspect strings', () => {
+test('Vietnamese i18n translates new OTTO map legend and quick-inspect strings without em-dashes', () => {
   const load = createLoader();
+  const { ZONE_DESCRIPTION } = load('src/shared/maps/mapStyle.ts');
   const { setLanguage, t, translateText } = load('src/shared/i18n.ts');
   setLanguage('vi');
+
+  for (const desc of Object.values(ZONE_DESCRIPTION)) {
+    assert.equal(desc.includes('—'), false);
+    assert.equal(desc.includes('–'), false);
+  }
 
   assert.equal(t('Map Legend'), 'Chú giải bản đồ');
   assert.equal(t('Live'), 'Trực tiếp');
   assert.equal(t('No Entry'), 'Cấm vào');
   assert.equal(t('1 AMR'), 'Tối đa 1 xe');
+  assert.equal(t('Inbound Gate'), 'Cổng nhập kho');
+  assert.equal(t('Outbound Gate'), 'Cổng xuất kho');
   assert.equal(t('One-way lane'), 'Làn đường 1 chiều');
   assert.equal(t('Two-way lane'), 'Làn đường 2 chiều');
   assert.equal(t('Live Nav2 Path (Authorized)'), 'Đường đi Nav2 trực tiếp (Đã cấp phép)');
+  assert.equal(
+    t(ZONE_DESCRIPTION.NO_STOP),
+    'Giữ thông thoáng: robot đi qua không dừng lại',
+  );
   assert.equal(
     translateText('Reduced robot speed area · Max 0.5 m/s'),
     'Khu vực robot giảm tốc độ di chuyển · Tối đa 0.5 m/s',
@@ -298,4 +336,26 @@ test('Vietnamese i18n translates new OTTO map legend and quick-inspect strings',
     'Rộng 1.2 m · Tối đa 0.8 m/s',
   );
   assert.equal(translateText('2 m · 1.0×'), '2 m · 1.0×');
+});
+
+test('endpointVisualKind classifies waypoint, inbound, outbound, charger, and park nodes', () => {
+  const load = createLoader({
+    react: { memo: fn => fn },
+    'react-native': { View: 'View' },
+    'react-native-svg': { __esModule: true, default: 'Svg', Path: 'Path' },
+    'lucide-react-native': {
+      ArrowDownToLine: 'ArrowDownToLine',
+      ArrowUpFromLine: 'ArrowUpFromLine',
+      CircleDot: 'CircleDot',
+      CircleParking: 'CircleParking',
+      Zap: 'Zap',
+    },
+  });
+  const { endpointVisualKind } = load('src/shared/maps/EndpointGlyph.tsx');
+
+  assert.equal(endpointVisualKind('WAYPOINT', 'WAIT-01', 'Wait Point'), 'WAYPOINT');
+  assert.equal(endpointVisualKind('WAYPOINT', 'INBOUND-01', 'Receiving'), 'INBOUND');
+  assert.equal(endpointVisualKind('WAYPOINT', 'EP-02', 'Outbound Gate'), 'OUTBOUND');
+  assert.equal(endpointVisualKind('CHARGER', 'CHG-01', 'Charger'), 'CHARGER');
+  assert.equal(endpointVisualKind('PARKING', 'PK-01', 'Parking A'), 'PARK');
 });

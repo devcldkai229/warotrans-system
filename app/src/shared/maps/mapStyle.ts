@@ -34,7 +34,7 @@ export const ZONE_LABEL: Record<string, string> = {
 export const ZONE_DESCRIPTION: Record<string, string> = {
   KEEP_OUT: 'Robots must not enter this area',
   SPEED: 'Reduced robot speed area',
-  NO_STOP: 'Keep clear — robots pass through without stopping',
+  NO_STOP: 'Keep clear: robots pass through without stopping',
   SINGLE_OCCUPANCY: 'Only one robot allowed inside at a time',
   JUNCTION: 'Shared traffic intersection',
 };
@@ -52,7 +52,23 @@ export function laneArrowColor(isDark: boolean): string {
 }
 
 export function laneBandOpacity(isDark: boolean): number {
-  return isDark ? 0.30 : 0.20;
+  return isDark ? 0.22 : 0.13;
+}
+
+export function zoneFillOpacity(type: string, isDark: boolean): number {
+  switch (type) {
+    case 'KEEP_OUT':
+      return isDark ? 0.20 : 0.16;
+    case 'SINGLE_OCCUPANCY':
+      return isDark ? 0.20 : 0.14;
+    case 'JUNCTION':
+      return isDark ? 0.16 : 0.11;
+    case 'SPEED':
+    case 'NO_STOP':
+      return isDark ? 0.18 : 0.12;
+    default:
+      return isDark ? 0.17 : 0.12;
+  }
 }
 
 /** WAYPOINT black, CHARGER green, PARK deep orange. */

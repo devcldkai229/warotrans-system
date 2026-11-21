@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, G, Line, Path, Pattern, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, Path, Pattern, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../api/navigationApi';
 import { ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
@@ -8,17 +8,16 @@ import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { Text } from '../ui';
 import { EndpointTile } from './EndpointGlyph';
 import {
-  ENDPOINT_NAME,
   JOB_HIGHLIGHT_COLOR,
   LANE_BLUE,
   PLAN_COLORS,
   ROBOT_COLOR,
   ZONE_COLOR,
   ZONE_DESCRIPTION,
-  ZONE_FILL_OPACITY,
   ZONE_LABEL,
   laneArrowColor,
   laneBandOpacity,
+  zoneFillOpacity,
 } from './mapStyle';
 
 const ROBOT_LEGEND_ITEMS = [
@@ -28,6 +27,14 @@ const ROBOT_LEGEND_ITEMS = [
   { key: 'PAUSED', label: 'Paused', color: ROBOT_COLOR.PAUSED, stale: false },
   { key: 'ERROR', label: 'Error', color: ROBOT_COLOR.ERROR, stale: false },
   { key: 'LAST_REPORTED', label: 'Last Reported', color: ROBOT_COLOR.OFFLINE, stale: true },
+] as const;
+
+const STATION_LEGEND_ITEMS = [
+  { key: 'WAYPOINT', type: 'WAYPOINT', label: 'Waypoint', code: undefined },
+  { key: 'INBOUND', type: 'WAYPOINT', label: 'Inbound Gate', code: 'INBOUND' },
+  { key: 'OUTBOUND', type: 'WAYPOINT', label: 'Outbound Gate', code: 'OUTBOUND' },
+  { key: 'CHARGER', type: 'CHARGER', label: 'Charger', code: undefined },
+  { key: 'PARK', type: 'PARK', label: 'Park', code: undefined },
 ] as const;
 
 const CORE_ZONE_TYPES = [
@@ -53,37 +60,37 @@ function MiniAmrGlyph({
   const deckStroke = isDark ? '#94a3b8' : '#475569';
 
   return (
-    <Svg width={28} height={28} viewBox="-15 -17 30 34">
-      <Path d="M0 -15.5 L4 -10.5 L-4 -10.5 Z" fill={tone} />
+    <Svg width={26} height={26} viewBox="-14 -16 28 32">
+      <Path d="M0 -14 L3.5 -9.5 L-3.5 -9.5 Z" fill={tone} />
       <Rect
-        x={-7.5}
-        y={-9}
-        width={15}
-        height={19}
-        rx={3.5}
+        x={-6.2}
+        y={-8.5}
+        width={12.4}
+        height={17}
+        rx={3.4}
         fill={chassisFill}
         stroke={stale ? tone : chassisStroke}
-        strokeWidth={1.5}
+        strokeWidth={1.4}
         strokeDasharray={stale ? '3 2' : undefined}
       />
-      <Rect x={-6.2} y={-8.2} width={12.4} height={3.8} rx={1.5} fill={tone} />
+      <Rect x={-5.2} y={-7.7} width={10.4} height={3.2} rx={1.2} fill={tone} />
       <Rect
-        x={-4.2}
+        x={-3.5}
         y={-2.5}
-        width={8.4}
-        height={9}
-        rx={1.5}
+        width={7}
+        height={7.8}
+        rx={1.3}
         fill={deckFill}
         stroke={deckStroke}
-        strokeWidth={0.8}
+        strokeWidth={0.75}
       />
     </Svg>
   );
 }
 
-function MiniZoneSwatch({ type }: { type: string }) {
+function MiniZoneSwatch({ type, isDark }: { type: string; isDark: boolean }) {
   const color = ZONE_COLOR[type] ?? ZONE_COLOR.JUNCTION;
-  const fillOpacity = ZONE_FILL_OPACITY[type] ?? 0.22;
+  const fillOpacity = zoneFillOpacity(type, isDark);
   const isKeepOut = type === 'KEEP_OUT';
   const patternId = `legend-hatch-${type}`;
 
@@ -97,7 +104,15 @@ function MiniZoneSwatch({ type }: { type: string }) {
           patternUnits="userSpaceOnUse"
           patternTransform="rotate(45)"
         >
-          <Line x1={0} y1={0} x2={0} y2={5} stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.65} strokeWidth={1.8} />
+          <Line
+            x1={0}
+            y1={0}
+            x2={0}
+            y2={5}
+            stroke={ZONE_COLOR.KEEP_OUT}
+            strokeOpacity={0.55}
+            strokeWidth={1.6}
+          />
         </Pattern>
       </Defs>
       <Rect
@@ -109,7 +124,8 @@ function MiniZoneSwatch({ type }: { type: string }) {
         fill={color}
         fillOpacity={fillOpacity}
         stroke={color}
-        strokeWidth={1.6}
+        strokeOpacity={0.72}
+        strokeWidth={1.3}
         strokeDasharray={isKeepOut ? undefined : '4 2.5'}
       />
       {isKeepOut ? (
@@ -127,7 +143,7 @@ function MiniLaneSwatch({
   isDark: boolean;
 }) {
   const arrow = laneArrowColor(isDark);
-  const bandOp = Math.min(0.45, laneBandOpacity(isDark) + 0.1);
+  const bandOp = Math.min(0.32, laneBandOpacity(isDark) + 0.08);
   const cyan = PLAN_COLORS[0];
 
   if (kind === 'nav2-granted' || kind === 'nav2-waiting') {
@@ -136,9 +152,26 @@ function MiniLaneSwatch({
       <Svg width={36} height={18} viewBox="0 0 36 18">
         {granted ? (
           <>
-            <Line x1={3} y1={9} x2={27} y2={9} stroke={cyan} strokeOpacity={0.25} strokeWidth={6} strokeLinecap="round" />
-            <Line x1={3} y1={9} x2={27} y2={9} stroke={cyan} strokeWidth={2.5} strokeLinecap="round" />
-            <Circle cx={30} cy={9} r={4} fill={cyan} fillOpacity={0.2} stroke={cyan} strokeWidth={1.5} />
+            <Line
+              x1={3}
+              y1={9}
+              x2={27}
+              y2={9}
+              stroke={cyan}
+              strokeOpacity={0.25}
+              strokeWidth={6}
+              strokeLinecap="round"
+            />
+            <Line x1={3} y1={9} x2={27} y2={9} stroke={cyan} strokeWidth={2.4} strokeLinecap="round" />
+            <Circle
+              cx={30}
+              cy={9}
+              r={4}
+              fill={cyan}
+              fillOpacity={0.2}
+              stroke={cyan}
+              strokeWidth={1.4}
+            />
             <Circle cx={30} cy={9} r={1.5} fill={cyan} />
           </>
         ) : (
@@ -161,16 +194,25 @@ function MiniLaneSwatch({
   return (
     <Svg width={36} height={20} viewBox="0 0 36 20">
       <Rect x={1} y={2} width={34} height={16} rx={3} fill={LANE_BLUE} fillOpacity={bandOp} />
-      <Line x1={1} y1={2} x2={35} y2={2} stroke={LANE_BLUE} strokeOpacity={0.6} strokeWidth={1} />
-      <Line x1={1} y1={18} x2={35} y2={18} stroke={LANE_BLUE} strokeOpacity={0.6} strokeWidth={1} />
+      <Line x1={1} y1={2} x2={35} y2={2} stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={0.9} />
+      <Line x1={1} y1={18} x2={35} y2={18} stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={0.9} />
       {kind === 'one-way' ? (
         <>
-          <Line x1={3} y1={10} x2={33} y2={10} stroke={arrow} strokeOpacity={0.35} strokeWidth={1} />
+          <Line x1={3} y1={10} x2={33} y2={10} stroke={arrow} strokeOpacity={0.3} strokeWidth={0.9} />
           <Path d="M13 8.8 L19 8.8 L19 6 L25 10 L19 14 L19 11.2 L13 11.2 Z" fill={arrow} />
         </>
       ) : (
         <>
-          <Line x1={1} y1={10} x2={35} y2={10} stroke={LANE_BLUE} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="3 2.5" />
+          <Line
+            x1={1}
+            y1={10}
+            x2={35}
+            y2={10}
+            stroke={LANE_BLUE}
+            strokeOpacity={0.58}
+            strokeWidth={0.9}
+            strokeDasharray="3 2.5"
+          />
           <Path d="M12 5 L18 5 L18 3.2 L23 6 L18 8.8 L18 7 L12 7 Z" fill={arrow} />
           <Path d="M24 13 L18 13 L18 11.2 L13 14 L18 16.8 L18 15 L24 15 Z" fill={arrow} />
         </>
@@ -233,11 +275,12 @@ export function MapLegendContent({
           Wedge indicates robot arrival direction.
         </Text>
         <View style={styles.grid}>
-          {(['WAYPOINT', 'CHARGER', 'PARK'] as const).map(type => (
-            <View key={type} style={styles.gridItem}>
+          {STATION_LEGEND_ITEMS.map(item => (
+            <View key={item.key} style={styles.gridItem}>
               <View style={styles.miniTileBox}>
                 <EndpointTile
-                  type={type}
+                  type={item.type}
+                  code={item.code}
                   headingDeg={0}
                   selected={false}
                   isDark={isDark}
@@ -245,13 +288,21 @@ export function MapLegendContent({
                 />
               </View>
               <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-                {ENDPOINT_NAME[type]}
+                {item.label}
               </Text>
             </View>
           ))}
           <View style={styles.gridItem}>
             <View style={styles.miniTileBox}>
-              <View style={[styles.roleRing, { borderColor: JOB_HIGHLIGHT_COLOR.pickup, backgroundColor: `${JOB_HIGHLIGHT_COLOR.pickup}22` }]} />
+              <View
+                style={[
+                  styles.roleRing,
+                  {
+                    borderColor: JOB_HIGHLIGHT_COLOR.pickup,
+                    backgroundColor: `${JOB_HIGHLIGHT_COLOR.pickup}1f`,
+                  },
+                ]}
+              />
             </View>
             <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
               Pickup
@@ -259,7 +310,15 @@ export function MapLegendContent({
           </View>
           <View style={styles.gridItem}>
             <View style={styles.miniTileBox}>
-              <View style={[styles.roleRing, { borderColor: JOB_HIGHLIGHT_COLOR.dropoff, backgroundColor: `${JOB_HIGHLIGHT_COLOR.dropoff}22` }]} />
+              <View
+                style={[
+                  styles.roleRing,
+                  {
+                    borderColor: JOB_HIGHLIGHT_COLOR.dropoff,
+                    backgroundColor: `${JOB_HIGHLIGHT_COLOR.dropoff}1f`,
+                  },
+                ]}
+              />
             </View>
             <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
               Destination
@@ -319,7 +378,7 @@ export function MapLegendContent({
             return (
               <View key={type}>
                 <View style={styles.zoneRow}>
-                  <MiniZoneSwatch type={type} />
+                  <MiniZoneSwatch type={type} isDark={isDark} />
                   <View style={styles.zoneTextCol}>
                     <View style={styles.zoneHeaderRow}>
                       <Text variant="caption" fontWeight="700" color="textPrimary">
@@ -376,17 +435,17 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 8,
     },
     miniTileBox: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-      transform: [{ scale: 0.78 }],
-    },
-    roleRing: {
       width: 28,
       height: 28,
-      borderRadius: 14,
-      borderWidth: 2.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      transform: [{ scale: 0.85 }],
+    },
+    roleRing: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 2,
     },
     flexText: { flex: 1 },
     listCard: {

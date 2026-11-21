@@ -103,7 +103,7 @@ export const lightColors = {
   mapWall: '#2c3442',
   mapShelfStroke: '#1e293b',
   mapHudBg: 'rgba(255, 255, 255, 0.94)',
-  mapHudBorder: 'rgba(15, 23, 42, 0.12)',
+  mapHudBorder: 'rgba(33, 34, 38, 0.10)',
   mapLabelBg: 'rgba(255, 255, 255, 0.92)',
 
   /* ---------------------------------------------------------------- */
