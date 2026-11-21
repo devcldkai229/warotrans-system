@@ -42,6 +42,11 @@ public static class JobActionPolicy
             ? "job_pause_owner_required"
             : null;
 
+    internal static string? PauseRobotScopeReason(RobotScope? scope, Guid? robotId) =>
+        scope is { AllRobots: false } && (robotId is not { } assigned || !scope.Allows(assigned))
+            ? "robot_out_of_scope"
+            : null;
+
     public static IReadOnlyList<ActionAvailability> Evaluate(
         JobStatus status,
         Func<string, bool> can,

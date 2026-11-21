@@ -113,19 +113,19 @@ public sealed class TransportRequest
 
     /// <summary>
     /// TRN-01 / WH-04: applies what cancelling did to each container. Containers whose Job has cargo on a robot wait
-    /// in CANCEL_PENDING_RECOVERY (nothing is treated as returned); every other open Detail is CANCELLED. The request
-    /// is CANCELLING until the last Detail is terminal, then aggregates (CANCELLED, or PARTIALLY_COMPLETED when some
-    /// containers had already been delivered).
+    /// in CANCEL_PENDING_RECOVERY. A confirmed dropoff stays reserved until its posting is queued. Other open Details
+    /// are CANCELLED. The request is CANCELLING until the last Detail is terminal, then aggregates.
     /// </summary>
-    public void ApplyCancel(Guid? actor, string reason, IReadOnlySet<Guid> containersInRecovery, DateTimeOffset now)
+    public void ApplyCancel(Guid? actor, string reason, IReadOnlySet<Guid> containersInRecovery, DateTimeOffset now,
+        IReadOnlySet<Guid>? confirmedDropoffs = null)
     {
         CancelledBy = actor;
         CancelReason = reason;
         CancelRequestedAt = now;
         foreach (var detail in Details.Where(d => !IsTerminal(d.Status)))
         {
-            var next = containersInRecovery.Contains(detail.ContainerId)
-                ? TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
+            var next = confirmedDropoffs?.Contains(detail.ContainerId) == true ? TransportRequestDetailStatus.IN_PROGRESS
+                : containersInRecovery.Contains(detail.ContainerId) ? TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
                 : TransportRequestDetailStatus.CANCELLED;
             if (detail.Status != next)
             {

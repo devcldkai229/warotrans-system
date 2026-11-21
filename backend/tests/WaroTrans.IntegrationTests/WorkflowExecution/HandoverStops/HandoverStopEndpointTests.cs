@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Entities;
@@ -16,6 +17,10 @@ using WaroTrans.IntegrationTests.Infrastructure;
 using WaroTrans.Navigation.Entities;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Transportation.Entities;
+using WaroTrans.Transportation.Enums;
+using WaroTrans.Transportation.Persistence;
+using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Persistence;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
@@ -124,81 +129,10 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         var client = CreateAnonymousClient();
         var ownerToken = (await client.LoginAsync(owner.Username)).AccessToken;
         var peerToken = (await client.LoginAsync(peer.Username)).AccessToken;
-        var (job, stop, move, firstStep, moveId) = await SeedAsync(owner.Id);
-
+        var (job, stop, firstStep, moveId, robot, firstId, secondId, endpoint) = await ReadyPickupAsync(owner.Id, robotButton);
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
-        var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
         var settings = scope.ServiceProvider.GetRequiredService<IOptions<HumanTaskOptions>>().Value;
-        var fleet = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
-        var robot = Robot.Register(Guid.NewGuid(), job.MapVersionId, "RBT-HANDOVER", "Handover robot", DateTimeOffset.UtcNow);
-        if (robotButton)
-        {
-            robot.Status = RobotStatus.AVAILABLE;
-            robot.IsOnline = true;
-            robot.LastHeartbeatAt = DateTimeOffset.UtcNow.AddHours(1);
-            robot.Capabilities = RobotHandoverStop.Capability;
-            fleet.Add(robot);
-            await fleet.SaveChangesAsync();
-            var trackedJob = (await db.Jobs.FindAsync(job.Id))!;
-            trackedJob.ContextValues = new() { [JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(robot.Id) };
-        }
-        var firstTask = (await db.JobTasks.FindAsync(firstStep.JobTaskId))!;
-        var firstId = firstTask.ContextValues["containerId"].GetGuid();
-        var secondId = Guid.NewGuid();
-        var endpoint = move.TargetEndpointId!.Value;
-        firstTask.ContextValues = new(firstTask.ContextValues) { ["source.endpointId"] = JsonSerializer.SerializeToElement(endpoint) };
-        var secondTask = new JobTask
-        {
-            Id = Guid.NewGuid(), JobId = job.Id, WorkflowTaskId = firstTask.WorkflowTaskId, SequenceNo = 3,
-            Status = JobTaskStatus.PENDING,
-            ContextValues = new(firstTask.ContextValues) { ["containerId"] = JsonSerializer.SerializeToElement(secondId) }
-        };
-        db.Add(secondTask);
-        db.Add(new JobStep
-        {
-            Id = Guid.NewGuid(), JobTaskId = secondTask.Id, WorkflowStepId = firstStep.WorkflowStepId, SequenceNo = 1,
-            StepType = StepType.HUMAN_INTERACTION, Status = JobStepStatus.PENDING
-        });
-
-        var now = DateTimeOffset.UtcNow;
-        var storedMove = (await db.JobSteps.FindAsync(move.Id))!;
-        storedMove.Status = JobStepStatus.COMPLETED;
-        storedMove.AcceptedMoveCommandId = moveId;
-        storedMove.MoveAcceptedAt = now.AddSeconds(-20);
-        storedMove.CompletedAt = now;
-        var storedStep = (await db.JobSteps.FindAsync(firstStep.Id))!;
-        storedStep.Status = JobStepStatus.WAITING;
-        storedStep.StartedAt = now;
-        storedStep.ResolvedInputs = new()
-        {
-            ["containerId"] = JsonSerializer.SerializeToElement(firstId),
-            ["endpointId"] = JsonSerializer.SerializeToElement(endpoint)
-        };
-        var definition = (await db.WorkflowSteps.FindAsync(firstStep.WorkflowStepId))!;
-        definition.InputBindings = new()
-        {
-            ["robotId"] = new() { SourceType = BindingSourceType.CONSTANT, ConstantValue = JsonSerializer.SerializeToElement(robot.Id) },
-            ["containerId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "containerId" },
-            ["endpointId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "source.endpointId" }
-        };
-        var sequence = 0;
-        foreach (var id in new[] { firstId, secondId })
-        {
-            db.JobContainers.Add(new JobContainer
-            {
-                Id = Guid.NewGuid(), ContainerId = id, TransportRequestId = Guid.NewGuid(), JobId = job.Id,
-                SequenceNo = ++sequence, Status = JobContainerStatus.ASSIGNED, CreatedAt = now, UpdatedAt = now
-            });
-        }
-        await db.SaveChangesAsync();
-
-        var category = new ProductCategory { Id = Guid.NewGuid(), Code = "HANDOVER", Name = "Handover" };
-        var product = new Product { Id = Guid.NewGuid(), CategoryId = category.Id, Sku = "HANDOVER", Name = "Handover", IsActive = true };
-        warehouse.AddRange(category, product,
-            new WarehouseContainer { Id = firstId, ProductId = product.Id, Barcode = "HANDOVER-1", CreatedBy = owner.Id },
-            new WarehouseContainer { Id = secondId, ProductId = product.Id, Barcode = "HANDOVER-2", CreatedBy = owner.Id });
-        await warehouse.SaveChangesAsync();
 
         var path = $"/api/workflow-execution/jobs/{job.Id}/handover-stops/{stop.Id}";
         using var legacyBeforeClaim = await client.SendWithTokenAsync(HttpMethod.Post,
@@ -387,6 +321,232 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         {
             settings.StopWorkZonePrioritySeconds = oldPriority;
         }
+    }
+
+    [Fact]
+    public async Task Confirmed_handover_recovers_all_stock_postings_after_a_downstream_failure()
+    {
+        var staff = await Factory.CreateAccountAsync("handover-retry", AccountRole.STAFF);
+        using var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync(staff.Username)).AccessToken;
+        var requestId = Guid.NewGuid();
+        var (job, stop, _, moveId, _, firstId, secondId, _) = await ReadyPickupAsync(staff.Id, transportRequestId: requestId);
+        var path = $"/api/workflow-execution/jobs/{job.Id}/handover-stops/{stop.Id}";
+        var confirmation = await BeginPickupAsync(client, path, token, moveId, firstId, secondId);
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var transportation = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+        var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+
+        // Fail the consumer's insert for one box, even if the background worker beats the request to it.
+        var rejectSecond = FormattableString.Invariant($"""
+            ALTER TABLE transportation.stock_postings ADD CONSTRAINT test_reject_handover
+                CHECK (container_id <> '{secondId:D}'::uuid)
+            """);
+        await transportation.Database.ExecuteSqlRawAsync(rejectSecond);
+        try
+        {
+            using var result = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", token, confirmation);
+            var detail = await ReadAsync(result);
+            Assert.All(detail.GetProperty("containers").EnumerateArray(), container => Assert.Equal("ONBOARD", container.GetProperty("status").GetString()));
+            await WaitUntilAsync(() => transportation.StockPostings.AnyAsync(posting => posting.ContainerId == firstId && posting.PostedAt != null));
+            using var replay = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", token, confirmation);
+            Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+
+            using var request = await client.GetWithTokenAsync($"/api/transportation/transport-requests/{requestId}", token);
+            var tr = await ReadAsync(request);
+            var pending = tr.GetProperty("details").EnumerateArray().Single(box => box.GetProperty("containerId").GetGuid() == secondId);
+            Assert.Contains(pending.GetProperty("warehouseSync").GetProperty("pickup").GetProperty("status").GetString(), new[] { "PENDING", "RETRYING" });
+            Assert.False(await transportation.StockPostings.AnyAsync(posting => posting.ContainerId == secondId));
+        }
+        finally
+        {
+            await transportation.Database.ExecuteSqlRawAsync("ALTER TABLE transportation.stock_postings DROP CONSTRAINT test_reject_handover");
+        }
+
+        // An independent worker completes it without another confirmation or a second movement.
+        await WaitUntilAsync(async () => await transportation.StockPostings.CountAsync(posting =>
+            posting.TransportRequestId == requestId && posting.PostedAt != null) == 2);
+        var pickedUp = await warehouse.ContainerMovements.AsNoTracking()
+            .Where(movement => movement.JobId == job.Id && movement.Type == ContainerMovementType.PICKED_UP)
+            .Select(movement => movement.ContainerId).ToListAsync();
+        Assert.Equal(new[] { firstId, secondId }.Order(), pickedUp.Order());
+    }
+
+    [Fact]
+    public async Task A_cancel_waiting_for_confirmation_sees_the_new_cargo_before_it_decides()
+    {
+        var staff = await Factory.CreateAccountAsync("handover-cancel", AccountRole.STAFF);
+        using var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync(staff.Username)).AccessToken;
+        var requestId = Guid.NewGuid();
+        var (job, stop, _, moveId, _, firstId, secondId, _) = await ReadyPickupAsync(staff.Id, transportRequestId: requestId);
+        var path = $"/api/workflow-execution/jobs/{job.Id}/handover-stops/{stop.Id}";
+        var confirmation = await BeginPickupAsync(client, path, token, moveId, firstId, secondId);
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        await using var blocker = await execution.Database.BeginTransactionAsync();
+        await execution.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM execution.jobs WHERE id = {job.Id} FOR UPDATE");
+        await using var observer = new NpgsqlConnection(PostgreSql.ConnectionString);
+        await observer.OpenAsync();
+
+        var confirm = client.SendWithTokenAsync(HttpMethod.Post, $"{path}/confirm", token, confirmation);
+        await WaitUntilAsync(async () => await WaitingJobLocksAsync(observer) == 1);
+        var cancel = client.SendWithTokenAsync(HttpMethod.Post, $"/api/transportation/transport-requests/{requestId}/cancel", token,
+            new { reason = "Customer cancelled during pickup" });
+        await WaitUntilAsync(async () => await WaitingJobLocksAsync(observer) == 2);
+        await blocker.CommitAsync();
+
+        using var confirmed = await confirm;
+        await ReadAsync(confirmed);
+        using var cancelled = await cancel;
+        var tr = await ReadAsync(cancelled);
+        Assert.Equal("CANCELLING", tr.GetProperty("status").GetString());
+        Assert.All(tr.GetProperty("details").EnumerateArray(), box =>
+            Assert.Equal("CANCEL_PENDING_RECOVERY", box.GetProperty("status").GetString()));
+        Assert.Equal(JobStatus.PAUSED, await execution.Jobs.Where(item => item.Id == job.Id).Select(item => item.Status).SingleAsync());
+        Assert.Equal(2, await execution.JobContainers.CountAsync(box => box.JobId == job.Id && box.Status == JobContainerStatus.ONBOARD));
+    }
+
+    private static async Task<long> WaitingJobLocksAsync(NpgsqlConnection observer)
+    {
+        await using var command = observer.CreateCommand();
+        command.CommandText = """
+            SELECT count(*) FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'
+                AND query LIKE 'SELECT id FROM execution.jobs WHERE%FOR UPDATE'
+            """;
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (!await condition())
+            await Task.Delay(50, timeout.Token);
+    }
+
+    private static async Task<object> BeginPickupAsync(HttpClient client, string path, string token, Guid moveId, Guid firstId, Guid secondId)
+    {
+        using var claim = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/claim", token, new { moveId, version = 0 });
+        var version = (await ReadAsync(claim)).GetProperty("version").GetInt32();
+        using var begun = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/begin", token, new { moveId, version });
+        version = (await ReadAsync(begun)).GetProperty("version").GetInt32();
+        var scans = new[] { new { containerId = firstId, barcode = "HANDOVER-1" }, new { containerId = secondId, barcode = "HANDOVER-2" } };
+        return new { moveId, version, scans };
+    }
+
+    private async Task<(Job Job, JobTask Stop, JobStep FirstStep, Guid MoveId, Robot Robot, Guid FirstId, Guid SecondId, Guid Endpoint)>
+        ReadyPickupAsync(Guid actor, bool robotButton = false, Guid? transportRequestId = null)
+    {
+        var (job, stop, move, firstStep, moveId) = await SeedAsync(actor);
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        var fleet = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+        var robot = Robot.Register(Guid.NewGuid(), job.MapVersionId, "RBT-HANDOVER", "Handover robot", DateTimeOffset.UtcNow);
+        if (robotButton)
+        {
+            robot.Status = RobotStatus.AVAILABLE;
+            robot.IsOnline = true;
+            robot.LastHeartbeatAt = DateTimeOffset.UtcNow.AddHours(1);
+            robot.Capabilities = RobotHandoverStop.Capability;
+            fleet.Add(robot);
+            await fleet.SaveChangesAsync();
+            var trackedJob = (await db.Jobs.FindAsync(job.Id))!;
+            trackedJob.ContextValues = new() { [JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(robot.Id) };
+        }
+        var firstTask = (await db.JobTasks.FindAsync(firstStep.JobTaskId))!;
+        var firstId = firstTask.ContextValues["containerId"].GetGuid();
+        var secondId = Guid.NewGuid();
+        var endpoint = move.TargetEndpointId!.Value;
+        firstTask.ContextValues = new(firstTask.ContextValues) { ["source.endpointId"] = JsonSerializer.SerializeToElement(endpoint) };
+        var secondTask = new JobTask
+        {
+            Id = Guid.NewGuid(), JobId = job.Id, WorkflowTaskId = firstTask.WorkflowTaskId, SequenceNo = 3,
+            Status = JobTaskStatus.PENDING,
+            ContextValues = new(firstTask.ContextValues) { ["containerId"] = JsonSerializer.SerializeToElement(secondId) }
+        };
+        db.Add(secondTask);
+        db.Add(new JobStep
+        {
+            Id = Guid.NewGuid(), JobTaskId = secondTask.Id, WorkflowStepId = firstStep.WorkflowStepId, SequenceNo = 1,
+            StepType = StepType.HUMAN_INTERACTION, Status = JobStepStatus.PENDING
+        });
+
+        var now = DateTimeOffset.UtcNow;
+        var storedMove = (await db.JobSteps.FindAsync(move.Id))!;
+        storedMove.Status = JobStepStatus.COMPLETED;
+        storedMove.AcceptedMoveCommandId = moveId;
+        storedMove.MoveAcceptedAt = now.AddSeconds(-20);
+        storedMove.CompletedAt = now;
+        var storedStep = (await db.JobSteps.FindAsync(firstStep.Id))!;
+        storedStep.Status = JobStepStatus.WAITING;
+        storedStep.StartedAt = now;
+        storedStep.ResolvedInputs = new()
+        {
+            ["containerId"] = JsonSerializer.SerializeToElement(firstId),
+            ["endpointId"] = JsonSerializer.SerializeToElement(endpoint)
+        };
+        var definition = (await db.WorkflowSteps.FindAsync(firstStep.WorkflowStepId))!;
+        definition.InputBindings = new()
+        {
+            ["robotId"] = new() { SourceType = BindingSourceType.CONSTANT, ConstantValue = JsonSerializer.SerializeToElement(robot.Id) },
+            ["containerId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "containerId" },
+            ["endpointId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "source.endpointId" }
+        };
+        var sequence = 0;
+        foreach (var id in new[] { firstId, secondId })
+        {
+            db.JobContainers.Add(new JobContainer
+            {
+                Id = Guid.NewGuid(), ContainerId = id, TransportRequestId = transportRequestId ?? Guid.NewGuid(), JobId = job.Id,
+                SequenceNo = ++sequence, Status = JobContainerStatus.ASSIGNED, CreatedAt = now, UpdatedAt = now
+            });
+        }
+        if (transportRequestId.HasValue)
+        {
+            // Leave work after pickup so the Job remains active and can be paused with cargo on board.
+            var next = new JobTask
+            {
+                Id = Guid.NewGuid(), JobId = job.Id, WorkflowTaskId = firstTask.WorkflowTaskId,
+                SequenceNo = 4, Status = JobTaskStatus.RUNNING
+            };
+            db.Add(next);
+            db.Add(new JobStep
+            {
+                Id = Guid.NewGuid(), JobTaskId = next.Id, WorkflowStepId = move.WorkflowStepId, SequenceNo = 1,
+                StepType = StepType.MOVE, Status = JobStepStatus.WAITING
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var category = new ProductCategory { Id = Guid.NewGuid(), Code = "HANDOVER", Name = "Handover" };
+        var product = new Product { Id = Guid.NewGuid(), CategoryId = category.Id, Sku = "HANDOVER", Name = "Handover", IsActive = true };
+        warehouse.AddRange(category, product,
+            new WarehouseContainer { Id = firstId, ProductId = product.Id, Barcode = "HANDOVER-1", CreatedBy = actor },
+            new WarehouseContainer { Id = secondId, ProductId = product.Id, Barcode = "HANDOVER-2", CreatedBy = actor });
+        await warehouse.SaveChangesAsync();
+
+        if (transportRequestId is { } requestId)
+        {
+            var transportation = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+            var warehouseId = await warehouse.Warehouses.Select(item => item.Id).SingleAsync();
+            transportation.TransportRequests.Add(new TransportRequest
+            {
+                Id = requestId, RequestCode = "TR-HANDOVER", WarehouseId = warehouseId, MapVersionId = job.MapVersionId,
+                WorkflowId = job.WorkflowId, RequestedBy = actor, Status = TransportRequestStatus.IN_PROGRESS,
+                PlanSchemaVersion = TransportRequest.CurrentPlanSchemaVersion, CreatedAt = now, UpdatedAt = now,
+                Details = new[] { firstId, secondId }.Select((id, index) => new TransportRequestDetail
+                {
+                    Id = Guid.NewGuid(), TransportRequestId = requestId, ContainerId = id, SequenceNo = index + 1,
+                    Status = TransportRequestDetailStatus.IN_PROGRESS, SourceEndpointId = endpoint,
+                    DestinationEndpointId = endpoint, CreatedAt = now, UpdatedAt = now
+                }).ToList()
+            });
+            await transportation.SaveChangesAsync();
+        }
+        return (job, stop, firstStep, moveId, robot, firstId, secondId, endpoint);
     }
 
     private static async Task<JsonElement> ReadAsync(HttpResponseMessage response)

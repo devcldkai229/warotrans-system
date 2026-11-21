@@ -16,7 +16,7 @@ public static class MqttTestPublisher
         var factory = new MqttClientFactory();
         using var client = factory.CreateMqttClient();
         var options = new MqttClientOptionsBuilder()
-            .WithTcpServer("localhost", 1883)
+            .WithTcpServer(TestConnectionStrings.MqttHost, TestConnectionStrings.MqttPort)
             .WithClientId($"warotrans-it-pub-{Guid.NewGuid():N}")
             .WithCleanSession()
             .Build();

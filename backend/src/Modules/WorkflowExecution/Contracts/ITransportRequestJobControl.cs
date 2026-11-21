@@ -18,9 +18,15 @@ public sealed record ContainerCancelOutcome(Guid ContainerId, Guid JobId, string
     /// <summary>Its Job has cargo on the robot: the Job is paused for recovery, nothing is treated as returned.</summary>
     public const string RecoveryRequired = "RECOVERY_REQUIRED";
 
-    /// <summary>Already delivered (or failed) before the cancel: left as it is.</summary>
+    /// <summary>Already failed before the cancel: left as it is.</summary>
     public const string AlreadyFinished = "ALREADY_FINISHED";
+
+    /// <summary>The dropoff was confirmed, even when its stock posting is still pending.</summary>
+    public const string AlreadyDelivered = "ALREADY_DELIVERED";
 }
+
+public sealed record PendingStockHandover(
+    Guid JobId, Guid ContainerId, bool IsPickup, DateTimeOffset ConfirmedAt, DateTimeOffset? NextAttemptAt);
 
 /// <summary>
 /// Lets Transportation fan a request-level cancel / reject out to the Jobs that carry it (TRN-01 / TRN-02) without
@@ -32,6 +38,10 @@ public interface ITransportRequestJobControl
     Task<IReadOnlyDictionary<Guid, IReadOnlyList<RequestJobState>>> GetJobsAsync(
         IReadOnlyCollection<Guid> transportRequestIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Confirmed handovers still awaiting Transportation's durable stock queue.</summary>
+    Task<IReadOnlyList<PendingStockHandover>> GetPendingStockHandoversAsync(
+        Guid transportRequestId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cancels every unfinished Job of the request. A Job with containers ONBOARD is not cancelled: its robot is

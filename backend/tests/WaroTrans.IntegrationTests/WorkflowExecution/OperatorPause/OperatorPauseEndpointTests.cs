@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.Fleet.Entities;
+using WaroTrans.Fleet.Persistence;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
@@ -9,6 +12,7 @@ using WaroTrans.Navigation.Entities;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Persistence;
 using WaroTrans.Warehouse.Persistence;
+using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -87,6 +91,54 @@ public sealed class OperatorPauseEndpointTests(WaroTransWebApplicationFactory fa
         using var adminResume = await client.SendWithTokenAsync(HttpMethod.Post, $"{job}/resume", adminToken, new { });
         Assert.Equal("robot_required", await ownerResume.ReadErrorCodeAsync());
         Assert.Equal("robot_required", await adminResume.ReadErrorCodeAsync());
+    }
+
+    [Fact]
+    public async Task Technician_can_pause_only_the_job_of_a_robot_in_their_scope()
+    {
+        var technician = await Factory.CreateAccountAsync("pause-tech", AccountRole.TECHNICIAN);
+        await Factory.CreateAccountAsync("pause-scope-admin", AccountRole.ADMIN);
+        using var client = CreateAnonymousClient();
+        var techToken = (await client.LoginAsync("pause-tech")).AccessToken;
+        var adminToken = (await client.LoginAsync("pause-scope-admin")).AccessToken;
+        var (jobId, _) = await SeedJobsAsync();
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var jobs = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        var fleet = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+        var job = await jobs.Jobs.SingleAsync(item => item.Id == jobId);
+        var now = DateTimeOffset.UtcNow;
+        var assigned = Robot.Register(Guid.NewGuid(), job.MapVersionId, "RBT-PAUSE-ASSIGNED", "Assigned robot", now);
+        var other = Robot.Register(Guid.NewGuid(), job.MapVersionId, "RBT-PAUSE-OTHER", "Other robot", now);
+        assigned.IsOnline = true;
+        assigned.LastHeartbeatAt = now.AddMinutes(1);
+        fleet.Robots.AddRange(assigned, other);
+        await fleet.SaveChangesAsync();
+        job.ContextValues = new() { [JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(assigned.Id) };
+        await jobs.SaveChangesAsync();
+        var jobPath = $"/api/workflow-execution/jobs/{jobId}";
+        var scopePath = $"/api/identity/accounts/{technician.Id}/robot-scope";
+        var pause = new { reason = "Aisle blocked" };
+        var mqtt = scope.ServiceProvider.GetRequiredService<CapturingMqttRobotCommandPublisher>();
+
+        using var firstScope = await client.SendWithTokenAsync(HttpMethod.Put, scopePath, adminToken, new { robotIds = new[] { other.Id } });
+        firstScope.EnsureSuccessStatusCode();
+        using var detail = await client.GetWithTokenAsync(jobPath, techToken);
+        detail.EnsureSuccessStatusCode();
+        var pauseAction = (await detail.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("availableActions").EnumerateArray()
+            .Single(action => action.GetProperty("action").GetString() == "PAUSE");
+        Assert.False(pauseAction.GetProperty("allowed").GetBoolean());
+        Assert.Equal("robot_out_of_scope", pauseAction.GetProperty("reason").GetString());
+
+        using var refused = await client.SendWithTokenAsync(HttpMethod.Post, $"{jobPath}/pause", techToken, pause);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("robot_out_of_scope", await refused.ReadErrorCodeAsync());
+        Assert.DoesNotContain(mqtt.Published, message => message.RobotCode == assigned.Code);
+
+        using var secondScope = await client.SendWithTokenAsync(HttpMethod.Put, scopePath, adminToken, new { robotIds = new[] { assigned.Id } });
+        secondScope.EnsureSuccessStatusCode();
+        using var paused = await client.SendWithTokenAsync(HttpMethod.Post, $"{jobPath}/pause", techToken, pause);
+        Assert.Equal(HttpStatusCode.OK, paused.StatusCode);
+        Assert.Contains(mqtt.Published, message => message.RobotCode == assigned.Code && message.Type == "STOP");
     }
 
     private static JsonElement ResumeAction(JsonElement detail) => detail.GetProperty("availableActions").EnumerateArray()

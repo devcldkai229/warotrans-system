@@ -16,9 +16,8 @@ public sealed class ContainerTransportLookup(TransportationDbContext db) : ICont
             return new HashSet<Guid>();
         }
 
-        var busy = await TransportReservations.ActiveDetails(db)
-            .Where(d => containerIds.Contains(d.ContainerId))
-            .Select(d => d.ContainerId)
+        var busy = await TransportReservations.UnavailableContainers(db)
+            .Where(containerId => containerIds.Contains(containerId))
             .Distinct()
             .ToListAsync(cancellationToken);
         return busy.ToHashSet();

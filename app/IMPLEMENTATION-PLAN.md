@@ -108,8 +108,8 @@ Task: APP-CAP-03, APP-CAP-02; phối hợp BE Warehouse/Transportation/Identity.
 - [ ] Chốt/cung cấp cấp mã và phiếu nháp; barcode đã cấp được giữ để in/dán trước demo, không đoán dãy mã sắp sinh hoặc reset DB để khớp tem.
 - [ ] Resolve Product qua endpoint thật; bỏ Product cũ khi scan mới/unknown, hiển thị loading/not-found/duplicate/inactive. Quick-create là form chủ động, không tự tạo từ mã lạ.
 - [ ] Dùng Stock Vouchers làm trang danh sách/chi tiết phiếu nhập-xuất và luồng tạo phiếu; giữ shell và subsection UI đang dùng.
-- [ ] Nhập lô N kiện, barcode riêng từng kiện, Product/số lượng mô tả, default Inbound từ BE; khôi phục draft sau gián đoạn và giữ kết quả cấp mã đã xác nhận.
-- [ ] Xác nhận phiếu nhập mới tăng tồn. Tạo TR Putaway sau đó; không cộng lại ở dropoff.
+- [ ] Nhập lô N kiện với barcode riêng, Product và số lượng trong từng kiện. Vị trí và endpoint ở trạng thái `None` cho tới khi vận hành. Khôi phục nháp sau gián đoạn và giữ kết quả cấp mã đã xác nhận.
+- [ ] Xác nhận phiếu nhập tăng tồn tổng ở nhóm chưa có vị trí. Tạo TR Putaway với cổng Inbound được chọn. Khi giao kiện, hệ thống ghi nhận tồn tại kệ và giữ nguyên tổng tồn của kho.
 - [ ] TR Outbound chọn Product + số Container theo FIFO, đóng băng lựa chọn thực tế và chống phân bổ trùng. FIFO theo mốc nhập được BE định nghĩa, không theo lúc cấp tem trước demo.
 - [ ] Phiếu xuất chọn/quét các kiện đang ở Outbound, có thể từ nhiều TR. Validate lại lúc confirm và trừ tồn đúng một lần.
 - [ ] Sửa retry/reconcile Warehouse sau delivery; đảm bảo vị trí/custody và tổng tồn nhất quán qua pickup, dropoff, lỗi và retry.

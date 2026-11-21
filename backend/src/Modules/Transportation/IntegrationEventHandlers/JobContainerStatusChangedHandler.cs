@@ -25,6 +25,7 @@ public sealed class JobContainerStatusChangedHandler(
 {
     public async Task HandleAsync(JobContainerStatusChanged integrationEvent, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await TransportRequestWriteLock.AcquireAsync(db, integrationEvent.TransportRequestId, cancellationToken);
         var request = await db.TransportRequests
             .Include(r => r.Details)
             .FirstOrDefaultAsync(r => r.Id == integrationEvent.TransportRequestId, cancellationToken);
@@ -49,12 +50,13 @@ public sealed class JobContainerStatusChangedHandler(
         var now = DateTimeOffset.UtcNow;
 
         // Before the early returns: ASSIGNED and ONBOARD both map to IN_PROGRESS, but only ONBOARD moves stock.
-        var posting = await QueuePostingAsync(integrationEvent, detail, now, cancellationToken);
+        var posting = await QueuePostingAsync(integrationEvent, detail, cancellationToken);
 
         // WH-04: a container waiting for recovery after a cancel only leaves that state when its Job ends it
         // (delivered, failed or cancelled), never by being picked up again.
         var detailChanges = mapped is not null
             && detail.Status != mapped
+            && !TransportRequest.IsTerminal(detail.Status)
             && !(detail.Status == TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY && mapped == TransportRequestDetailStatus.IN_PROGRESS);
 
         if (detailChanges)
@@ -69,6 +71,8 @@ public sealed class JobContainerStatusChangedHandler(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
 
         if (posting is not null)
         {
@@ -94,7 +98,6 @@ public sealed class JobContainerStatusChangedHandler(
     private async Task<StockPosting?> QueuePostingAsync(
         JobContainerStatusChanged integrationEvent,
         TransportRequestDetail detail,
-        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         StockPostingType? type = integrationEvent.Status switch
@@ -124,7 +127,7 @@ public sealed class JobContainerStatusChangedHandler(
             TransportRequestId = detail.TransportRequestId,
             DestinationStorageLocationId = detail.DestinationStorageLocationId,
             DestinationLevelNo = detail.DestinationLevelNo,
-            CreatedAt = now
+            CreatedAt = integrationEvent.OccurredAt
         };
         db.StockPostings.Add(posting);
         return posting;

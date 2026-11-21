@@ -1923,6 +1923,14 @@ public sealed class JobExecutionEngineTests
             var needsScan = await Assert.ThrowsAsync<DomainValidationException>(
                 () => engine.ArmRecoveryTransferAsync(jobId, version, second, scans[..1], default));
             Assert.Equal("handover_scan_manifest_mismatch", needsScan.Code);
+            _fleet.RefuseRecoveryArm = true;
+            var refused = await Assert.ThrowsAsync<ConflictException>(
+                () => engine.ArmRecoveryTransferAsync(jobId, version, second, scans, default));
+            Assert.Equal("recovery_button_unavailable", refused.Code);
+            var afterFailure = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(item => item.Id == recovery.Id);
+            Assert.Null(afterFailure.ButtonArmId);
+            Assert.Equal(version.Version, afterFailure.Version);
+            _fleet.RefuseRecoveryArm = false;
             await engine.ArmRecoveryTransferAsync(jobId, version, second, scans, default);
             await engine.ArmRecoveryTransferAsync(jobId, version, second, scans, default);
 
@@ -2518,10 +2526,12 @@ public sealed class JobExecutionEngineTests
         public Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RobotSnapshot>>(Robots.Values.Where(r => r.CurrentMapVersionId == mapVersionId).ToList());
 
+        public bool RefuseRecoveryArm { get; set; }
+
         public Task<bool> ArmRecoveryButtonAsync(
             Guid robotId, Guid jobId, Guid moveStepId, Guid containerId, Guid endpointId,
             Guid requestId, RobotRecoveryTransfer recoveryTransfer, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Robots[robotId].Capabilities?.Contains(RobotRecoveryTransfer.Capability) == true);
+            Task.FromResult(!RefuseRecoveryArm && Robots[robotId].Capabilities?.Contains(RobotRecoveryTransfer.Capability) == true);
 
         /// <summary>Like Fleet: a busy or offline robot is not eligible.</summary>
         public Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>
