@@ -192,3 +192,108 @@ export function footage(spans: PlaybackSpan[], from: number, to: number): [numbe
     .map((s) => [fraction(Date.parse(s.utcStart), from, to), fraction(Date.parse(s.utcEnd), from, to)] as [number, number])
     .filter(([a, b]) => b > a)
 }
+
+/** What the core said about a step (job.step-status-changed payload). Older journals carry only the key. */
+interface StepPayload {
+  jobId?: string
+  jobStepId?: string
+  stepKey?: string
+  status?: string
+  stepType?: string
+  stepName?: string
+  taskName?: string
+  stepPosition?: number
+  stepCount?: number
+  targetEndpointCode?: string
+  targetEndpointName?: string
+  errorCode?: string | null
+}
+
+export const STEP_EVENT_TYPE = 'job.step-status-changed'
+
+const STEP_DONE = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'])
+
+/** One step of a trip as it ran: from its first status to its end (or the next step when it never said so). */
+export interface StepSpan {
+  stepId: string
+  jobId: string | null
+  key: string
+  name: string
+  type: string | null
+  taskName: string | null
+  position: number | null
+  count: number | null
+  targetCode: string | null
+  targetName: string | null
+  startMs: number
+  /** Null while it still ran when the journal ends. */
+  endMs: number | null
+  /** Last status seen: EXECUTING, WAITING, COMPLETED, FAILED … */
+  status: string
+}
+
+/**
+ * The trip's steps on the timeline, in start order, built from the step events. A step that never reported its end
+ * ends when the next step of the same trip starts. Skipped steps that never ran (no time on the clock) are left out.
+ */
+export function stepTimeline(events: { eventType: string; occurredAtUtc: string; payload: unknown }[]): StepSpan[] {
+  const byStep = new Map<string, StepSpan>()
+  const sorted = events.filter((e) => e.eventType === STEP_EVENT_TYPE).sort((a, b) => Date.parse(a.occurredAtUtc) - Date.parse(b.occurredAtUtc))
+  for (const e of sorted) {
+    const p = (e.payload ?? {}) as StepPayload
+    if (!p.jobStepId) continue
+    const at = Date.parse(e.occurredAtUtc)
+    const status = p.status ?? ''
+    let span = byStep.get(p.jobStepId)
+    if (!span) {
+      if (STEP_DONE.has(status) && status !== 'FAILED' && status !== 'COMPLETED') continue
+      span = {
+        stepId: p.jobStepId,
+        jobId: p.jobId ?? null,
+        key: p.stepKey ?? '',
+        name: p.stepName || p.stepKey || '',
+        type: p.stepType ?? null,
+        taskName: p.taskName ?? null,
+        position: p.stepPosition ?? null,
+        count: p.stepCount ?? null,
+        targetCode: p.targetEndpointCode ?? null,
+        targetName: p.targetEndpointName ?? null,
+        startMs: at,
+        endMs: null,
+        status,
+      }
+      byStep.set(p.jobStepId, span)
+    }
+    span.status = status
+    span.targetCode ??= p.targetEndpointCode ?? null
+    span.targetName ??= p.targetEndpointName ?? null
+    if (STEP_DONE.has(status)) span.endMs = at
+    else if (span.endMs != null) span.endMs = null // reopened (paused, then resumed)
+  }
+  const spans = [...byStep.values()].sort((a, b) => a.startMs - b.startMs || (a.position ?? 0) - (b.position ?? 0))
+  for (const span of spans) {
+    if (span.endMs != null) continue
+    const next = spans.find((s) => s !== span && s.jobId === span.jobId && s.startMs > span.startMs)
+    if (next) span.endMs = next.startMs
+  }
+  return spans
+}
+
+/** The step running at an instant: the latest-started one that covers it. Null between trips or before the first. */
+export function stepAt(spans: StepSpan[], t: number): StepSpan | null {
+  let best: StepSpan | null = null
+  for (const s of spans) {
+    if (s.startMs <= t && (s.endMs == null || t < s.endMs) && (!best || s.startMs >= best.startMs)) best = s
+  }
+  return best
+}
+
+/** Where "previous / next step" goes: the start of the step before or after the one at the cursor. */
+export function stepJump(spans: StepSpan[], cursorMs: number, direction: 1 | -1): number | null {
+  const starts = [...new Set(spans.map((s) => s.startMs))].sort((a, b) => a - b)
+  if (direction === 1) return starts.find((t) => t > cursorMs + 250) ?? null
+  const current = stepAt(spans, cursorMs)
+  // From inside a step that has run a while, "previous" first goes back to its own start, like a media player.
+  if (current && cursorMs - current.startMs > 1500) return current.startMs
+  return [...starts].reverse().find((t) => t < cursorMs - 250 && t !== current?.startMs) ?? starts[0] ?? null
+}

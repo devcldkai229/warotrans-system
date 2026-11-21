@@ -11,6 +11,10 @@ import {
   pathUntil,
   planAt,
   poseAt,
+  STEP_EVENT_TYPE,
+  stepAt,
+  stepJump,
+  stepTimeline,
 } from './replayModel'
 
 const T0 = Date.parse('2026-11-17T10:00:00Z')
@@ -138,5 +142,53 @@ describe('player helpers', () => {
     expect(currentEventId(events, T0 + 11_000)).toBe('a')
     expect(currentEventId(events, T0 + 16_000)).toBe('info')
     expect(currentEventId(events, T0 + 25_000)).toBeNull()
+  })
+})
+
+describe('step timeline', () => {
+  const step = (offsetMs: number, jobStepId: string, status: string, extra: Record<string, unknown> = {}) => ({
+    eventType: STEP_EVENT_TYPE,
+    occurredAtUtc: iso(offsetMs),
+    payload: { jobId: 'J1', jobStepId, stepKey: jobStepId.toLowerCase(), status, ...extra },
+  })
+  const events = [
+    step(0, 'S1', 'EXECUTING', { stepName: 'Move to inbound', stepType: 'MOVE', stepPosition: 1, stepCount: 3, targetEndpointCode: 'EP-INBOUND' }),
+    step(20_000, 'S1', 'COMPLETED'),
+    step(20_000, 'S2', 'EXECUTING', { stepName: 'Confirm pickup', stepType: 'HUMAN_INTERACTION', stepPosition: 2, stepCount: 3 }),
+    step(21_000, 'S2', 'WAITING'),
+    step(45_000, 'S3', 'EXECUTING', { stepName: 'Move to shelf', stepType: 'MOVE', stepPosition: 3, stepCount: 3 }),
+    step(46_000, 'X9', 'SKIPPED'),
+    { eventType: 'robot.command-lifecycle', occurredAtUtc: iso(1000), payload: {} },
+  ]
+
+  it('builds one span per step, closing a step that never said so at the next start', () => {
+    const spans = stepTimeline(events)
+    expect(spans.map((s) => [s.stepId, s.startMs - T0, s.endMs == null ? null : s.endMs - T0, s.status])).toEqual([
+      ['S1', 0, 20_000, 'COMPLETED'],
+      ['S2', 20_000, 45_000, 'WAITING'],
+      ['S3', 45_000, null, 'EXECUTING'],
+    ])
+    expect(spans[0]).toMatchObject({ name: 'Move to inbound', type: 'MOVE', position: 1, count: 3, targetCode: 'EP-INBOUND' })
+  })
+
+  it('falls back to the step key on old journals', () => {
+    expect(stepTimeline([step(0, 'MOVE_A', 'EXECUTING')])[0]!.name).toBe('move_a')
+  })
+
+  it('finds the step at any second, and none before the first', () => {
+    const spans = stepTimeline(events)
+    expect(stepAt(spans, T0 - 1)).toBeNull()
+    expect(stepAt(spans, T0 + 19_999)?.stepId).toBe('S1')
+    expect(stepAt(spans, T0 + 20_000)?.stepId).toBe('S2')
+    expect(stepAt(spans, T0 + 30_000)?.stepId).toBe('S2')
+    expect(stepAt(spans, T0 + 90_000)?.stepId).toBe('S3')
+  })
+
+  it('jumps to the next step start, and back to the current start first', () => {
+    const spans = stepTimeline(events)
+    expect(stepJump(spans, T0 + 5000, 1)).toBe(T0 + 20_000)
+    expect(stepJump(spans, T0 + 30_000, -1)).toBe(T0 + 20_000)
+    expect(stepJump(spans, T0 + 20_500, -1)).toBe(T0)
+    expect(stepJump(spans, T0 + 50_000, 1)).toBeNull()
   })
 })

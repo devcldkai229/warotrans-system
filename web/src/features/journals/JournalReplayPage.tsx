@@ -17,8 +17,23 @@ import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EVIDENCE_LABEL, EVIDENCE_TONE, SEVERITY_LABEL, SEVERITY_TONE } from './journalTones'
 import { CameraPlayer } from './replay/CameraPlayer'
-import { JourneyTimeline, NOTE_COLOR, SEVERITY_COLOR } from './replay/JourneyTimeline'
-import { cameraState, currentEventId, formatElapsed, incidentJump, incidents, mediaAt, ms, pathUntil, planAt, poseAt } from './replay/replayModel'
+import { JourneyTimeline, NOTE_COLOR, SEVERITY_COLOR, STEP_OTHER_COLOR, STEP_TYPE_COLOR, stepColor, stepsOfRun } from './replay/JourneyTimeline'
+import {
+  cameraState,
+  currentEventId,
+  formatElapsed,
+  incidentJump,
+  incidents,
+  mediaAt,
+  ms,
+  pathUntil,
+  planAt,
+  poseAt,
+  stepAt,
+  stepJump,
+  stepTimeline,
+  type StepSpan,
+} from './replay/replayModel'
 
 const COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed']
 const RATES = [0.5, 1, 2, 4]
@@ -139,6 +154,7 @@ export function JournalReplayPage() {
   const mapQuery = useQuery({ queryKey: ['map-detail', mapVersionId], queryFn: () => getMapVersionDetail(mapVersionId!), enabled: Boolean(mapVersionId), staleTime: 300_000 })
   const geometry = useMemo(() => mapDetailToGeometry(mapQuery.data), [mapQuery.data])
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data])
+  const steps = useMemo(() => stepTimeline(events), [events])
 
   const seek = useCallback((time: number) => setCursor(Math.min(Math.max(time, fromMs), toMs)), [fromMs, toMs])
   const jump = useCallback(
@@ -147,6 +163,13 @@ export function JournalReplayPage() {
       if (target != null) seek(target)
     },
     [events, cursorMs, seek],
+  )
+  const jumpStep = useCallback(
+    (direction: 1 | -1, among: StepSpan[] = steps) => {
+      const target = stepJump(among, cursorMs, direction)
+      if (target != null) seek(target)
+    },
+    [steps, cursorMs, seek],
   )
 
   // Keyboard shortcuts, except while typing a note.
@@ -161,10 +184,12 @@ export function JournalReplayPage() {
       else if (event.key === 'ArrowLeft' && target?.getAttribute('role') !== 'slider') seek(cursorMs - (event.shiftKey ? 1000 : SKIP_MS))
       else if (event.key === ']') jump(1)
       else if (event.key === '[') jump(-1)
+      else if (event.key === '.') jumpStep(1)
+      else if (event.key === ',') jumpStep(-1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [cursorMs, seek, jump])
+  }, [cursorMs, seek, jump, jumpStep])
 
   const addNote = useMutation({
     mutationFn: (body: { category: string; note: string }) =>
@@ -203,6 +228,8 @@ export function JournalReplayPage() {
     return options.find((c) => c.rec && spansByRecording[c.rec.id] && mediaAt(spansByRecording[c.rec.id]!.spans, cursorMs)) ?? options[0] ?? null
   }
   const others = runs.filter((run) => run.id !== selectedRunId)
+  const selectedSteps = selectedRun ? stepsOfRun(steps, selectedRun, runs.length) : []
+  const currentStep = stepAt(selectedSteps, cursorMs)
   const activeEvent = currentEventId(events, cursorMs)
   const visibleEvents = showAllEvents ? events : events.filter((e) => e.severity !== 'INFO')
   const incidentCount = incidents(events).length
@@ -270,6 +297,16 @@ export function JournalReplayPage() {
                     cursorMs={cursorMs}
                     playing={playing}
                     rate={rate}
+                  />
+                ) : null}
+                {selectedRun ? (
+                  <CurrentStepBar
+                    steps={selectedSteps}
+                    current={currentStep}
+                    cursorMs={cursorMs}
+                    color={COLORS[selectedIndex % COLORS.length]!}
+                    onSeek={seek}
+                    onJump={(direction) => jumpStep(direction, selectedSteps)}
                   />
                 ) : null}
                 {others.length > 0 ? (
@@ -393,6 +430,8 @@ export function JournalReplayPage() {
                 spansByRecording={spansByRecording}
                 events={events}
                 annotations={notes}
+                steps={steps}
+                activeStepId={currentStep?.stepId ?? null}
                 selectedRunId={selectedRunId}
                 onSelectRun={setMainRun}
                 onSeek={seek}
@@ -402,7 +441,14 @@ export function JournalReplayPage() {
                 <span className="flex items-center gap-1.5"><span className="h-1 w-4 rounded-full bg-ink-2/30" />{t('Trip')}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 rotate-45" style={{ background: SEVERITY_COLOR.WARNING }} />{t('Incident')}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: NOTE_COLOR }} />{t('Note')}</span>
-                <span className="ml-auto">{t('Local time; recorded in UTC')} · {t('Space: play / pause · ← →: 5 s · [ ]: incidents')}</span>
+                {steps.length > 0 ? (
+                  <>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-[2px]" style={{ background: COLORS[selectedIndex % COLORS.length] }} />{t('Driving step')}</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-[2px]" style={{ background: STEP_TYPE_COLOR.HUMAN_INTERACTION }} />{t('Waiting for staff')}</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-[2px]" style={{ background: STEP_OTHER_COLOR }} />{t('Other step')}</span>
+                  </>
+                ) : null}
+                <span className="ml-auto">{t('Local time; recorded in UTC')} · {t('Space: play / pause · ← →: 5 s · [ ]: incidents · , .: steps')}</span>
               </p>
             </section>
 
@@ -557,6 +603,112 @@ function ControlButton({ icon, label, shortcut, onClick, disabled }: { icon: Ico
     >
       <Icon name={icon} size={16} />
     </button>
+  )
+}
+
+type StepTone = 'blue' | 'amber' | 'green' | 'red' | 'grey'
+
+const STEP_STATUS: Record<string, { label: string; tone: StepTone }> = {
+  EXECUTING: { label: 'Running', tone: 'blue' },
+  READY: { label: 'Running', tone: 'blue' },
+  WAITING: { label: 'Waiting', tone: 'amber' },
+  PAUSED: { label: 'Paused', tone: 'amber' },
+  COMPLETED: { label: 'Done', tone: 'green' },
+  FAILED: { label: 'Failed', tone: 'red' },
+  CANCELLED: { label: 'Cancelled', tone: 'grey' },
+  SKIPPED: { label: 'Skipped', tone: 'grey' },
+}
+
+const STEP_TYPE_ICON: Record<string, IconName> = { MOVE: 'route', HUMAN_INTERACTION: 'user' }
+
+/**
+ * "Where is the trip at this second": the step under the cursor, its target, how long it has run and a dot per step.
+ * Follows the cursor on every frame, so dragging the timeline or playing the video moves it with the picture.
+ */
+function CurrentStepBar({
+  steps,
+  current,
+  cursorMs,
+  color,
+  onSeek,
+  onJump,
+}: {
+  steps: StepSpan[]
+  current: StepSpan | null
+  cursorMs: number
+  color: string
+  onSeek: (t: number) => void
+  onJump: (direction: 1 | -1) => void
+}) {
+  if (steps.length === 0) {
+    return <p className="rounded-lg border border-dashed border-outline-variant px-3 py-2 text-xs text-ink-2">{t('This journal has no step data.')}</p>
+  }
+  const index = current ? steps.indexOf(current) : -1
+  const before = !current && cursorMs < steps[0]!.startMs
+  // The status the step had at the cursor: a step that later completed is still running before its end.
+  const status = current ? (current.endMs != null && cursorMs < current.endMs && current.status === 'COMPLETED' ? 'EXECUTING' : current.status) : null
+  const shown = status ? (STEP_STATUS[status] ?? { label: status, tone: 'grey' as const }) : null
+  const position =
+    current?.position != null && current.count != null ? `${current.position}/${current.count}` : index >= 0 ? `${index + 1}/${steps.length}` : null
+  const target = current?.targetCode
+    ? current.targetName && current.targetName !== current.targetCode
+      ? `${current.targetName} (${current.targetCode})`
+      : current.targetCode
+    : null
+  return (
+    <div
+      className="flex items-center gap-3 rounded-lg border border-outline-soft bg-container px-3 py-2"
+      data-testid="current-step"
+      data-step-id={current?.stepId ?? ''}
+    >
+      <span
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-white"
+        style={{ background: current ? stepColor(current.type, color) : STEP_OTHER_COLOR }}
+      >
+        <Icon name={(current?.type && STEP_TYPE_ICON[current.type]) || 'list'} size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-[11px] font-medium tracking-wide text-muted uppercase">{t('Step now')}</span>
+          {position ? <span className="font-mono text-xs text-ink-2">{position}</span> : null}
+          {shown ? <StatusBadge tone={shown.tone}>{t(shown.label)}</StatusBadge> : null}
+        </div>
+        <p className="truncate text-sm font-semibold" data-testid="current-step-name">
+          {current ? current.name : before ? t('Before the first step') : t('Between steps')}
+          {target ? <span className="font-normal text-ink-2"> · {target}</span> : null}
+        </p>
+        {/* One dot per step; the current one is wide. Click to go to that step. */}
+        <div className="mt-1 flex flex-wrap items-center gap-1" aria-label={t('Steps')}>
+          {steps.map((s, i) => (
+            <button
+              key={s.stepId}
+              type="button"
+              onClick={() => onSeek(s.startMs)}
+              title={`${i + 1}. ${s.name}${s.targetCode ? ` · ${s.targetCode}` : ''}`}
+              aria-label={`${i + 1}. ${s.name}`}
+              className={cx('h-1.5 rounded-full transition-all', s === current ? 'w-5' : 'w-1.5 opacity-50 hover:opacity-90')}
+              style={{ background: s.startMs <= cursorMs ? stepColor(s.type, color) : 'var(--color-outline-variant)' }}
+            />
+          ))}
+        </div>
+      </div>
+      {current ? (
+        <span className="hidden shrink-0 text-right font-mono text-xs text-ink-2 tabular-nums sm:block">
+          {formatElapsed(cursorMs - current.startMs)}
+          {current.endMs != null ? <span className="text-muted"> / {formatElapsed(current.endMs - current.startMs)}</span> : null}
+        </span>
+      ) : null}
+      <div className="flex shrink-0 items-center">
+        <ControlButton icon="chevronLeft" label={t('Previous step')} shortcut="," onClick={() => onJump(-1)} />
+        <ControlButton
+          icon="chevronRight"
+          label={t('Next step')}
+          shortcut="."
+          onClick={() => onJump(1)}
+          disabled={!steps.some((s) => s.startMs > cursorMs + 250)}
+        />
+      </div>
+    </div>
   )
 }
 

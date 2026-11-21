@@ -35,7 +35,7 @@ internal static class EventClassifier
                 $"Trip{job} {status}{Suffix(Str(e.Payload, "failureCode"))}", null, null),
             TransportEventTypes.JobStepStatusChanged => new(EvidenceEventCategory.FLEET,
                 status == "FAILED" ? EvidenceSeverity.ERROR : EvidenceSeverity.INFO,
-                $"Step {Str(e.Payload, "stepKey")} of{job} {status}{Suffix(Str(e.Payload, "errorCode"))}", null, null),
+                $"Step {StepLabel(e.Payload)} of{job} {status}{Suffix(Str(e.Payload, "errorCode"))}", null, null),
             TransportEventTypes.JobContainerStatusChanged => new(EvidenceEventCategory.CARGO,
                 status == "FAILED" ? EvidenceSeverity.ERROR : EvidenceSeverity.INFO,
                 $"Container {Str(e.Payload, "containerId")} {status}", null, null),
@@ -58,6 +58,21 @@ internal static class EventClassifier
             TransportEventTypes.TrafficWaitChanged => Traffic(e),
             _ => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.INFO, e.EventType, null, null)
         };
+    }
+
+    /// <summary>"4/9 Move to shelf (EP-SHELF-A-1)" when the core sent the step details, else the bare step key.</summary>
+    private static string StepLabel(JsonElement payload)
+    {
+        var name = Str(payload, "stepName");
+        if (string.IsNullOrEmpty(name))
+        {
+            return Str(payload, "stepKey") ?? "";
+        }
+
+        var position = Int(payload, "stepPosition");
+        var count = Int(payload, "stepCount");
+        var target = Str(payload, "targetEndpointCode");
+        return $"{(position > 0 && count > 0 ? $"{position}/{count} " : "")}{name}{(string.IsNullOrEmpty(target) ? "" : $" ({target})")}";
     }
 
     private static Classification Command(TransportEventEnvelope e, string robot)

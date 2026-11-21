@@ -173,6 +173,24 @@ public sealed class MultiRobotTripsTests(WaroTransWebApplicationFactory factory)
             Assert.Equal(trips.ToHashSet(), opened.Select(e => e.GetProperty("jobId").GetGuid()).ToHashSet());
             Assert.Equal([2, 3], opened.Select(e => e.GetProperty("payload").GetProperty("containerIds").GetArrayLength()).Order());
             Assert.Equal(2, opened.Select(e => e.GetProperty("assignmentId").GetGuid()).Distinct().Count());
+
+            // Step events carry what the replay's step lane shows: type, name, place in the trip, target endpoint.
+            var steps = (await outbox.OutboxMessages.AsNoTracking()
+                    .Where(m => m.EventType == EvidenceEventTypes.JobStepStatusChanged)
+                    .ToListAsync())
+                .Select(m => JsonDocument.Parse(m.Payload).RootElement)
+                .Where(e => e.GetProperty("transportRequestId").GetGuid() == requestId)
+                .Select(e => e.GetProperty("payload"))
+                .ToList();
+            Assert.NotEmpty(steps);
+            Assert.All(steps, p =>
+            {
+                Assert.False(string.IsNullOrEmpty(p.GetProperty("stepName").GetString()));
+                Assert.False(string.IsNullOrEmpty(p.GetProperty("stepType").GetString()));
+                Assert.InRange(p.GetProperty("stepPosition").GetInt32(), 1, p.GetProperty("stepCount").GetInt32());
+            });
+            Assert.Contains(steps, p => p.GetProperty("stepType").GetString() == "MOVE"
+                && !string.IsNullOrEmpty(p.TryGetProperty("targetEndpointCode", out var code) ? code.GetString() : null));
         }
         finally
         {

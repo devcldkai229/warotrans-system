@@ -59,6 +59,24 @@ public class TransportEventTests
     }
 
     [Fact]
+    public void A_step_with_details_reads_as_its_place_name_and_target()
+    {
+        var c = EventClassifier.Classify(Envelope(TransportEventTypes.JobStepStatusChanged, "EXECUTING",
+            new { stepKey = "move_to_drop", stepName = "Move to shelf", stepPosition = 4, stepCount = 9, targetEndpointCode = "EP-SHELF-A-1" },
+            Guid.NewGuid()));
+        Assert.Equal(EvidenceSeverity.INFO, c.Severity);
+        Assert.Contains("4/9 Move to shelf (EP-SHELF-A-1)", c.Message);
+    }
+
+    [Fact]
+    public void A_step_without_details_falls_back_to_its_key()
+    {
+        var c = EventClassifier.Classify(Envelope(TransportEventTypes.JobStepStatusChanged, "COMPLETED",
+            new { stepKey = "move_to_drop" }, Guid.NewGuid()));
+        Assert.Contains("Step move_to_drop", c.Message);
+    }
+
+    [Fact]
     public void A_failed_navigation_result_is_an_error_with_its_code()
     {
         var c = EventClassifier.Classify(Envelope(TransportEventTypes.RobotCommandLifecycle, "RESULT",
