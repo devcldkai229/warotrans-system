@@ -19,7 +19,8 @@ public sealed partial class JobExecutionEngine
 {
     internal async Task<bool> CanArmRecoveryButtonAsync(Guid robotId, CancellationToken cancellationToken) =>
         recoveryOptions?.Value.EnableTransferButton == true
-        && (await fleet.GetRobotAsync(robotId, cancellationToken))?.Capabilities?.Contains(RobotRecoveryTransfer.Capability) == true;
+        && await fleet.GetRobotAsync(robotId, cancellationToken) is { IsEnabled: true, IsOnline: true } robot
+        && robot.Capabilities?.Contains(RobotRecoveryTransfer.Capability, StringComparer.Ordinal) == true;
 
     public async Task ArmRecoveryTransferAsync(
         Guid jobId, RecoveryCaseAccess access, Guid robotId, IReadOnlyList<HandoverStopScan>? scans, CancellationToken cancellationToken)
@@ -39,15 +40,16 @@ public sealed partial class JobExecutionEngine
             throw new ConflictException("The recovery manifest has changed.", "recovery_case_changed");
         await VerifyRecoveryTransferAsync(job, recovery, target, robotId, onBoard, scans, cancellationToken);
 
-        if (recovery.ButtonArmId is null)
-        {
-            recovery.ButtonArmId = Guid.NewGuid();
-            recovery.Version++;
-        }
-        await SaveAndPublishAsync(cancellationToken, transaction);
+        var armId = recovery.ButtonArmId ?? Guid.NewGuid();
+        var armVersion = recovery.ButtonArmId is null ? recovery.Version + 1 : recovery.Version;
+        // Confirm/unassign take the same Job lock. The button can only confirm after this publish is recorded.
         if (!await fleet.ArmRecoveryButtonAsync(target, jobId, move, recovery.ContainerIds[0], endpoint,
-                recovery.ButtonArmId.Value, new RobotRecoveryTransfer(recovery.Id, recovery.Version, recovery.ContainerIds), CancellationToken.None))
+                armId, new RobotRecoveryTransfer(recovery.Id, armVersion, recovery.ContainerIds), cancellationToken))
             throw new ConflictException("The recovery robot could not arm the button. Refresh the case.", "recovery_button_unavailable");
+
+        recovery.ButtonArmId = armId;
+        recovery.Version = armVersion;
+        await SaveAndPublishAsync(CancellationToken.None, transaction);
     }
 
     public Task<JobRecoveryCase> ConfirmRecoveryTransferByRobotAsync(RobotInteractionConfirmed button, CancellationToken cancellationToken)

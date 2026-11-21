@@ -39,6 +39,10 @@ public sealed class GetTransportRequestHandler(
 
         var jobs = (await jobControl.GetJobsAsync([request.Id], cancellationToken)).GetValueOrDefault(request.Id) ?? [];
 
+        // Read the producer queue first. If a handover leaves it between queries, its posting is already durable.
+        var pendingHandovers = (await jobControl.GetPendingStockHandoversAsync(request.Id, cancellationToken))
+            .OrderByDescending(handover => handover.ConfirmedAt)
+            .ToLookup(handover => handover.ContainerId);
         var postings = (await dbContext.StockPostings
                 .AsNoTracking()
                 .Where(p => p.TransportRequestId == request.Id)
@@ -97,8 +101,11 @@ public sealed class GetTransportRequestHandler(
                     lookups.Endpoints.TryGetValue(d.DestinationEndpointId, out var destinationEndpoint);
 
                     var containerPostings = postings[d.ContainerId];
-                    var pickup = containerPostings.FirstOrDefault(p => p.Type == StockPostingType.PICKUP)?.Sync;
-                    var delivery = containerPostings.FirstOrDefault(p => p.Type == StockPostingType.DELIVERY)?.Sync;
+                    var pending = pendingHandovers[d.ContainerId];
+                    var pickup = containerPostings.FirstOrDefault(p => p.Type == StockPostingType.PICKUP)?.Sync
+                        ?? WaitingForPosting(pending.FirstOrDefault(handover => handover.IsPickup));
+                    var delivery = containerPostings.FirstOrDefault(p => p.Type == StockPostingType.DELIVERY)?.Sync
+                        ?? WaitingForPosting(pending.FirstOrDefault(handover => !handover.IsPickup));
 
                     return new TransportRequestDetailItemResponse(
                         d.Id,
@@ -131,4 +138,9 @@ public sealed class GetTransportRequestHandler(
             TransportRequestActionPolicy.Evaluate(request, jobs, currentUser.Can),
             names.GetValueOrDefault(request.RequestedBy));
     }
+
+    private static WarehouseStockPostingResponse? WaitingForPosting(PendingStockHandover? handover) => handover is null
+        ? null
+        : new(handover.JobId, handover.NextAttemptAt.HasValue ? "RETRYING" : "PENDING",
+            handover.ConfirmedAt, null, handover.NextAttemptAt);
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using System.Globalization;
 
 namespace WaroTrans.IntegrationTests.Infrastructure;
 
@@ -19,8 +20,8 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("Mongo:ConnectionString", TestConnectionStrings.MongoDb);
         builder.UseSetting("Mongo:DatabaseName", TestConnectionStrings.MongoDatabaseName);
         builder.UseSetting("Authentication:Jwt:Key", "warotrans-integration-test-signing-key-0123456789");
-        builder.UseSetting("Mqtt:Host", "localhost");
-        builder.UseSetting("Mqtt:Port", "1883");
+        builder.UseSetting("Mqtt:Host", TestConnectionStrings.MqttHost);
+        builder.UseSetting("Mqtt:Port", TestConnectionStrings.MqttPort.ToString(CultureInfo.InvariantCulture));
         builder.UseSetting("Mqtt:ClientId", $"warotrans-test-{Guid.NewGuid():N}");
         // Own topic tree: never the live warotrans/v1 that real robots (RBT-001) listen and publish on.
         builder.UseSetting("Mqtt:TopicPrefix", TestTopicPrefix);

@@ -120,8 +120,7 @@ public sealed partial class JobExecutionEngine
         task.HandoverConfirmedAt = now;
         task.HandoverVersion++;
         await SaveAndPublishAsync(cancellationToken, transaction);
-        await db.Entry(job).ReloadAsync(CancellationToken.None);
-        await AdvanceAsync(jobId, CancellationToken.None);
+        await ContinueUnderJobLockAsync(job, CancellationToken.None);
     }
 
     internal async Task<bool> TryArmBegunHandoverStopAsync(Guid jobId, CancellationToken cancellationToken)

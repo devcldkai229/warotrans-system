@@ -20,7 +20,9 @@ public sealed class AuditEventRecorder(IAuditTrail audit) : IIntegrationEventHan
                 Context: new Dictionary<string, object?>
                 {
                     ["jobId"] = e.JobId,
-                    ["transportRequestId"] = e.TransportRequestId
+                    ["transportRequestId"] = e.TransportRequestId,
+                    ["eventId"] = e.EventId,
+                    ["handoverConfirmedBy"] = e.HandoverConfirmedBy
                 }),
             cancellationToken);
 }

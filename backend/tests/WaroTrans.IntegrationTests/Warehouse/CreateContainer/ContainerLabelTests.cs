@@ -33,9 +33,9 @@ public sealed class ContainerLabelTests(WaroTransWebApplicationFactory factory) 
         return (warehouse.Id, product.Id);
     }
 
-    private static object Claim(Guid warehouseId, Guid productId, string label) => new
+    private static object Claim(Guid warehouseId, Guid productId, string? label, Guid? requestId = null) => new
     {
-        warehouseId, requestId = Guid.NewGuid(), containerCount = 1, labelBarcode = label,
+        warehouseId, requestId = requestId ?? Guid.NewGuid(), containerCount = 1, labelBarcode = label,
         groups = new[] { new { groupKey = "g1", productId, containerCount = 1, quantityPerContainer = 1, unit = "container" } },
     };
 
@@ -71,6 +71,49 @@ public sealed class ContainerLabelTests(WaroTransWebApplicationFactory factory) 
         var refused = await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/containers", token, Claim(warehouseId, productId, notIssued));
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.Equal("label_not_issued", await CodeOf(refused));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_receipt_accepts_the_original_barcode_and_rejects_a_different_label(bool legacyHash)
+    {
+        await Factory.CreateAccountAsync("label-retry", AccountRole.STAFF);
+        using var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync("label-retry")).AccessToken;
+        var (warehouseId, productId) = await SeedAsync();
+        var requestId = Guid.NewGuid();
+        using var issued = await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/container-labels", token, new { count = 2 });
+        issued.EnsureSuccessStatusCode();
+        var labels = (await issued.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("codes");
+        const string route = "/api/warehouse/containers";
+
+        // Before labels were part of the hash, an issued-label receipt had the same hash as an automatic batch.
+        using var created = await client.SendWithTokenAsync(HttpMethod.Post, route, token,
+            Claim(warehouseId, productId, legacyHash ? null : labels[0].GetString(), requestId));
+        created.EnsureSuccessStatusCode();
+        var original = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items")[0];
+        var barcode = original.GetProperty("barcode").GetString();
+
+        using var same = await client.SendWithTokenAsync(HttpMethod.Post, route, token,
+            Claim(warehouseId, productId, $" {barcode} ", requestId));
+        same.EnsureSuccessStatusCode();
+        var receipt = await same.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(receipt.GetProperty("replayed").GetBoolean());
+        Assert.Equal(original.GetProperty("id").GetGuid(), receipt.GetProperty("items")[0].GetProperty("id").GetGuid());
+
+        using var different = await client.SendWithTokenAsync(HttpMethod.Post, route, token,
+            Claim(warehouseId, productId, labels[1].GetString(), requestId));
+        Assert.Equal(HttpStatusCode.Conflict, different.StatusCode);
+        Assert.Equal("container_creation_request_conflict", await CodeOf(different));
+
+        if (!legacyHash)
+        {
+            using var omitted = await client.SendWithTokenAsync(HttpMethod.Post, route, token,
+                Claim(warehouseId, productId, null, requestId));
+            Assert.Equal(HttpStatusCode.Conflict, omitted.StatusCode);
+            Assert.Equal("container_creation_request_conflict", await CodeOf(omitted));
+        }
     }
 
     [Fact]

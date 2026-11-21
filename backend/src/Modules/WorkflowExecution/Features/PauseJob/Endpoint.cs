@@ -13,13 +13,15 @@ namespace WaroTrans.WorkflowExecution.Features.PauseJob;
 public sealed record PauseJobRequest(string? Reason);
 
 public sealed class PauseJobHandler(
-    JobExecutionEngine engine, JobQueries queries, ICurrentUser user, StaffWarehouseScope warehouseScope)
+    JobExecutionEngine engine, JobQueries queries, ICurrentUser user, StaffWarehouseScope warehouseScope,
+    IRobotAccessScope robotAccessScope)
 {
     public async Task<JobDetailDto> HandleAsync(Guid jobId, PauseJobRequest request, CancellationToken cancellationToken)
     {
         var actor = user.AccountId ?? throw new AppException("Sign in to pause a Job.", 401, "unauthenticated");
         await warehouseScope.EnsureJobAccessAsync(jobId, user, cancellationToken);
-        await engine.PauseAsync(jobId, request.Reason, actor, cancellationToken);
+        var robotScope = user.Role == AppRoles.Technician ? await robotAccessScope.GetCurrentAsync(cancellationToken) : null;
+        await engine.PauseAsync(jobId, request.Reason, actor, cancellationToken, robotScope);
         return await queries.GetDetailAsync(jobId, cancellationToken);
     }
 }

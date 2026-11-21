@@ -263,7 +263,8 @@ Robot accept/reject rules:
 ```
 
 `reasonCode` examples when `accepted=false`: `NOT_LOCALIZED`, `BUSY`, `UNKNOWN_TARGET`, `INVALID_PAYLOAD`, `NAV2_UNAVAILABLE`,
-`COMMAND_EXPIRED`, `JOB_MISMATCH`.  
+`COMMAND_EXPIRED`, `JOB_MISMATCH`.
+
 When `accepted=true`, `reasonCode` is usually `null` (or `ALREADY_ACCEPTED` for idempotent retry).
 
 ## CommandResult (robot → backend)

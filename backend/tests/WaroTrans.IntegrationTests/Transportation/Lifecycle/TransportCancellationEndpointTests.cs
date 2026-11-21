@@ -8,7 +8,9 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Persistence;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Persistence;
@@ -179,6 +181,55 @@ public sealed class TransportCancellationEndpointTests(WaroTransWebApplicationFa
             Assert.Equal(seed.SourceLocationId, c.CurrentStorageLocationId);
         });
         Assert.Equal(2, await warehouse.ContainerMovements.CountAsync(m => containerIds.Contains(m.ContainerId) && m.Type == ContainerMovementType.RECOVERED));
+    }
+
+    [Fact]
+    public async Task An_unload_waits_for_a_pickup_still_in_the_execution_outbox()
+    {
+        var (seed, requestId, trips) = await RequestAsync(containers: 1, queue: true);
+        var robot = await SeedRobotAsync(seed);
+        var trip = trips.Single();
+        await StartAsync(trip, robot.Id);
+        var containerId = Assert.Single(await PutCargoOnRobotAsync(trip, stockRecorded: false));
+        await using var scope = Services.CreateAsyncScope();
+        var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        var transportation = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+        var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        var lookup = scope.ServiceProvider.GetRequiredService<IContainerTransportLookup>();
+        var atPickup = DateTimeOffset.UtcNow;
+        await execution.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO execution.stock_handover_outbox
+                (id, job_id, transport_request_id, container_id, type, confirmed_at, next_attempt_at, attempts)
+            VALUES ({Guid.NewGuid()}, {trip}, {requestId}, {containerId}, 'PICKUP', {atPickup}, {atPickup.AddHours(1)}, 0)
+            """);
+
+        using var cancel = await Client.PostAsJsonAsync($"{Route}/{requestId}/cancel", new { reason = "customer cancelled" });
+        Assert.True(cancel.IsSuccessStatusCode, await cancel.Content.ReadAsStringAsync());
+        await HoldRobotAsync(robot.Id);
+        var barcodes = await BarcodesAsync([containerId]);
+        using var unload = await Client.PostAsJsonAsync($"{Route}/{requestId}/cancellation/jobs/{trip}/handover", new
+        {
+            containerId, scannedBarcode = barcodes[containerId], storageLocationId = seed.SourceLocationId, levelNo = 1
+        });
+        Assert.True(unload.IsSuccessStatusCode, await unload.Content.ReadAsStringAsync());
+
+        var posting = await transportation.StockPostings.AsNoTracking().SingleAsync(p => p.ContainerId == containerId);
+        Assert.Equal(StockPostingType.CANCEL_HANDOVER, posting.Type);
+        Assert.Null(posting.PostedAt);
+        Assert.Equal(0, posting.Attempts);
+        Assert.Contains(containerId, await lookup.GetContainersInActiveTransportAsync([containerId]));
+
+        await execution.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE execution.stock_handover_outbox SET next_attempt_at = {atPickup} WHERE container_id = {containerId}
+            """);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (await transportation.StockPostings.CountAsync(p => p.ContainerId == containerId && p.PostedAt != null, timeout.Token) < 2)
+            await Task.Delay(100, timeout.Token);
+
+        var movementTypes = await warehouse.ContainerMovements.AsNoTracking().Where(m => m.ContainerId == containerId)
+            .OrderBy(m => m.OccurredAt).Select(m => m.Type).ToListAsync();
+        Assert.Equal([ContainerMovementType.PICKED_UP, ContainerMovementType.RECOVERED], movementTypes);
+        Assert.Empty(await lookup.GetContainersInActiveTransportAsync([containerId]));
     }
 
     [Fact]
@@ -355,8 +406,8 @@ public sealed class TransportCancellationEndpointTests(WaroTransWebApplicationFa
         }
     }
 
-    /// <summary>The pickups were confirmed and posted: the containers are ONBOARD in the Job and IN_TRANSIT in Warehouse.</summary>
-    private async Task<List<Guid>> PutCargoOnRobotAsync(Guid trip)
+    /// <summary>Confirm pickup in Execution, with an option to leave Warehouse waiting for the posting.</summary>
+    private async Task<List<Guid>> PutCargoOnRobotAsync(Guid trip, bool stockRecorded = true)
     {
         await using var scope = Services.CreateAsyncScope();
         var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
@@ -376,6 +427,7 @@ public sealed class TransportCancellationEndpointTests(WaroTransWebApplicationFa
         await execution.SaveChangesAsync();
 
         var ids = job.JobContainers.Select(c => c.ContainerId).ToList();
+        if (!stockRecorded) return ids;
         var warehouse = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
         foreach (var container in await warehouse.Containers.Where(c => ids.Contains(c.Id)).ToListAsync())
         {

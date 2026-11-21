@@ -87,7 +87,7 @@ The response contains `requestId`, `warehouseId`, `containerCount`, `replayed`, 
 
 Order is request-group order, then increasing `containerNo`. Render/print only the **successfully returned** persisted IDs/barcodes. Client previews must not invent them.
 
-Retry the same payload with the same `requestId` and same account, including after a timeout or unknown network result. The server returns the same Container IDs/barcodes and creates no extra boxes, including when identical requests arrive concurrently. Differences in decimal scale or override ordering do not change effective intent. Changing group order, Product, quantity, unit, warehouse, target voucher or explicit location does change intent.
+Retry the same payload with the same `requestId` and same account, including after a timeout or unknown network result. The server returns the same Container IDs/barcodes and creates no extra boxes, including when identical requests arrive concurrently. Decimal scale, override ordering and surrounding whitespace on `labelBarcode` are normalized. Group order, Product, quantity, unit, warehouse, target voucher, explicit location and the selected pre-printed label are part of the request intent.
 
 Reusing a `requestId` for a different payload/account returns 409 `container_creation_request_conflict`. When a user deliberately changes an already submitted batch, first resolve the prior outcome, then start a genuinely new operation with a new ID. Do not auto-generate a new ID on network failure or conflict.
 
@@ -116,10 +116,10 @@ Common 400 errors include `voucher_container_not_at_outbound`, `container_conten
 
 ## Warehouse synchronization after a handover
 
-`GET /api/transportation/transport-requests/{id}` includes `details[].warehouseSync` when the request has a recorded Warehouse posting for that Container. `pickup` and `delivery` are each nullable. A posting contains `jobId`, `status`, `recordedAt`, `postedAt` and `nextAttemptAt`.
+`GET /api/transportation/transport-requests/{id}` includes `details[].warehouseSync` for confirmed handovers in the Execution outbox as well as postings already queued by Transportation. `pickup` and `delivery` are each nullable. A posting contains `jobId`, `status`, `recordedAt`, `postedAt` and `nextAttemptAt`.
 
 - `PENDING` means the handover was recorded and Warehouse still has to apply it.
-- `RETRYING` means a posting attempt failed and the server will try again. The server reports a separate issue after repeated failures.
+- `RETRYING` means an attempt to queue or apply the posting failed and the server will try again. Repeated Warehouse posting failures raise a separate issue.
 - `POSTED` means the Warehouse posting completed. `postedAt` is present even when an earlier attempt failed.
 
 A missing posting means this endpoint has no receipt for the handover. A completed Job or transport detail can coexist with a pending Warehouse posting. Refresh the transport request to read the new posting status while the server retries.
@@ -131,5 +131,7 @@ A missing posting means this endpoint has no receipt for the handover. A complet
 ## Deployment
 
 Apply Warehouse migrations through `20261118054034_AddGateStagingAndUnlocatedReceiving` before running the updated BE. The migration adds Container warehouse ownership and endpoint custody, records endpoint IDs for movements and preserves existing booked balances. Apply Transportation migrations through `20261120075239_IndexStockPostingsByRequest` to index the handover status lookup. Coordinate the upgrade with completion of in-flight TRs, especially pickups made under the old accounting rules.
+
+Apply WorkflowExecution migration `20261121065048_QueueStockHandovers` before activating handover confirmation on the updated BE. It creates the Execution outbox for new handovers. Reconcile any older handovers with a missing Warehouse posting against their original Job and Container movements before proceeding with those goods.
 
 Mobile FE can use both directions on the updated BE. For outbound, replace the shelf/`STORED` preview predicate with `STAGED_OUTBOUND` and display the returned endpoint. For inbound, render null location as None and select a gate only when composing putaway.

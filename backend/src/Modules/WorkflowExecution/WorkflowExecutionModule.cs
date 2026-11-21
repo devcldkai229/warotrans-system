@@ -86,6 +86,8 @@ public static class WorkflowExecutionModule
 
         // Job execution (GĐ 3)
         services.AddScoped<JobExecutionEngine>();
+        services.AddSingleton<StockHandoverDispatcher>();
+        services.AddHostedService(sp => sp.GetRequiredService<StockHandoverDispatcher>());
         services.AddScoped<JobQueries>();
         services.AddScoped<StaffWarehouseScope>();
         services.AddScoped<IStaffOperatingWarehouse>(sp => sp.GetRequiredService<StaffWarehouseScope>());

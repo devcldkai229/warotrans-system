@@ -127,7 +127,7 @@ public sealed record JobStepDto(
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
 public sealed class JobQueries(
     WorkflowExecutionDbContext db, ICurrentUser currentUser, StaffWarehouseScope warehouseScope,
-    JobExecutionEngine engine, IAccountNameLookup? accountNames = null)
+    JobExecutionEngine engine, IRobotAccessScope robotAccessScope, IAccountNameLookup? accountNames = null)
 {
     public async Task<JobDetailDto> GetDetailAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -169,6 +169,10 @@ public sealed class JobQueries(
         var warehouseDenial = job.Status is JobStatus.RUNNING or JobStatus.PAUSED or JobStatus.REASSIGNING
             ? await warehouseScope.JobDenialAsync(job.MapVersionId, currentUser, cancellationToken)
             : null;
+        var robotId = AssignedRobot(job);
+        var pauseDenial = job.Status == JobStatus.RUNNING && currentUser.Role == AppRoles.Technician
+            ? JobActionPolicy.PauseRobotScopeReason(await robotAccessScope.GetCurrentAsync(cancellationToken), robotId)
+            : warehouseDenial;
         var resumeDenial = warehouseDenial
             ?? JobActionPolicy.ResumeOwnershipReason(job, currentUser.AccountId, currentUser.Role == AppRoles.Admin);
         if (resumeDenial is null && job.Status == JobStatus.PAUSED)
@@ -184,7 +188,7 @@ public sealed class JobQueries(
             job.Status.ToString(),
             job.WorkflowId,
             job.MapVersionId,
-            AssignedRobot(job),
+            robotId,
             job.JobContainers.Select(c => c.TransportRequestId).Distinct().ToList(),
             orderedSteps.Count(s => s.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED),
             orderedSteps.Count,
@@ -228,7 +232,7 @@ public sealed class JobQueries(
                         })
                         .ToList()))
                 .ToList(),
-            JobActionPolicy.Evaluate(job.Status, currentUser.Can, warehouseDenial, resumeDenial),
+            JobActionPolicy.Evaluate(job.Status, currentUser.Can, pauseDenial, resumeDenial),
             job.Priority,
             job.DeadlineAt,
             job.QueuedAt,

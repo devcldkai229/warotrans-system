@@ -37,9 +37,11 @@ public sealed class CreateContainerBatchHandler(
             throw new AppException("Voucher writing is not allowed.", 403, "forbidden");
 
         var rows = Expand(request);
-        var fingerprint = Fingerprint(request, rows);
+        var label = request.LabelBarcode?.Trim();
+        var fingerprint = Fingerprint(request, rows, label);
+        var legacyFingerprint = label is not null ? Fingerprint(request, rows) : null;
         // Replay precedes changing Product/configuration/readiness checks: the operation already happened.
-        var replay = await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken);
+        var replay = await FindReceiptAsync(request, actor, fingerprint, legacyFingerprint, rows.Count, cancellationToken);
         if (replay is not null) return replay;
 
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
@@ -47,7 +49,7 @@ public sealed class CreateContainerBatchHandler(
         {
             // Serialize the request before allocating labels or inserting its set of unique receipt ordinals.
             await WarehouseWriteLocks.ReceivingRequestAsync(db, request.RequestId!.Value, cancellationToken);
-            replay = await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken);
+            replay = await FindReceiptAsync(request, actor, fingerprint, legacyFingerprint, rows.Count, cancellationToken);
             if (replay is not null) return replay;
 
             StockVoucher? voucher = null;
@@ -55,7 +57,7 @@ public sealed class CreateContainerBatchHandler(
             {
                 voucher = await WarehouseWriteLocks.VoucherAsync(db, voucherId, cancellationToken);
                 // A host that only holds the voucher lock can have committed while this request waited.
-                replay = await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken);
+                replay = await FindReceiptAsync(request, actor, fingerprint, legacyFingerprint, rows.Count, cancellationToken);
                 if (replay is not null) return replay;
                 if (voucher.Type != StockVoucherType.INBOUND)
                     throw new DomainValidationException("The batch requires an INBOUND voucher.", "voucher_not_inbound");
@@ -78,8 +80,8 @@ public sealed class CreateContainerBatchHandler(
                 throw new NotFoundException("A batch product was not found or is inactive.", "product_not_found");
             var byId = products.ToDictionary(p => p.Id);
             var now = DateTimeOffset.UtcNow;
-            var barcodes = request.LabelBarcode is { } label
-                ? await ClaimLabelAsync(label.Trim(), cancellationToken)
+            var barcodes = label is not null
+                ? await ClaimLabelAsync(label, cancellationToken)
                 : await codes.NextContainerCodesAsync(rows.Count, DateOnly.FromDateTime(now.UtcDateTime), cancellationToken);
             if (barcodes.Count != rows.Count || barcodes.Any(code => string.IsNullOrWhiteSpace(code) || code.Length > 100)
                 || barcodes.Distinct(StringComparer.Ordinal).Count() != rows.Count)
@@ -118,7 +120,7 @@ public sealed class CreateContainerBatchHandler(
             // The unique receipt ordinal arbitrates simultaneous requests, including a first request for the key.
             if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             db.ChangeTracker.Clear();
-            return await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken)
+            return await FindReceiptAsync(request, actor, fingerprint, legacyFingerprint, rows.Count, cancellationToken)
                 ?? throw new ConflictException("The receiving request changed. Retry using the same RequestId.", "container_creation_request_conflict");
         }
     }
@@ -133,12 +135,17 @@ public sealed class CreateContainerBatchHandler(
         return [label];
     }
 
-    private async Task<CreateContainerBatchResponse?> FindReceiptAsync(CreateContainerRequest request, Guid actor, string hash, int count, CancellationToken cancellationToken)
+    private async Task<CreateContainerBatchResponse?> FindReceiptAsync(CreateContainerRequest request, Guid actor, string hash,
+        string? legacyHash, int count, CancellationToken cancellationToken)
     {
         var existing = await db.Containers.AsNoTracking().Where(c => c.CreationRequestId == request.RequestId)
             .OrderBy(c => c.CreationOrdinal).ToListAsync(cancellationToken);
         if (existing.Count == 0) return null;
-        if (existing.Any(c => c.CreatedBy != actor || c.CreationRequestHash != hash || c.CreationStockVoucherId != request.StockVoucherId))
+        var label = request.LabelBarcode?.Trim();
+        // Older receipts hashed only the contents and voucher. Their stored barcode identifies the accepted label.
+        bool MatchesHash(Container box) => box.CreationRequestHash == hash
+            || (legacyHash is not null && box.CreationRequestHash == legacyHash && box.Barcode == label);
+        if (existing.Any(c => c.CreatedBy != actor || !MatchesHash(c) || c.CreationStockVoucherId != request.StockVoucherId))
             throw new ConflictException("RequestId has already been used by a different receiving request.", "container_creation_request_conflict");
         if (existing.Count != count || !existing.Select(c => c.CreationOrdinal).SequenceEqual(Enumerable.Range(1, count).Select(i => (int?)i)))
             throw new ConflictException("The receiving receipt is incomplete; reconcile it before creating another batch.", "container_creation_receipt_incomplete");
@@ -168,14 +175,16 @@ public sealed class CreateContainerBatchHandler(
         return result;
     }
 
-    private static string Fingerprint(CreateContainerRequest request, IEnumerable<PlannedContainer> rows)
+    private static string Fingerprint(CreateContainerRequest request, IEnumerable<PlannedContainer> rows, string? label = null)
     {
         // Hash effective quantities, not JSON decimal scale or override ordering. Scope/location are part of intent.
         var effectiveRows = rows.Select(row => new { row.GroupKey, row.ContainerNo, row.ProductId, Quantity = row.Quantity.ToString("G29", CultureInfo.InvariantCulture), row.Unit, row.SupplierBarcode });
-        // Preserve hashes of pre-existing unlinked receipts. Only linked requests add the voucher to intent.
-        var normalized = request.StockVoucherId is null
-            ? JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, Rows = effectiveRows })
-            : JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, request.StockVoucherId, Rows = effectiveRows });
+        // Preserve both older hash shapes for receipts created before a pre-printed label was part of the intent.
+        var normalized = label is not null
+            ? JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, request.StockVoucherId, LabelBarcode = label, Rows = effectiveRows })
+            : request.StockVoucherId is null
+                ? JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, Rows = effectiveRows })
+                : JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, request.StockVoucherId, Rows = effectiveRows });
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 

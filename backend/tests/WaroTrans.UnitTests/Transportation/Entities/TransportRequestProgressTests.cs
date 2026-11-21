@@ -101,6 +101,25 @@ public sealed class TransportRequestProgressTests
     }
 
     [Fact]
+    public void Cancelling_keeps_a_confirmed_delivery_reserved_until_its_warehouse_posting_is_queued()
+    {
+        var request = Request(TransportRequestDetailStatus.IN_PROGRESS, TransportRequestDetailStatus.QUEUED);
+        var delivered = request.Details.OrderBy(detail => detail.SequenceNo).First();
+
+        request.ApplyCancel(Guid.NewGuid(), "customer cancelled", new HashSet<Guid>(), DateTimeOffset.UtcNow,
+            new HashSet<Guid> { delivered.ContainerId });
+
+        Assert.Equal(TransportRequestDetailStatus.IN_PROGRESS, delivered.Status);
+        Assert.Equal(TransportRequestStatus.CANCELLING, request.Status);
+        Assert.False(request.IsClosed);
+
+        delivered.Status = TransportRequestDetailStatus.COMPLETED;
+        request.ApplyDetailProgress(DateTimeOffset.UtcNow);
+        Assert.Equal(TransportRequestStatus.PARTIALLY_COMPLETED, request.Status);
+        Assert.True(request.IsClosed);
+    }
+
+    [Fact]
     public void Cargo_on_a_robot_keeps_the_request_cancelling_until_it_is_recovered()
     {
         var request = Request(TransportRequestDetailStatus.IN_PROGRESS, TransportRequestDetailStatus.QUEUED);

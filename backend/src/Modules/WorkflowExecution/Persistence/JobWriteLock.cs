@@ -5,7 +5,7 @@ namespace WaroTrans.WorkflowExecution.Persistence;
 
 internal static class JobWriteLock
 {
-    // Serialize mutations that coordinate a stop's claim with its individual workflow steps.
+    // Serialize handover, recovery and operator decisions that act on the same Job and cargo.
     internal static async Task<IDbContextTransaction?> AcquireAsync(
         WorkflowExecutionDbContext db, Guid jobId, CancellationToken cancellationToken)
     {

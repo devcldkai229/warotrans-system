@@ -287,28 +287,44 @@ public sealed class TransportCancellationService(
     private async Task CancelWholeRequestAsync(TransportCancellation operation, CancellationToken cancellationToken)
     {
         var reason = operation.Reason ?? operation.ReasonCode;
-        var request = await LoadRequestAsync(operation.TransportRequestId, cancellationToken);
-        if (request.Status != TransportRequestStatus.CANCELLING)
+        var requestId = operation.TransportRequestId;
+        TransportRequest request;
+        await using (var transaction = await TransportRequestWriteLock.AcquireAsync(db, requestId, cancellationToken))
         {
-            request.Status = TransportRequestStatus.CANCELLING;
-            request.CancelledBy = operation.RequestedBy;
-            request.CancelReason = reason;
-            request.CancelRequestedAt = operation.RequestedAt;
-            request.UpdatedAt = Now;
-            await db.SaveChangesAsync(cancellationToken);
+            db.ChangeTracker.Clear();
+            request = await LoadRequestAsync(requestId, cancellationToken);
+            if (request.Status != TransportRequestStatus.CANCELLING)
+            {
+                request.Status = TransportRequestStatus.CANCELLING;
+                request.CancelledBy = operation.RequestedBy;
+                request.CancelReason = reason;
+                request.CancelRequestedAt = operation.RequestedAt;
+                request.UpdatedAt = Now;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
         }
 
-        var outcomes = await jobControl.CancelForRequestAsync(request.Id, reason, cancellationToken);
+        // WorkflowExecution and container events acquire their own locks during the fan-out.
+        var outcomes = await jobControl.CancelForRequestAsync(requestId, reason, cancellationToken);
         var inRecovery = outcomes
             .Where(o => o.Outcome == ContainerCancelOutcome.RecoveryRequired)
             .Select(o => o.ContainerId)
             .ToHashSet();
+        var confirmedHandovers = outcomes.Where(o => o.Outcome is ContainerCancelOutcome.AlreadyDelivered or ContainerCancelOutcome.AlreadyHandedOver)
+            .Select(o => o.ContainerId).ToHashSet();
 
-        // Container events from the Jobs were applied in their own scope: start again from what is stored.
-        db.ChangeTracker.Clear();
-        request = await LoadRequestAsync(request.Id, cancellationToken);
-        request.ApplyCancel(request.CancelledBy ?? operation.RequestedBy, request.CancelReason ?? reason, inRecovery, Now);
-        await db.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await TransportRequestWriteLock.AcquireAsync(db, requestId, cancellationToken))
+        {
+            db.ChangeTracker.Clear();
+            request = await LoadRequestAsync(requestId, cancellationToken);
+            request.ApplyCancel(request.CancelledBy ?? operation.RequestedBy, request.CancelReason ?? reason, inRecovery, Now, confirmedHandovers);
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
+        }
 
         logger.LogInformation(
             "TransportRequest {RequestCode} cancelled: {Recovery} container(s) on a robot, status {Status}",
@@ -336,19 +352,24 @@ public sealed class TransportCancellationService(
         var outcomes = await jobControl.CancelContainersBeforePickupAsync(request.Id, containerIds, $"Detail cancelled: {reason}", cancellationToken);
         var handledByJobs = outcomes.Select(o => o.ContainerId).ToHashSet();
 
-        db.ChangeTracker.Clear();
-        request = await LoadRequestAsync(request.Id, cancellationToken);
-        var now = Now;
-        // Details no Job carries yet (request not queued): nothing physical to stop.
-        foreach (var detail in request.Details.Where(d =>
-                     containerIds.Contains(d.ContainerId) && !handledByJobs.Contains(d.ContainerId) && !TransportRequest.IsTerminal(d.Status)))
+        await using (var transaction = await TransportRequestWriteLock.AcquireAsync(db, request.Id, cancellationToken))
         {
-            detail.Status = TransportRequestDetailStatus.CANCELLED;
-            detail.UpdatedAt = now;
-        }
+            db.ChangeTracker.Clear();
+            request = await LoadRequestAsync(request.Id, cancellationToken);
+            var now = Now;
+            // Details without Jobs can be cancelled directly.
+            foreach (var detail in request.Details.Where(d =>
+                         containerIds.Contains(d.ContainerId) && !handledByJobs.Contains(d.ContainerId) && !TransportRequest.IsTerminal(d.Status)))
+            {
+                detail.Status = TransportRequestDetailStatus.CANCELLED;
+                detail.UpdatedAt = now;
+            }
 
-        request.ApplyDetailProgress(now);
-        await db.SaveChangesAsync(cancellationToken);
+            request.ApplyDetailProgress(now);
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
+        }
         logger.LogInformation("TransportRequest {RequestCode}: {Count} detail(s) cancelled before pickup", request.RequestCode, targets.Count);
         await events.PublishAsync(TransportRequestEvents.Progressed(request), cancellationToken);
     }
@@ -947,53 +968,70 @@ public sealed class TransportCancellationService(
     /// <summary>Containers unloaded by hand are posted to Warehouse (ordered after their pickup). A lost write is queued again here.</summary>
     private async Task EnsureHandoverPostingsAsync(TransportCancellation operation, CancellationToken cancellationToken)
     {
+        var handovers = operation.Items.SelectMany(item => item.Containers
+            .Where(box => box.Resolution == ContainerResolutions.HandedOver && box.StorageLocationId is not null)
+            .Select(box => (item.JobId, Box: box))).ToArray();
+        if (handovers.Length == 0) return;
+
         var queued = new List<StockPosting>();
-        foreach (var item in operation.Items)
+        TransportRequest request;
+        var detailsChanged = false;
+        await using (var transaction = await TransportRequestWriteLock.AcquireAsync(db, operation.TransportRequestId, cancellationToken))
         {
-            foreach (var row in item.Containers.Where(c => c.Resolution == ContainerResolutions.HandedOver && c.StorageLocationId is not null))
+            // The caller may have loaded the request before another reader queued a handover.
+            if (db.TransportRequests.Local.FirstOrDefault(item => item.Id == operation.TransportRequestId) is { } tracked)
             {
-                var key = $"{item.JobId:N}:{row.ContainerId:N}:{StockPostingType.CANCEL_HANDOVER}";
-                if (await db.StockPostings.AnyAsync(p => p.Key == key, cancellationToken))
+                foreach (var detail in tracked.Details.ToArray())
+                    db.Entry(detail).State = EntityState.Detached;
+                db.Entry(tracked).State = EntityState.Detached;
+            }
+            request = await LoadRequestAsync(operation.TransportRequestId, cancellationToken);
+            var now = Now;
+            var existingKeys = (await db.StockPostings.AsNoTracking()
+                .Where(posting => posting.TransportRequestId == request.Id && posting.Type == StockPostingType.CANCEL_HANDOVER)
+                .Select(posting => posting.Key).ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
+            var details = request.Details.ToDictionary(detail => detail.ContainerId);
+            foreach (var (jobId, box) in handovers)
+            {
+                var key = $"{jobId:N}:{box.ContainerId:N}:{StockPostingType.CANCEL_HANDOVER}";
+                if (existingKeys.Add(key))
                 {
-                    continue;
+                    var posting = new StockPosting
+                    {
+                        Id = Guid.NewGuid(),
+                        Key = key,
+                        Type = StockPostingType.CANCEL_HANDOVER,
+                        ContainerId = box.ContainerId,
+                        JobId = jobId,
+                        TransportRequestId = request.Id,
+                        DestinationStorageLocationId = box.StorageLocationId,
+                        DestinationLevelNo = box.LevelNo ?? 1,
+                        ActorAccountId = box.HandedOverBy,
+                        CreatedAt = box.HandedOverAt ?? now
+                    };
+                    db.StockPostings.Add(posting);
+                    queued.Add(posting);
                 }
 
-                var posting = new StockPosting
+                if (details.TryGetValue(box.ContainerId, out var detail) && !TransportRequest.IsTerminal(detail.Status))
                 {
-                    Id = Guid.NewGuid(),
-                    Key = key,
-                    Type = StockPostingType.CANCEL_HANDOVER,
-                    ContainerId = row.ContainerId,
-                    JobId = item.JobId,
-                    TransportRequestId = operation.TransportRequestId,
-                    DestinationStorageLocationId = row.StorageLocationId,
-                    DestinationLevelNo = row.LevelNo ?? 1,
-                    ActorAccountId = row.HandedOverBy,
-                    CreatedAt = Now
-                };
-                db.StockPostings.Add(posting);
-                queued.Add(posting);
+                    detail.Status = TransportRequestDetailStatus.CANCELLED;
+                    detail.UpdatedAt = now;
+                    detailsChanged = true;
+                }
             }
-        }
 
-        if (queued.Count == 0)
-        {
-            return;
-        }
-
-        try
-        {
+            if (detailsChanged)
+                request.ApplyDetailProgress(now);
             await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-        {
-            return; // queued at the same moment by another refresh
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
         }
 
         foreach (var posting in queued)
-        {
             await postings.PostNowAsync(posting, cancellationToken);
-        }
+        if (detailsChanged)
+            await events.PublishAsync(TransportRequestEvents.Progressed(request), cancellationToken);
     }
 
     private async Task ReportManualAsync(

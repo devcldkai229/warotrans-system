@@ -7,7 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.IntegrationTests.Infrastructure;
 using WaroTrans.Transportation.Entities;
+using WaroTrans.Transportation.Enums;
 using WaroTrans.Transportation.Persistence;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Persistence;
@@ -155,6 +157,10 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
 
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+        var lookup = scope.ServiceProvider.GetRequiredService<IContainerTransportLookup>();
+        var request = await db.TransportRequests.Include(item => item.Details).SingleAsync(item => item.Id == requestId);
+        request.Status = TransportRequestStatus.COMPLETED;
+        Assert.Single(request.Details).Status = TransportRequestDetailStatus.COMPLETED;
         var pickup = new StockPosting
         {
             Id = Guid.NewGuid(), Key = $"{jobId:N}:{seed.ContainerId:N}:PICKUP", Type = StockPostingType.PICKUP,
@@ -175,6 +181,7 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
         Assert.NotNull(pending);
         Assert.Equal(new PostingDto(jobId, "POSTED", pickup.CreatedAt, pickup.PostedAt, null), pending.Pickup);
         Assert.Equal(new PostingDto(jobId, "PENDING", recordedAt, null, retryAt), pending.Delivery);
+        Assert.Contains(seed.ContainerId, await lookup.GetContainersInActiveTransportAsync([seed.ContainerId]));
 
         delivery.Attempts = 1;
         delivery.LastError = "Internal Warehouse error for test";
@@ -192,6 +199,7 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
         await db.SaveChangesAsync();
         var posted = Assert.Single((await Client.GetFromJsonAsync<GetDto>(path, JsonOptions))!.Details).WarehouseSync;
         Assert.Equal(new PostingDto(jobId, "POSTED", recordedAt, delivery.PostedAt, null), posted!.Delivery);
+        Assert.Empty(await lookup.GetContainersInActiveTransportAsync([seed.ContainerId]));
     }
 
     [Fact]

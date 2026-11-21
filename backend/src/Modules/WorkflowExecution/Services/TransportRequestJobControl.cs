@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.WorkflowExecution.Contracts;
+using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Persistence;
 
@@ -35,6 +36,15 @@ public sealed class TransportRequestJobControl(
                     .OrderBy(j => j.JobNo)
                     .ToList());
     }
+
+    public async Task<IReadOnlyList<PendingStockHandover>> GetPendingStockHandoversAsync(
+        Guid transportRequestId, CancellationToken cancellationToken = default) =>
+        await db.StockHandovers.AsNoTracking()
+            .Where(handover => handover.TransportRequestId == transportRequestId)
+            .Select(handover => new PendingStockHandover(handover.JobId, handover.ContainerId,
+                handover.Type == HandoverType.PICKUP, handover.ConfirmedAt,
+                handover.Attempts > 0 ? handover.NextAttemptAt : null))
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<ContainerCancelOutcome>> CancelForRequestAsync(
         Guid transportRequestId,

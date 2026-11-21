@@ -4,6 +4,7 @@ using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Contracts;
+using WaroTrans.WorkflowExecution.Contracts;
 
 namespace WaroTrans.Transportation.Services;
 
@@ -16,7 +17,8 @@ public sealed class StockPostingProcessor(
     IContainerMovementRecorder movements,
     ILogger<StockPostingProcessor> logger,
     IIssueReporter? issues = null,
-    IMapEndpointCatalog? endpoints = null)
+    IMapEndpointCatalog? endpoints = null,
+    ITransportRequestJobControl? jobControl = null)
 {
     public const int AttemptsBeforeIssue = 5;
     private const int BatchSize = 200;
@@ -68,6 +70,9 @@ public sealed class StockPostingProcessor(
     {
         try
         {
+            if (posting.Type == StockPostingType.CANCEL_HANDOVER && await HasUnpostedPickupAsync(posting, cancellationToken))
+                return false;
+
             // The TR detail is the durable source of the actual gate, including on an outbox retry.
             var destination = await db.TransportRequestDetails.AsNoTracking()
                 .Where(d => d.TransportRequestId == posting.TransportRequestId && d.ContainerId == posting.ContainerId)
@@ -152,6 +157,20 @@ public sealed class StockPostingProcessor(
 
             return false;
         }
+    }
+
+    private async Task<bool> HasUnpostedPickupAsync(StockPosting handover, CancellationToken cancellationToken)
+    {
+        // Read the Execution outbox first. If the pickup leaves it, the Transportation posting is already durable.
+        if (jobControl is not null)
+        {
+            var pending = await jobControl.GetPendingStockHandoversAsync(handover.TransportRequestId, cancellationToken);
+            if (pending.Any(item => item.IsPickup && item.JobId == handover.JobId && item.ContainerId == handover.ContainerId))
+                return true;
+        }
+
+        return await db.StockPostings.AnyAsync(item => item.JobId == handover.JobId && item.ContainerId == handover.ContainerId
+            && item.Type == StockPostingType.PICKUP && item.PostedAt == null, cancellationToken);
     }
 
     private static TimeSpan Backoff(int attempts)

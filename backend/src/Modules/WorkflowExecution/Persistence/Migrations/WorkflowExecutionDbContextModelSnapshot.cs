@@ -631,6 +631,63 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.ToTable("job_tasks", "execution");
                 });
 
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.StockHandover", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<Guid>("ContainerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_id");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<Guid>("TransportRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_request_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_stock_handover_outbox");
+
+                    b.HasIndex("NextAttemptAt")
+                        .HasDatabaseName("i_x_stock_handover_outbox_next_attempt_at");
+
+                    b.HasIndex("TransportRequestId")
+                        .HasDatabaseName("i_x_stock_handover_outbox_transport_request_id");
+
+                    b.HasIndex("JobId", "ContainerId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_stock_handover_outbox_job_id_container_id_type");
+
+                    b.ToTable("stock_handover_outbox", "execution");
+                });
+
             modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.Workflow", b =>
                 {
                     b.Property<Guid>("Id")

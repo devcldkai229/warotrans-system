@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace WaroTrans.IntegrationTests.Infrastructure;
 
 /// <summary>
@@ -18,4 +20,8 @@ public static class TestConnectionStrings
     public static string MongoDatabaseName =>
         Environment.GetEnvironmentVariable("Mongo__DatabaseName")
         ?? "warotrans_operations_test";
+
+    public static string MqttHost => Environment.GetEnvironmentVariable("Mqtt__Host") ?? "localhost";
+
+    public static int MqttPort => int.Parse(Environment.GetEnvironmentVariable("Mqtt__Port") ?? "1883", CultureInfo.InvariantCulture);
 }
