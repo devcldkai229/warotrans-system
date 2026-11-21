@@ -80,6 +80,15 @@ internal sealed class EvidenceEventCapture(
             payload["taskName"] = step.TaskName;
             payload["stepPosition"] = step.Position;
             payload["stepCount"] = step.StepCount;
+            if (step.Purpose is not null)
+            {
+                payload["purpose"] = step.Purpose;
+            }
+
+            if (step.OperationCode is not null)
+            {
+                payload["operationCode"] = step.OperationCode;
+            }
             if (step.TargetEndpointId is { } endpointId
                 && (await navigation.GetEndpointsAsync([endpointId], ct)).FirstOrDefault() is { } endpoint)
             {

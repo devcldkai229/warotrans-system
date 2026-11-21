@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Annotation, EvidenceEvent, RecordingSpans, ReplayRun } from '@/shared/api/evidence'
 import { t } from '@/shared/i18n'
 import { cx } from '@/shared/lib/cx'
-import { footage, formatElapsed, fraction, ms, type StepSpan } from './replayModel'
+import { footage, formatElapsed, fraction, ms, type StepSpan, type VideoHole } from './replayModel'
 
 interface JourneyTimelineProps {
   fromMs: number
@@ -16,6 +16,8 @@ interface JourneyTimelineProps {
   /** The trips' steps; each run shows those of its own Job on a row under it. */
   steps: StepSpan[]
   activeStepId: string | null
+  /** Stretches of each run without picture: amber hatching on the video bar, click to go to where video resumes. */
+  holesByRun?: Record<string, VideoHole[]>
   selectedRunId: string | null
   onSelectRun: (runId: string) => void
   onSeek: (t: number) => void
@@ -64,6 +66,7 @@ export function JourneyTimeline({
   annotations,
   steps,
   activeStepId,
+  holesByRun = {},
   selectedRunId,
   onSelectRun,
   onSeek,
@@ -189,6 +192,27 @@ export function JourneyTimeline({
                   />
                 )),
               )}
+              {/* No video: amber hatching where the run has no picture */}
+              {(holesByRun[run.id] ?? []).map((h) => {
+                const a = fraction(h.fromMs, fromMs, toMs)
+                const b = fraction(h.toMs, fromMs, toMs)
+                return (
+                  <button
+                    key={`hole-${h.fromMs}`}
+                    type="button"
+                    data-mark
+                    data-testid="video-hole-mark"
+                    title={`${clock(h.fromMs)} → ${clock(h.toMs)} · ${t('No video')} (${formatElapsed(h.toMs - h.fromMs)})`}
+                    onClick={() => onSeek(h.nextVideoMs ?? h.fromMs)}
+                    className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"
+                    style={{
+                      left: `${a * 100}%`,
+                      width: `max(3px, ${Math.max(0, b - a) * 100}%)`,
+                      background: 'repeating-linear-gradient(135deg, rgb(245 158 11 / 0.85) 0 3px, rgb(245 158 11 / 0.25) 3px 6px)',
+                    }}
+                  />
+                )
+              })}
               {/* Incidents */}
               {events
                 .filter((e) => e.runId === run.id && e.severity !== 'INFO')

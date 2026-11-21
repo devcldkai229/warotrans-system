@@ -206,6 +206,8 @@ interface StepPayload {
   stepCount?: number
   targetEndpointCode?: string
   targetEndpointName?: string
+  purpose?: string
+  operationCode?: string
   errorCode?: string | null
 }
 
@@ -243,6 +245,10 @@ export interface StepSpan {
   count: number | null
   targetCode: string | null
   targetName: string | null
+  /** PICKUP / DROPOFF for a MOVE, as the core resolved it; null on old journals. */
+  purpose: string | null
+  /** PICKUP_CONFIRM / DROPOFF_CONFIRM for a staff step; null on old journals. */
+  operationCode: string | null
   startMs: number
   /** Null while it still ran when the journal ends. */
   endMs: number | null
@@ -276,6 +282,8 @@ export function stepTimeline(events: { eventType: string; occurredAtUtc: string;
         count: p.stepCount ?? null,
         targetCode: p.targetEndpointCode ?? null,
         targetName: p.targetEndpointName ?? null,
+        purpose: p.purpose ?? null,
+        operationCode: p.operationCode ?? null,
         startMs: at,
         endMs: null,
         status,
@@ -314,4 +322,161 @@ export function stepJump(spans: StepSpan[], cursorMs: number, direction: 1 | -1)
   // From inside a step that has run a while, "previous" first goes back to its own start, like a media player.
   if (current && cursorMs - current.startMs > 1500) return current.startMs
   return [...starts].reverse().find((t) => t < cursorMs - 250 && t !== current?.startMs) ?? starts[0] ?? null
+}
+
+// ---------------------------------------------------------------------------------------------------- video holes
+
+/** Why a robot has no picture at some time. Server reasons (spans endpoint) plus the ones only the page can see. */
+export type HoleReason = string
+
+export interface VideoHole {
+  fromMs: number
+  toMs: number
+  reason: HoleReason
+  /** Where video resumes (the "jump to video" target); null when nothing comes after. */
+  nextVideoMs: number | null
+}
+
+interface SpanLike {
+  utcStart: string
+  utcEnd: string
+}
+interface GapLike {
+  fromUtc: string
+  toUtc: string
+  reason: string
+}
+
+/** Holes shorter than this are a frame or two at a boundary: not worth a warning. */
+export const MIN_HOLE_MS = 300
+
+/**
+ * Every stretch of a run with no picture, from the run's start to its end: before the camera started, between two
+ * pieces of video (the server's reason when it knows one, else "the robot stopped recording" between recordings), after
+ * the last frame. A run with no video at all is one NO_RECORDING hole.
+ */
+export function videoHoles(spans: SpanLike[], gaps: GapLike[], runStartMs: number, runEndMs: number): VideoHole[] {
+  if (runEndMs <= runStartMs) return []
+  const sorted = spans.map((s) => [Date.parse(s.utcStart), Date.parse(s.utcEnd)] as const).sort((a, b) => a[0] - b[0])
+  if (sorted.length === 0) return [{ fromMs: runStartMs, toMs: runEndMs, reason: 'NO_RECORDING', nextVideoMs: null }]
+  const known = gaps.map((g) => ({ from: Date.parse(g.fromUtc), to: Date.parse(g.toUtc), reason: g.reason }))
+  const reasonFor = (from: number, to: number, fallback: HoleReason): HoleReason =>
+    known.find((g) => g.from < to && g.to > from && g.reason !== 'NO_VIDEO' && g.reason !== 'NOT_YET_RECORDED')?.reason ?? fallback
+  const holes: VideoHole[] = []
+  let covered = runStartMs
+  let first = true
+  for (const [start, end] of sorted) {
+    if (start - covered >= MIN_HOLE_MS) {
+      holes.push({ fromMs: covered, toMs: start, reason: reasonFor(covered, start, first ? 'NOT_YET_RECORDED' : 'RECORDING_STOPPED'), nextVideoMs: start })
+    }
+    covered = Math.max(covered, end)
+    first = false
+  }
+  if (runEndMs - covered >= MIN_HOLE_MS) {
+    holes.push({ fromMs: covered, toMs: runEndMs, reason: reasonFor(covered, runEndMs, 'AFTER_RECORDING'), nextVideoMs: null })
+  }
+  return holes
+}
+
+/** The hole the cursor is in, if any. */
+export function holeAt(holes: VideoHole[], t: number): VideoHole | null {
+  return holes.find((h) => h.fromMs <= t && t < h.toMs) ?? null
+}
+
+// ---------------------------------------------------------------------------------------------------- what the robot does
+
+export interface PlaceLike {
+  code: string
+  name: string
+  x: number
+  y: number
+}
+
+export type ActivityKind = 'TO_PICKUP' | 'TO_DROPOFF' | 'MOVING' | 'AT_PICKUP' | 'AT_DROPOFF' | 'AT_STOP' | 'IDLE'
+
+/** "From Shelf B-2 to Shelf C-1 to deliver": the trip leg under the cursor, in words the floor uses. */
+export interface Activity {
+  kind: ActivityKind
+  /** Where the leg starts (previous stop, or the nearest place to where the robot stood); null when unknown. */
+  from: string | null
+  /** Where it goes, or where the robot stands for a staff step. */
+  to: string | null
+}
+
+function placeLabel(code: string | null, name: string | null): string | null {
+  if (!code && !name) return null
+  return name && code && name !== code ? `${name} (${code})` : name || code
+}
+
+/** PICKUP / DROPOFF of a step: the core's purpose / operation code, else guessed from its key or name (old journals). */
+export function stepGoal(step: Pick<StepSpan, 'key' | 'name' | 'purpose' | 'operationCode'>): 'PICKUP' | 'DROPOFF' | null {
+  const said = `${step.purpose ?? ''} ${step.operationCode ?? ''}`.toUpperCase()
+  if (said.includes('PICKUP')) return 'PICKUP'
+  if (said.includes('DROPOFF') || said.includes('DROP_OFF') || said.includes('DELIVER')) return 'DROPOFF'
+  const text = `${step.key} ${step.name}`.toUpperCase()
+  if (/PICK/.test(text)) return 'PICKUP'
+  if (/DROP|DELIVER/.test(text)) return 'DROPOFF'
+  return null
+}
+
+/** The nearest named place within `radius` metres of a point. */
+export function nearestPlace(places: PlaceLike[], x: number, y: number, radius = 0.6): PlaceLike | null {
+  let best: PlaceLike | null = null
+  let bestD = radius
+  for (const p of places) {
+    const d = Math.hypot(p.x - x, p.y - y)
+    if (d <= bestD) {
+      best = p
+      bestD = d
+    }
+  }
+  return best
+}
+
+export function activityAt(
+  steps: StepSpan[],
+  current: StepSpan | null,
+  startPose: { x: number; y: number } | null,
+  places: PlaceLike[],
+): Activity {
+  if (!current) return { kind: 'IDLE', from: null, to: null }
+  const index = steps.indexOf(current)
+  const previousMove = [...steps.slice(0, Math.max(0, index))].reverse().find((s) => s.type === 'MOVE' && s.targetCode)
+  const goal = stepGoal(current)
+  if (current.type === 'MOVE') {
+    const start = startPose ? nearestPlace(places, startPose.x, startPose.y) : null
+    const from = previousMove
+      ? placeLabel(previousMove.targetCode, previousMove.targetName)
+      : start
+        ? placeLabel(start.code, start.name)
+        : null
+    return {
+      kind: goal === 'PICKUP' ? 'TO_PICKUP' : goal === 'DROPOFF' ? 'TO_DROPOFF' : 'MOVING',
+      from,
+      to: placeLabel(current.targetCode, current.targetName),
+    }
+  }
+  const here = current.targetCode
+    ? placeLabel(current.targetCode, current.targetName)
+    : previousMove
+      ? placeLabel(previousMove.targetCode, previousMove.targetName)
+      : null
+  return { kind: goal === 'PICKUP' ? 'AT_PICKUP' : goal === 'DROPOFF' ? 'AT_DROPOFF' : 'AT_STOP', from: null, to: here }
+}
+
+// ---------------------------------------------------------------------------------------------------- event ticker
+
+/**
+ * The ticker's scroll position at t, in rows: event i sits at row i; between two events the list slides at a steady
+ * pace from one to the next, so playing the replay makes the feed drift instead of jumping.
+ */
+export function tickerPosition(times: number[], t: number): number {
+  if (times.length === 0) return 0
+  if (t <= times[0]!) return 0
+  for (let i = 0; i < times.length - 1; i++) {
+    const a = times[i]!
+    const b = times[i + 1]!
+    if (t < b) return b === a ? i + 1 : i + (t - a) / (b - a)
+  }
+  return times.length - 1
 }

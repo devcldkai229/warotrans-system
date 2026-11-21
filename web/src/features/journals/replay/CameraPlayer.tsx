@@ -15,6 +15,8 @@ interface CameraPlayerProps {
   rate: number
   /** The secondary player starts at the lowest rendition (two streams at once on a modest browser). */
   secondary?: boolean
+  /** Why there is no picture at the cursor (a warning with the reason), and where video resumes. */
+  hole?: { title: string; reason: string; jumpLabel?: string; onJump?: () => void } | null
 }
 
 const STATE_LABEL: Record<CameraState, string> = {
@@ -30,7 +32,7 @@ const STATE_LABEL: Record<CameraState, string> = {
  * recording's measured spans to a media time; the player is sought or nudged back onto it. Where no span covers the
  * cursor the video is hidden and the reason shown — never a frozen last frame.
  */
-export function CameraPlayer({ robotCode, spans, hasRecording, cursorMs, playing, rate, secondary = false }: CameraPlayerProps) {
+export function CameraPlayer({ robotCode, spans, hasRecording, cursorMs, playing, rate, secondary = false, hole = null }: CameraPlayerProps) {
   const video = useRef<HTMLVideoElement>(null)
   const hls = useRef<Hls | null>(null)
   const [grant, setGrant] = useState<{ assetId: string; value: PlaybackGrant } | null>(null)
@@ -122,7 +124,32 @@ export function CameraPlayer({ robotCode, spans, hasRecording, cursorMs, playing
       {state === 'SYNC_UNCERTAIN' ? (
         <span className="absolute right-3 top-3 rounded-sm bg-amber-400/95 px-2 py-1 text-xs font-semibold text-black">{STATE_LABEL.SYNC_UNCERTAIN}</span>
       ) : null}
-      {!showVideo ? (
+      {!showVideo && hole && !error && state !== 'PROCESSING' ? (
+        <div
+          role="status"
+          data-testid="video-hole"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-800 to-slate-950 p-4 text-center text-white/85"
+        >
+          <span
+            className={cx('inline-flex items-center justify-center rounded-full', secondary ? 'size-7' : 'size-11')}
+            style={{ background: 'rgb(251 191 36 / 0.15)', color: '#fcd34d' }}
+          >
+            <Icon name="alert" size={secondary ? 15 : 22} />
+          </span>
+          <span className={cx('font-semibold text-white', secondary ? 'text-[11px]' : 'text-sm')}>{hole.title}</span>
+          {!secondary ? <span className="max-w-md text-xs text-white/70">{hole.reason}</span> : null}
+          {!secondary && hole.onJump ? (
+            <button
+              type="button"
+              onClick={hole.onJump}
+              className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+            >
+              <Icon name="play" size={12} />
+              {hole.jumpLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : !showVideo ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-800 to-slate-950 p-4 text-center text-white/80">
           <Icon name={overlayIcon} size={secondary ? 18 : 28} className={cx('text-white/60', state === 'PROCESSING' && 'animate-spin')} />
           <span className={secondary ? 'text-[11px]' : 'text-sm'}>{error ? `${t('Video error')}: ${error}` : state ? STATE_LABEL[state] : ''}</span>

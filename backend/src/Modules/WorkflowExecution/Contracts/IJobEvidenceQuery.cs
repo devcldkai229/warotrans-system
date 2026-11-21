@@ -31,6 +31,8 @@ public sealed record JobEvidenceContext(
 
 /// <param name="Position">1-based place of the step in the whole trip (tasks in order, then steps in order).</param>
 /// <param name="StepCount">Number of steps of the trip.</param>
+/// <param name="Purpose">What a MOVE goes for, as resolved (PICKUP, DROPOFF …); null when the step has none.</param>
+/// <param name="OperationCode">What a staff step confirms (PICKUP_CONFIRM, DROPOFF_CONFIRM …); null when none.</param>
 public sealed record JobStepEvidenceView(
     Guid JobStepId,
     string StepType,
@@ -38,7 +40,9 @@ public sealed record JobStepEvidenceView(
     string TaskName,
     int Position,
     int StepCount,
-    Guid? TargetEndpointId);
+    Guid? TargetEndpointId,
+    string? Purpose = null,
+    string? OperationCode = null);
 
 public sealed record JobRobotAssignmentView(
     Guid AssignmentId,

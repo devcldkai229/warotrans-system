@@ -66,13 +66,23 @@ internal static class PlaybackEndpoints
             .Where(s => ready.Contains(s.MediaAssetId))
             .OrderBy(s => s.UtcStart)
             .ToList();
+        // Why the video after a hole starts a new continuity group (camera lost, robot rebooted, frames skipped …), so
+        // the replay can say why there is no picture instead of only that there is none.
+        var groupOfAsset = assets.ToDictionary(a => a.Id, a => a.ContinuityGroupId);
+        var groupIds = groupOfAsset.Values.Distinct().ToList();
+        var gapReasonOfGroup = await db.ContinuityGroups.AsNoTracking()
+            .Where(g => groupIds.Contains(g.Id) && g.GapReason != null)
+            .ToDictionaryAsync(g => g.Id, g => g.GapReason!.Value.ToString(), ct);
         var gaps = new List<GapResponse>();
         var cursor = recording.StartedAtUtc;
         foreach (var span in spans)
         {
             if (span.UtcStart - cursor > TimeSpan.FromSeconds(1))
             {
-                gaps.Add(new GapResponse(cursor, span.UtcStart, cursor == recording.StartedAtUtc ? "NOT_YET_RECORDED" : "NO_VIDEO"));
+                var known = groupOfAsset.TryGetValue(span.MediaAssetId, out var group) && gapReasonOfGroup.TryGetValue(group, out var why)
+                    ? why
+                    : null;
+                gaps.Add(new GapResponse(cursor, span.UtcStart, cursor == recording.StartedAtUtc ? "NOT_YET_RECORDED" : known ?? "NO_VIDEO"));
             }
 
             cursor = span.UtcEnd > cursor ? span.UtcEnd : cursor;

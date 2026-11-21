@@ -37,7 +37,9 @@ internal sealed class JobEvidenceQuery(WorkflowExecutionDbContext db) : IJobEvid
                     step.StepType,
                     definition.Name,
                     TaskName = taskDefinition.Name,
-                    step.TargetEndpointId
+                    step.TargetEndpointId,
+                    step.ResolvedInputs,
+                    definition.Config
                 })
             .ToListAsync(cancellationToken);
         var index = steps.FindIndex(s => s.Id == jobStepId);
@@ -47,8 +49,12 @@ internal sealed class JobEvidenceQuery(WorkflowExecutionDbContext db) : IJobEvid
         }
 
         var found = steps[index];
+        var purpose = found.ResolvedInputs.TryGetValue("purpose", out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+        var operation = string.IsNullOrWhiteSpace(found.Config?.OperationCode) ? null : found.Config.OperationCode;
         return new JobStepEvidenceView(found.Id, found.StepType.ToString(), found.Name, found.TaskName, index + 1, steps.Count,
-            found.TargetEndpointId);
+            found.TargetEndpointId, purpose, operation);
     }
 
     public async Task<IReadOnlyList<JobEvidenceContext>> GetJobsOfRequestAsync(

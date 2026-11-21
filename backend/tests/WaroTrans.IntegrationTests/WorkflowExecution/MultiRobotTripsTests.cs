@@ -191,6 +191,9 @@ public sealed class MultiRobotTripsTests(WaroTransWebApplicationFactory factory)
             });
             Assert.Contains(steps, p => p.GetProperty("stepType").GetString() == "MOVE"
                 && !string.IsNullOrEmpty(p.TryGetProperty("targetEndpointCode", out var code) ? code.GetString() : null));
+            // What the replay says the robot is doing: a MOVE carries its purpose (PICKUP / DROPOFF).
+            Assert.All(steps.Where(p => p.GetProperty("stepType").GetString() == "MOVE"), p =>
+                Assert.Contains(p.GetProperty("purpose").GetString(), new[] { "PICKUP", "DROPOFF" }));
         }
         finally
         {
