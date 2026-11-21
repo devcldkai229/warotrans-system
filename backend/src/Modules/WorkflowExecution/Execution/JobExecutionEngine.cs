@@ -2210,6 +2210,18 @@ public sealed partial class JobExecutionEngine(
         }
 
         var endpointId = step.ResolvedInputs["targetEndpointId"].GetGuid();
+        // TRN-03: a cancelled Job's robot takes its cargo to a recovery point instead of the step's own target.
+        var recoveryTo = RecoveryTarget(step);
+        if (recoveryTo is { } recoveryEndpoint)
+        {
+            if (step.OutputValues.ContainsKey(CancelRecoveryArrivedKey))
+            {
+                return false; // there already; HoldAtRecoveryAsync holds the Job
+            }
+
+            endpointId = recoveryEndpoint;
+        }
+
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
         if (pose is null || !pose.IsEnabled || pose.MapVersionId != job.MapVersionId)
         {
@@ -2320,7 +2332,7 @@ public sealed partial class JobExecutionEngine(
                         queueSince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var rs) ? rs.GetDateTimeOffset() : now;
                     }
 
-                    var area = queueZone is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
+                    var area = queueZone is not null || recoveryTo is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
                         z.QueueEndpointCode is not null && SemanticReservation.PointInRing(pose.X, pose.Y, z.Ring));
                     var busy = area is null ? null : await AreaBusyByAsync(job, step, robotId, area, policy, cancellationToken);
                     if (area is not null && busy is not null)
@@ -2405,6 +2417,11 @@ public sealed partial class JobExecutionEngine(
                         issued[SupersededCommandIdsKey] = supersededSemantic;
                     }
 
+                    if (recoveryTo is { } semanticRecovery)
+                    {
+                        issued[CancelRecoveryToKey] = JsonSerializer.SerializeToElement(semanticRecovery);
+                    }
+
                     step.OutputValues = issued;
                     await SaveAndPublishAsync(cancellationToken);
                     logger.LogInformation(
@@ -2420,6 +2437,13 @@ public sealed partial class JobExecutionEngine(
             }
 
             // Active Mode: segmented coordinator is sole motion authority (publisher issues MQTT).
+            if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null && recoveryTo is not null)
+            {
+                Fail(job, task, step, stepKey, "recovery_not_supported_in_traffic_mode",
+                    "Active Mode cannot drive to a recovery point.", DateTimeOffset.UtcNow);
+                return true;
+            }
+
             if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
             {
                 var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
@@ -2727,6 +2751,11 @@ public sealed partial class JobExecutionEngine(
             if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var superseded))
             {
                 outputs[SupersededCommandIdsKey] = superseded; // commands of earlier attempts (resume)
+            }
+
+            if (recoveryTo is { } legacyRecovery)
+            {
+                outputs[CancelRecoveryToKey] = JsonSerializer.SerializeToElement(legacyRecovery);
             }
 
             step.OutputValues = outputs;

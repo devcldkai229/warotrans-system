@@ -39,6 +39,8 @@ public static class TransportationModule
         services.AddHostedService<Services.StockPostingHostedService>();
 
         // TRN-03: cancellations followed until every robot and container is accounted for.
+        services.Configure<Features.Cancellation.TransportCancellationOptions>(
+            configuration.GetSection(Features.Cancellation.TransportCancellationOptions.SectionName));
         services.AddScoped<Features.Cancellation.TransportCancellationService>();
         services.AddHostedService<Services.TransportCancellationHostedService>();
 

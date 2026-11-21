@@ -34,6 +34,8 @@ public sealed partial class JobExecutionEngine
             .ToListAsync(cancellationToken);
         var jobs = await db.Jobs.AsNoTracking()
             .Include(j => j.JobContainers)
+            .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
+            .AsSplitQuery()
             .Where(j => jobIds.Contains(j.Id))
             .OrderBy(j => j.JobNo)
             .ToListAsync(cancellationToken);
@@ -43,6 +45,7 @@ public sealed partial class JobExecutionEngine
         {
             var robotId = AssignedRobot(job);
             var robot = robotId is { } rid ? await fleet.GetRobotAsync(rid, cancellationToken) : null;
+            var state = await CancelRobotStateAsync(job, robot, cancellationToken);
             views.Add(new RequestJobCancellationView(
                 job.Id,
                 job.JobNo,
@@ -56,7 +59,13 @@ public sealed partial class JobExecutionEngine
                     .OrderBy(c => c.SequenceNo)
                     .Select(c => new RequestJobContainerView(
                         c.ContainerId, c.TransportRequestId, c.Status.ToString(), c.FailureCode, c.LoadedAt, c.DeliveredAt))
-                    .ToList()));
+                    .ToList(),
+                state.Phase,
+                state.RecoveryEndpointId,
+                state.RecoveryCode,
+                state.Localized,
+                state.Fresh,
+                state.CanRecover));
         }
 
         return views;

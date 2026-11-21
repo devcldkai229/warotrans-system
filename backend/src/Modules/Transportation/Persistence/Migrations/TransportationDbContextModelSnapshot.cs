@@ -208,6 +208,38 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("containers");
 
+                    b.Property<string>("DestinationEndpointCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("destination_endpoint_code");
+
+                    b.Property<string>("DestinationNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("destination_note");
+
+                    b.Property<string>("DestinationStatus")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("destination_status");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("done_at");
+
+                    b.Property<DateTimeOffset?>("HandoverRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_requested_at");
+
+                    b.Property<Guid?>("HandoverRequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handover_requested_by");
+
+                    b.Property<string>("InitialPhase")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("initial_phase");
+
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
@@ -217,6 +249,16 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("job_no");
+
+                    b.Property<string>("Phase")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("RecoveryPointCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("recovery_point_code");
 
                     b.Property<string>("RobotCode")
                         .HasMaxLength(100)

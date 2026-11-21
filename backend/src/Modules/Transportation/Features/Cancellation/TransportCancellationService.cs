@@ -37,8 +37,14 @@ public sealed class TransportCancellationService(
     StockPostingProcessor postings,
     ILogger<TransportCancellationService> logger,
     IIssueReporter? issues = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    Microsoft.Extensions.Options.IOptions<TransportCancellationOptions>? options = null)
 {
+    private TransportCancellationOptions Options => options?.Value ?? new TransportCancellationOptions();
+
+    /// <summary>Where each robot was in its trip just before this cancel stopped it (destination policy).</summary>
+    private Dictionary<Guid, string>? _phasesBeforeCancel;
+
     /// <summary>Set while this service changes Jobs itself, so container events do not refresh the same cancellation underneath it.</summary>
     private static readonly AsyncLocal<bool> Busy = new();
 
@@ -235,6 +241,8 @@ public sealed class TransportCancellationService(
         Busy.Value = true;
         try
         {
+            _phasesBeforeCancel = (await jobControl.GetCancellationViewAsync(operation.TransportRequestId, cancellationToken))
+                .ToDictionary(j => j.JobId, j => j.Phase);
             if (operation.Scope == CancellationScopes.Request)
                 await CancelWholeRequestAsync(operation, cancellationToken);
             else
@@ -544,10 +552,257 @@ public sealed class TransportCancellationService(
             throw new NotFoundException("This Job is not part of the cancellation.", "cancellation_job_not_found");
         }
 
+        var job = (await jobControl.GetCancellationViewAsync(transportRequestId, cancellationToken)).FirstOrDefault(j => j.JobId == jobId);
+        if (job?.Phase != CancelRobotPhases.AtDropoff && !Options.AllowsDelivery(operation.ReasonCode))
+        {
+            throw new ConflictException(
+                $"The request was cancelled for {operation.ReasonCode}: its cargo is not delivered. Send the robot to a recovery point or unload it by scan.",
+                "reason_forbids_delivery");
+        }
+
         await jobControl.DeliverCancelledCargoAsync(jobId, actor, cancellationToken);
         db.ChangeTracker.Clear();
         operation = await db.TransportCancellations.Include(c => c.Items).FirstAsync(c => c.Id == operation.Id, cancellationToken);
         return await RefreshAsync(operation, cancellationToken);
+    }
+
+    /// <summary>The wait / queue points the robot of this Job could take its cargo to.</summary>
+    public async Task<IReadOnlyList<RecoveryPointView>> RecoveryPointsAsync(Guid transportRequestId, Guid jobId, CancellationToken cancellationToken)
+    {
+        var operation = await ActiveAsync(transportRequestId, cancellationToken);
+        if (operation.Items.All(i => i.JobId != jobId))
+        {
+            throw new NotFoundException("This Job is not part of the cancellation.", "cancellation_job_not_found");
+        }
+
+        return await jobControl.GetRecoveryPointsAsync(jobId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Destination policy, cargo on a robot between stops: the robot takes it to a recovery point and holds still there
+    /// for the unload by scan. Without an endpoint the nearest free one is taken.
+    /// </summary>
+    public async Task<CancellationResponse> SendToRecoveryAsync(Guid transportRequestId, Guid jobId, Guid? endpointId, CancellationToken cancellationToken)
+    {
+        var actor = currentUser.AccountId
+            ?? throw new AppException("Sending a robot needs a signed-in account.", 401, "unauthenticated");
+        var operation = await ActiveAsync(transportRequestId, cancellationToken);
+        if (operation.Items.All(i => i.JobId != jobId))
+        {
+            throw new NotFoundException("This Job is not part of the cancellation.", "cancellation_job_not_found");
+        }
+
+        var code = await jobControl.SendCancelledCargoToRecoveryAsync(jobId, endpointId, actor, cancellationToken);
+        db.ChangeTracker.Clear();
+        operation = await db.TransportCancellations.Include(c => c.Items).FirstAsync(c => c.Id == operation.Id, cancellationToken);
+        var item = operation.Items.First(i => i.JobId == jobId);
+        item.RecoveryPointCode = code;
+        item.UpdatedAt = Now;
+        operation.Version++;
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Cancellation {CancellationId}: Job {JobNo} takes its cargo to recovery point {Code}", operation.Id, item.JobNo, code);
+        return await RefreshAsync(operation, cancellationToken);
+    }
+
+    /// <summary>A person is asked to come and unload the robot where it holds still; the staff see it as an issue.</summary>
+    public async Task<CancellationResponse> RequestManualHandoverAsync(Guid transportRequestId, Guid jobId, string? note, CancellationToken cancellationToken)
+    {
+        var actor = currentUser.AccountId
+            ?? throw new AppException("Asking for a handover needs a signed-in account.", 401, "unauthenticated");
+        var operation = await ActiveAsync(transportRequestId, cancellationToken);
+        var item = operation.Items.FirstOrDefault(i => i.JobId == jobId)
+            ?? throw new NotFoundException("This Job is not part of the cancellation.", "cancellation_job_not_found");
+        if (!item.Containers.Any(c => c.JobContainerStatus == "ONBOARD"))
+        {
+            throw new ConflictException("Nothing is on the robot any more.", "no_cargo_onboard");
+        }
+
+        if (item.HandoverRequestedAt is null)
+        {
+            item.HandoverRequestedAt = Now;
+            item.HandoverRequestedBy = actor;
+            item.UpdatedAt = Now;
+            operation.Version++;
+            await db.SaveChangesAsync(cancellationToken);
+
+            var onboard = item.Containers.Where(c => c.JobContainerStatus == "ONBOARD").ToList();
+            var barcodes = await BarcodesAsync(onboard.Select(c => c.ContainerId).ToList(), cancellationToken);
+            var where = item.RecoveryPointCode is { } point && item.Phase == CancelRobotPhases.AtRecovery ? $" at recovery point {point}" : " where it stands";
+            if (issues is not null)
+            {
+                try
+                {
+                    await issues.ReportAsync(
+                        new SystemIssueDraft(
+                            $"cancel-handover:{operation.Id:N}:{item.JobId:N}",
+                            item.JobId,
+                            item.JobNo,
+                            actor,
+                            item.RobotId,
+                            onboard.Count == 1 ? onboard[0].ContainerId : null,
+                            $"Request cancelled: unload robot {item.RobotCode ?? "?"}{where}. It holds still with "
+                            + $"{string.Join(", ", onboard.Select(c => barcodes.GetValueOrDefault(c.ContainerId) ?? c.ContainerId.ToString()))}. "
+                            + "Scan each container off in the app (Unload By Scan) and put it on a shelf."
+                            + (string.IsNullOrWhiteSpace(note) ? string.Empty : $" Note: {Trim(note.Trim())}"),
+                            High: false,
+                            TransportRequestId: operation.TransportRequestId),
+                        cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "Could not open the handover issue for cancellation {CancellationId}", operation.Id);
+                }
+            }
+        }
+
+        return await RefreshAsync(operation, cancellationToken);
+    }
+
+    /// <summary>
+    /// Destination policy once a Job of the cancellation is over: its robot goes to parking (to the nearer of a wait
+    /// point and parking when it was on its way to a pickup). Tried again on each refresh for a while, then given up
+    /// with a note: a robot that is held, lost or busy is never forced.
+    /// </summary>
+    private async Task SendRobotOnAsync(TransportCancellationItem item, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (DestinationStatuses.IsSettled(item.DestinationStatus))
+        {
+            return;
+        }
+
+        void Settle(string status, string? code, string? note)
+        {
+            if (item.DestinationStatus == status && item.DestinationEndpointCode == code && item.DestinationNote == note)
+            {
+                return;
+            }
+
+            item.DestinationStatus = status;
+            item.DestinationEndpointCode = code;
+            item.DestinationNote = note is null ? null : note.Length > 200 ? note[..200] : note;
+            item.UpdatedAt = now;
+        }
+
+        if (!Options.SendRobotsToParking)
+        {
+            Settle(DestinationStatuses.Off, null, null);
+            return;
+        }
+
+        if (item.RobotId is not { } robotId)
+        {
+            Settle(DestinationStatuses.NotNeeded, null, "no_robot");
+            return;
+        }
+
+        RobotDestinationResult result;
+        try
+        {
+            result = await jobControl.SendRobotAfterCancelAsync(robotId, item.InitialPhase == CancelRobotPhases.ToPickup, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            result = new RobotDestinationResult(RobotDestinationResult.Retry, null, ex is AppException app ? app.Code : "error");
+        }
+
+        switch (result.Status)
+        {
+            case RobotDestinationResult.Sent:
+                Settle(DestinationStatuses.Sent, result.EndpointCode, null);
+                logger.LogInformation("Cancellation: robot {RobotCode} of Job {JobNo} sent to {Endpoint}", item.RobotCode, item.JobNo, result.EndpointCode);
+                break;
+            case RobotDestinationResult.NotNeeded:
+                Settle(DestinationStatuses.NotNeeded, result.EndpointCode, result.Note);
+                break;
+            case RobotDestinationResult.Skipped:
+                Settle(DestinationStatuses.Skipped, result.EndpointCode, result.Note);
+                break;
+            default:
+                var since = item.DoneAt ?? now;
+                Settle(
+                    (now - since).TotalSeconds >= Math.Max(0, Options.ParkingRetrySeconds) ? DestinationStatuses.Skipped : DestinationStatuses.Pending,
+                    result.EndpointCode,
+                    result.Note);
+                break;
+        }
+    }
+
+    /// <summary>The next steps open for one robot, and why the others are not (the UI shows both).</summary>
+    private (IReadOnlyList<string> Actions, IReadOnlyDictionary<string, string> Blocked) ActionsFor(
+        TransportCancellation operation, TransportCancellationItem item, RequestJobCancellationView? job)
+    {
+        var actions = new List<string>();
+        var blocked = new Dictionary<string, string>();
+        var onboard = item.Containers.Any(c => c.JobContainerStatus == "ONBOARD");
+        if (!operation.IsActive || !onboard || job is null || job.Status is not ("PAUSED" or "RECOVERY_REQUIRED"))
+        {
+            if (operation.IsActive && onboard && job?.Phase == CancelRobotPhases.ToRecovery)
+            {
+                blocked[CancellationActions.ContinueDelivery] = "robot_driving_to_recovery";
+                blocked[CancellationActions.UnloadByScan] = "robot_driving_to_recovery";
+            }
+
+            return (actions, blocked);
+        }
+
+        var held = job.RobotMotionHeld || !job.RobotOnline;
+        if (held)
+        {
+            actions.Add(CancellationActions.UnloadByScan);
+        }
+        else
+        {
+            blocked[CancellationActions.UnloadByScan] = "robot_not_stopped";
+        }
+
+        if (item.HandoverRequestedAt is null)
+        {
+            actions.Add(CancellationActions.RequestManualHandover);
+        }
+        else
+        {
+            blocked[CancellationActions.RequestManualHandover] = "already_requested";
+        }
+
+        string? cannotDrive = job.Status == "RECOVERY_REQUIRED" ? "needs_technician"
+            : !job.RobotOnline ? "robot_offline"
+            : !job.RobotLocalized ? "robot_not_localized"
+            : !job.RobotTelemetryFresh ? "robot_telemetry_stale"
+            : null;
+        if (cannotDrive is not null)
+        {
+            blocked[CancellationActions.ContinueDelivery] = cannotDrive;
+            blocked[CancellationActions.SendToRecovery] = cannotDrive;
+            return (actions, blocked);
+        }
+
+        if (job.Phase == CancelRobotPhases.AtDropoff || Options.AllowsDelivery(operation.ReasonCode))
+        {
+            actions.Add(CancellationActions.ContinueDelivery);
+        }
+        else
+        {
+            blocked[CancellationActions.ContinueDelivery] = "reason_forbids_delivery";
+        }
+
+        if (job.Phase == CancelRobotPhases.AtRecovery)
+        {
+            blocked[CancellationActions.SendToRecovery] = "already_at_recovery_point";
+        }
+        else if (job.Phase == CancelRobotPhases.AtDropoff)
+        {
+            blocked[CancellationActions.SendToRecovery] = "at_dropoff_reconcile_first";
+        }
+        else if (!job.CanSendToRecovery)
+        {
+            blocked[CancellationActions.SendToRecovery] = "recovery_needs_move";
+        }
+        else
+        {
+            actions.Add(CancellationActions.SendToRecovery);
+        }
+
+        return (actions, blocked);
     }
 
     // ------------------------------------------------------------------ evaluation
@@ -577,6 +832,7 @@ public sealed class TransportCancellationService(
                     RobotId = job.RobotId,
                     RobotCode = job.RobotCode,
                     Stage = CancellationStages.Pending,
+                    InitialPhase = _phasesBeforeCancel?.GetValueOrDefault(job.JobId) ?? job.Phase,
                     UpdatedAt = now
                 };
                 operation.Items.Add(item);
@@ -616,9 +872,15 @@ public sealed class TransportCancellationService(
             }
 
             stages.Add(stage);
-            if (stage == CancellationStages.Manual && before != CancellationStages.Manual)
+            if (stage is CancellationStages.Manual or CancellationStages.SafeStop && before != stage)
             {
                 await ReportManualAsync(operation, item, job, cancellationToken);
+            }
+
+            if (stage == CancellationStages.Done)
+            {
+                item.DoneAt ??= now;
+                await SendRobotOnAsync(item, now, cancellationToken);
             }
         }
 
@@ -632,6 +894,12 @@ public sealed class TransportCancellationService(
                 // The details catch up through their container events; until then the request is not closed.
                 status = CancellationStatuses.Recovering;
             }
+        }
+
+        // Destination policy: the robots of finished Jobs are on their way to parking before it is closed.
+        if (status == CancellationStatuses.Finalized && operation.Items.Any(i => i.DestinationStatus == DestinationStatuses.Pending))
+        {
+            status = CancellationStatuses.ParkingRobots;
         }
 
         var changed = status != operation.Status;
@@ -737,7 +1005,10 @@ public sealed class TransportCancellationService(
         }
 
         var unrecovered = item.Containers.Count(c => c.Resolution == ContainerResolutions.Unrecovered);
-        var description = unrecovered > 0
+        var description = item.Stage == CancellationStages.SafeStop
+            ? $"Request cancelled while robot {job.RobotCode ?? "?"} (Job {job.JobNo}) carried cargo, and the robot cannot drive safely "
+              + "(it is not localized). It holds still (safe stop). Technician: check the robot and localize it; the cargo can be unloaded by scan meanwhile."
+            : unrecovered > 0
             ? $"Job {job.JobNo} was cancelled with {unrecovered} container(s) on the robot and nobody unloaded them by scan. "
               + "Warehouse still has them in transit: find them and recover each one to the shelf it is on."
             : $"The cancellation of Job {job.JobNo} cannot finish by itself (Job {job.Status}, robot {job.RobotCode ?? "none"}). "
@@ -773,6 +1044,7 @@ public sealed class TransportCancellationService(
             var onboard = item.Containers.Any(c => c.JobContainerStatus == "ONBOARD");
             var held = job is not null && (job.RobotMotionHeld || !job.RobotOnline);
             var jobHeld = job?.Status is "PAUSED" or "RECOVERY_REQUIRED";
+            var (actions, blocked) = ActionsFor(operation, item, job);
             return new CancellationItemResponse(
                 item.JobId,
                 item.JobNo,
@@ -791,7 +1063,17 @@ public sealed class TransportCancellationService(
                     c.Resolution,
                     c.StorageLocationId,
                     c.LevelNo,
-                    c.HandedOverAt)).ToList());
+                    c.HandedOverAt)).ToList(),
+                item.Phase ?? job?.Phase,
+                item.InitialPhase,
+                job?.RobotLocalized ?? false,
+                item.RecoveryPointCode,
+                item.HandoverRequestedAt,
+                item.DestinationStatus,
+                item.DestinationEndpointCode,
+                item.DestinationNote,
+                actions,
+                blocked);
         }).ToList();
 
         var all = operation.Items.SelectMany(i => i.Containers).ToList();
@@ -812,7 +1094,7 @@ public sealed class TransportCancellationService(
             all.Count(c => c.Resolution == ContainerResolutions.NotPickedUp),
             all.Count(c => c.JobContainerStatus == "ONBOARD"),
             all.Count(c => c.Resolution == ContainerResolutions.Unrecovered)
-                + operation.Items.Count(i => i.Stage is CancellationStages.Manual or CancellationStages.WaitingRobot),
+                + operation.Items.Count(i => i.Stage is CancellationStages.Manual or CancellationStages.WaitingRobot or CancellationStages.SafeStop),
             items);
     }
 

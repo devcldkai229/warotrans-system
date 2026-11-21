@@ -60,6 +60,12 @@ public sealed class TransportCancellationItemConfiguration : IEntityTypeConfigur
         builder.Property(x => x.JobNo).HasMaxLength(100).IsRequired();
         builder.Property(x => x.RobotCode).HasMaxLength(100);
         builder.Property(x => x.Stage).HasMaxLength(40).IsRequired();
+        builder.Property(x => x.InitialPhase).HasMaxLength(40);
+        builder.Property(x => x.Phase).HasMaxLength(40);
+        builder.Property(x => x.RecoveryPointCode).HasMaxLength(100);
+        builder.Property(x => x.DestinationStatus).HasMaxLength(24);
+        builder.Property(x => x.DestinationEndpointCode).HasMaxLength(100);
+        builder.Property(x => x.DestinationNote).HasMaxLength(200);
 
         // Containers are replaced as a whole list on every change, so comparing the serialized form is enough.
         builder.Property(x => x.Containers)

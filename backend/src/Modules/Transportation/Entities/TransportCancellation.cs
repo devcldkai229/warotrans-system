@@ -51,6 +51,27 @@ public sealed class TransportCancellationItem
     public List<CancellationContainer> Containers { get; set; } = [];
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>Where the robot was in its trip when the cancellation first saw it (CancelRobotPhases): decides where it goes after.</summary>
+    public string? InitialPhase { get; set; }
+
+    /// <summary>Where the robot is in its trip now (CancelRobotPhases).</summary>
+    public string? Phase { get; set; }
+
+    /// <summary>The recovery (wait / queue) point the cargo was taken to, if any.</summary>
+    public string? RecoveryPointCode { get; set; }
+
+    /// <summary>Someone asked for a person to come and unload the robot where it stands.</summary>
+    public DateTimeOffset? HandoverRequestedAt { get; set; }
+    public Guid? HandoverRequestedBy { get; set; }
+
+    /// <summary>When every container of this Job was accounted for.</summary>
+    public DateTimeOffset? DoneAt { get; set; }
+
+    /// <summary><see cref="DestinationStatuses"/>: the robot sent to parking (or a wait point) once its Job was done.</summary>
+    public string? DestinationStatus { get; set; }
+    public string? DestinationEndpointCode { get; set; }
+    public string? DestinationNote { get; set; }
+
     public TransportCancellation Cancellation { get; set; } = null!;
 }
 
@@ -96,6 +117,9 @@ public static class CancellationStatuses
     /// <summary>Something a person must sort out (cargo cancelled without a handover, robot fault). Never closes by itself.</summary>
     public const string ManualIntervention = "MANUAL_INTERVENTION";
 
+    /// <summary>Every container is accounted for; robots are being sent to parking (destination policy).</summary>
+    public const string ParkingRobots = "PARKING_ROBOTS";
+
     /// <summary>No old work runs and every container is accounted for.</summary>
     public const string Finalized = "FINALIZED";
 }
@@ -115,8 +139,46 @@ public static class CancellationStages
     /// <summary>Someone chose to deliver the cargo anyway: the Job runs again, only to drop off what is on board.</summary>
     public const string Delivering = "DELIVERING";
 
+    /// <summary>The robot drives its cargo to a recovery (wait / queue) point.</summary>
+    public const string ToRecovery = "TO_RECOVERY";
+
+    /// <summary>The robot holds still at a recovery point: unload by scan there.</summary>
+    public const string AtRecovery = "AT_RECOVERY";
+
+    /// <summary>The robot stands at its drop-off, unload not confirmed: reconcile the containers before anything else.</summary>
+    public const string AtDropoff = "AT_DROPOFF";
+
+    /// <summary>A person was asked to come and unload the robot where it stands.</summary>
+    public const string HandoverRequested = "HANDOVER_REQUESTED";
+
+    /// <summary>The robot holds still but cannot drive safely (lost localization): a technician looks at it; cargo only by hand.</summary>
+    public const string SafeStop = "SAFE_STOP";
+
     public const string Manual = "MANUAL";
     public const string Done = "DONE";
+}
+
+/// <summary>The next steps a person may take for one robot of a cancellation (the server decides which are open).</summary>
+public static class CancellationActions
+{
+    public const string ContinueDelivery = "CONTINUE_DELIVERY";
+    public const string SendToRecovery = "SEND_TO_RECOVERY";
+    public const string RequestManualHandover = "REQUEST_MANUAL_HANDOVER";
+    public const string UnloadByScan = "UNLOAD_BY_SCAN";
+}
+
+/// <summary>Where the robot of a finished Job was sent (destination policy: parking, or a wait point).</summary>
+public static class DestinationStatuses
+{
+    public const string Pending = "PENDING";
+    public const string Sent = "SENT";
+    public const string NotNeeded = "NOT_NEEDED";
+    public const string Skipped = "SKIPPED";
+
+    /// <summary>TransportCancellation:SendRobotsToParking is off: robots stay where they are.</summary>
+    public const string Off = "OFF";
+
+    public static bool IsSettled(string? status) => status is Sent or NotNeeded or Skipped or Off;
 }
 
 public static class ContainerResolutions

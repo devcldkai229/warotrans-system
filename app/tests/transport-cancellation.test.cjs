@@ -8,6 +8,8 @@ const {
   isCancellationActive,
   matchScannedContainer,
   newIdempotencyKey,
+  openActions,
+  robotNextStep,
   CANCELLATION_STAGE_TEXT,
 } = createLoader()('src/features/transport/cancellationData.ts');
 
@@ -43,7 +45,7 @@ test('the screen keeps following a cancellation until it is finalized and colour
   assert.equal(cancellationTone('MANUAL_INTERVENTION'), 'danger');
   assert.equal(cancellationTone('WAITING_ROBOT'), 'warning');
   assert.equal(cancellationTone('FINALIZED'), 'success');
-  assert.equal(Object.keys(CANCELLATION_STAGE_TEXT).length, 7);
+  assert.equal(Object.keys(CANCELLATION_STAGE_TEXT).length, 12);
 });
 
 test('each confirmation gets its own idempotency key', () => {
@@ -84,4 +86,22 @@ test('a request never cancelled answers null, and a hand-over posts the scan and
 
   assert.equal(calls[1].path, '/api/transportation/transport-requests/tr-1/cancellation/jobs/job-1/handover');
   assert.deepEqual(JSON.parse(calls[1].init.body), { containerId: 'c4', scannedBarcode: 'C211126004', storageLocationId: 's-1', levelNo: 2 });
+});
+
+test('the destination policy says where each robot goes next', () => {
+  assert.equal(robotNextStep({ ...item, phase: 'IN_TRANSIT' }).next, 'Recovery Point, Where The Cargo Is Handled');
+  assert.equal(robotNextStep({ ...item, phase: 'TO_PICKUP' }).next, 'A Wait Point Or Parking, Whichever Is Nearer');
+  assert.equal(robotNextStep({ ...item, phase: 'AT_DROPOFF' }).next, 'Reconcile The Containers First');
+  const atPoint = robotNextStep({ ...item, phase: 'AT_RECOVERY', recoveryPointCode: 'EP-WAIT-POINT-1' });
+  assert.equal(atPoint.params.code, 'EP-WAIT-POINT-1');
+  assert.equal(robotNextStep({ ...item, stage: 'SAFE_STOP' }).warn, true);
+  const parked = robotNextStep({ ...item, stage: 'DONE', destinationStatus: 'SENT', destinationEndpointCode: 'EP-PARKING-A' });
+  assert.equal(parked.next, 'Sent To {code}');
+  assert.equal(parked.params.code, 'EP-PARKING-A');
+});
+
+test('next steps come from the server, with the old flags only for an older server', () => {
+  assert.deepEqual([...openActions({ ...item, actions: ['SEND_TO_RECOVERY'] })], ['SEND_TO_RECOVERY']);
+  assert.deepEqual([...openActions({ ...item, actions: undefined })].sort(), ['CONTINUE_DELIVERY', 'UNLOAD_BY_SCAN']);
+  assert.equal(CANCELLATION_STAGE_TEXT.AT_RECOVERY, 'At The Recovery Point');
 });

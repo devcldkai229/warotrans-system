@@ -16,7 +16,8 @@ public sealed class CancellationProgressTests
 
     private static RequestJobCancellationView Job(
         string status, bool online, bool held, string? failure = null, params RequestJobContainerView[] containers) =>
-        new(Guid.NewGuid(), "J211126001", status, failure, Guid.NewGuid(), "RBT-002", online, held, containers);
+        new(Guid.NewGuid(), "J211126001", status, failure, Guid.NewGuid(), "RBT-002", online, held, containers,
+            CancelRobotPhases.InTransit, RobotLocalized: true, RobotTelemetryFresh: true);
 
     private static string Evaluate(
         RequestJobCancellationView job,
@@ -32,6 +33,36 @@ public sealed class CancellationProgressTests
             (inTransit ?? new HashSet<Guid>()).ToHashSet(),
             RequestedAt,
             RequestedAt + (after ?? TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void Where_a_held_robot_stands_decides_its_stage()
+    {
+        var onboard = Container(C1, "ONBOARD", loaded: true);
+        var held = Job("PAUSED", true, true, CancellationProgress.CargoOnboardCancelCode, onboard);
+
+        Assert.Equal(CancellationStages.AtRecovery, Evaluate(held with { Phase = CancelRobotPhases.AtRecovery, RecoveryEndpointCode = "EP-WAIT-1" }, out var item));
+        Assert.Equal("EP-WAIT-1", item.RecoveryPointCode);
+        Assert.Equal(CancellationStages.AtDropoff, Evaluate(held with { Phase = CancelRobotPhases.AtDropoff }, out _));
+        Assert.Equal(CancellationStages.ToRecovery, Evaluate(held with { Status = "RUNNING", RobotMotionHeld = false, Phase = CancelRobotPhases.ToRecovery }, out _));
+        // Lost localization: it holds still and is not asked to drive anywhere (a technician looks at it).
+        Assert.Equal(CancellationStages.SafeStop, Evaluate(held with { RobotLocalized = false }, out _));
+        Assert.Equal(CancellationStatuses.ManualIntervention, CancellationProgress.Overall([CancellationStages.SafeStop, CancellationStages.Done]));
+        Assert.Equal(CancellationStatuses.Recovering, CancellationProgress.Overall([CancellationStages.AtRecovery, CancellationStages.Done]));
+    }
+
+    [Fact]
+    public void A_handover_asked_for_is_shown_until_the_cargo_is_off_and_the_first_phase_is_kept()
+    {
+        var job = Job("PAUSED", true, true, CancellationProgress.CargoOnboardCancelCode, Container(C1, "ONBOARD", loaded: true));
+        var item = new TransportCancellationItem { JobId = job.JobId, JobNo = job.JobNo, HandoverRequestedAt = RequestedAt, InitialPhase = CancelRobotPhases.ToPickup };
+
+        var stage = CancellationProgress.EvaluateItem(item, job, new HashSet<Guid> { C1 }, new HashSet<Guid>(), RequestedAt, RequestedAt.AddSeconds(5));
+
+        Assert.Equal(CancellationStages.HandoverRequested, stage);
+        Assert.Equal(CancellationStages.HandoverRequested, item.Stage);
+        Assert.Equal(CancelRobotPhases.ToPickup, item.InitialPhase);
+        Assert.Equal(CancelRobotPhases.InTransit, item.Phase);
     }
 
     [Fact]

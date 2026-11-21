@@ -6,7 +6,10 @@ using WaroTrans.WorkflowExecution.Persistence;
 namespace WaroTrans.WorkflowExecution.Services;
 
 /// <summary>Request-level cancel fan-out over the Jobs of a TransportRequest (TRN-01 / WH-04).</summary>
-public sealed class TransportRequestJobControl(WorkflowExecutionDbContext db, JobExecutionEngine engine) : ITransportRequestJobControl
+public sealed class TransportRequestJobControl(
+    WorkflowExecutionDbContext db,
+    JobExecutionEngine engine,
+    Features.RobotCare.RobotCareService robotCare) : ITransportRequestJobControl
 {
     public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<RequestJobState>>> GetJobsAsync(
         IReadOnlyCollection<Guid> transportRequestIds,
@@ -93,11 +96,51 @@ public sealed class TransportRequestJobControl(WorkflowExecutionDbContext db, Jo
     {
         var job = await db.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken)
             ?? throw new WaroTrans.BuildingBlocks.Exceptions.NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
-        if (job.Status == Enums.JobStatus.RUNNING)
+        // Running already: delivering (no-op), or driving to a recovery point (refused until it is there).
+        await engine.ContinueCancelledDeliveryAsync(job.Id, actor, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RecoveryPointView>> GetRecoveryPointsAsync(Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var robotId = await AssignedRobotAsync(jobId, cancellationToken);
+        return robotId is { } id ? await robotCare.RecoveryPointsAsync(id, cancellationToken) : [];
+    }
+
+    public async Task<string> SendCancelledCargoToRecoveryAsync(Guid jobId, Guid? endpointId, Guid actor, CancellationToken cancellationToken = default)
+    {
+        var robotId = await AssignedRobotAsync(jobId, cancellationToken)
+            ?? throw new WaroTrans.BuildingBlocks.Exceptions.ConflictException("This Job has no robot.", "robot_required");
+        var points = await robotCare.RecoveryPointsAsync(robotId, cancellationToken);
+        RecoveryPointView chosen;
+        if (endpointId is { } wanted)
         {
-            return; // already delivering
+            chosen = points.FirstOrDefault(p => p.EndpointId == wanted)
+                     ?? throw new WaroTrans.BuildingBlocks.Exceptions.DomainValidationException(
+                         "That endpoint is not a recovery (wait / queue) point on the robot's map.", "not_a_recovery_point");
+        }
+        else
+        {
+            chosen = points.FirstOrDefault(p => p.Free)
+                     ?? throw new WaroTrans.BuildingBlocks.Exceptions.ConflictException(
+                         points.Count == 0
+                             ? "The map has no recovery (wait / queue) point."
+                             : "Every recovery point is taken by another robot. Unload the cargo where the robot stands.",
+                         points.Count == 0 ? "no_recovery_point" : "no_free_recovery_point");
         }
 
-        await engine.ResumeAsync(jobId, null, cancellationToken, actor);
+        await engine.SendCancelledCargoToRecoveryAsync(jobId, chosen.EndpointId, actor, cancellationToken);
+        return chosen.Code;
+    }
+
+    public Task<RobotDestinationResult> SendRobotAfterCancelAsync(Guid robotId, bool allowWaitPoint, CancellationToken cancellationToken = default) =>
+        robotCare.SendAfterCancelAsync(robotId, allowWaitPoint, cancellationToken);
+
+    private async Task<Guid?> AssignedRobotAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        var job = await db.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken)
+            ?? throw new WaroTrans.BuildingBlocks.Exceptions.NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
+        return job.ContextValues.TryGetValue(JobExecutionEngine.AssignedRobotKey, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String
+            ? value.GetGuid()
+            : null;
     }
 }

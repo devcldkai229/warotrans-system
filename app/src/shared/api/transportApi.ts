@@ -258,8 +258,17 @@ export interface CancelPreview {
   totalContainers: number; delivered: number; onRobot: number; notPickedUp: number; alreadyClosed: number;
   jobs: CancelPreviewJob[]; details: CancelPreviewDetail[]; reasonCodes: string[];
 }
-export type CancellationStatus = 'REQUESTED' | 'STOPPING' | 'WAITING_ROBOT' | 'RECOVERING' | 'MANUAL_INTERVENTION' | 'FINALIZED';
-export type CancellationStage = 'PENDING' | 'STOP_REQUESTED' | 'WAITING_ROBOT' | 'CARGO_ON_ROBOT' | 'DELIVERING' | 'MANUAL' | 'DONE';
+export type CancellationStatus =
+  | 'REQUESTED' | 'STOPPING' | 'WAITING_ROBOT' | 'RECOVERING' | 'MANUAL_INTERVENTION' | 'PARKING_ROBOTS' | 'FINALIZED';
+export type CancellationStage =
+  | 'PENDING' | 'STOP_REQUESTED' | 'WAITING_ROBOT' | 'CARGO_ON_ROBOT' | 'DELIVERING' | 'TO_RECOVERY' | 'AT_RECOVERY' | 'AT_DROPOFF'
+  | 'HANDOVER_REQUESTED' | 'SAFE_STOP' | 'MANUAL' | 'DONE';
+/** Where the robot is in its trip (TRN-03 destination policy). */
+export type CancelRobotPhase =
+  | 'UNKNOWN' | 'NOT_STARTED' | 'TO_PICKUP' | 'AT_PICKUP' | 'IN_TRANSIT' | 'AT_DROPOFF' | 'TO_RECOVERY' | 'AT_RECOVERY' | 'DONE';
+export type CancellationAction = 'CONTINUE_DELIVERY' | 'SEND_TO_RECOVERY' | 'REQUEST_MANUAL_HANDOVER' | 'UNLOAD_BY_SCAN';
+/** A wait / queue point (Wait = Queue = Recovery Point). */
+export interface RecoveryPoint { endpointId: string; code: string; name: string; free: boolean; distanceMeters: number | null }
 export interface CancellationContainer {
   containerId: string; barcode: string | null; jobContainerStatus: string; resolution: string | null;
   storageLocationId: string | null; levelNo: number | null; handedOverAt: string | null;
@@ -267,6 +276,10 @@ export interface CancellationContainer {
 export interface CancellationItem {
   jobId: string; jobNo: string; jobStatus: string; robotId: string | null; robotCode: string | null; robotOnline: boolean;
   robotMotionHeld: boolean; stage: CancellationStage; canHandOver: boolean; canDeliver: boolean; containers: CancellationContainer[];
+  phase?: CancelRobotPhase | null; initialPhase?: CancelRobotPhase | null; robotLocalized?: boolean; recoveryPointCode?: string | null;
+  handoverRequestedAt?: string | null; destinationStatus?: 'PENDING' | 'SENT' | 'NOT_NEEDED' | 'SKIPPED' | 'OFF' | null;
+  destinationEndpointCode?: string | null; destinationNote?: string | null;
+  actions?: CancellationAction[] | null; blockedActions?: Partial<Record<CancellationAction, string>> | null;
 }
 /** The latest cancellation of a request and where it stands (TRN-03). */
 export interface Cancellation {
@@ -293,6 +306,22 @@ export function handOverCancelledCargo(requestId: string, jobId: string, body: {
 /** Deliver the cargo on a stopped robot anyway: its Job resumes and only drops off what is on board. */
 export function deliverCancelledCargo(requestId: string, jobId: string) {
   return apiFetch<Cancellation>(`/api/transportation/transport-requests/${requestId}/cancellation/jobs/${jobId}/deliver`, { method: 'POST' });
+}
+/** Wait / queue points the Job's robot could take its cancelled cargo to, free and nearest first. */
+export function getRecoveryPoints(requestId: string, jobId: string) {
+  return apiFetch<RecoveryPoint[]>(`/api/transportation/transport-requests/${requestId}/cancellation/jobs/${jobId}/recovery-points`);
+}
+/** The stopped robot takes its cargo to a recovery point (nearest free when none is given) and holds still there. */
+export function sendCancelledCargoToRecovery(requestId: string, jobId: string, endpointId?: string | null) {
+  return apiFetch<Cancellation>(`/api/transportation/transport-requests/${requestId}/cancellation/jobs/${jobId}/recovery`, {
+    method: 'POST', body: JSON.stringify({ endpointId: endpointId ?? null }),
+  });
+}
+/** Ask a person to come and unload the stopped robot where it stands (an issue for the staff). */
+export function requestManualCargoHandover(requestId: string, jobId: string, note?: string | null) {
+  return apiFetch<Cancellation>(`/api/transportation/transport-requests/${requestId}/cancellation/jobs/${jobId}/manual-handover`, {
+    method: 'POST', body: JSON.stringify({ note: note ?? null }),
+  });
 }
 /** Refuses a request before any of its Jobs ran (supervisor right); the requester is notified. */
 export function rejectTransportRequest(id: string, reason: string) {

@@ -89,6 +89,7 @@ public sealed class RobotCommandLifecycleJobStepHandler(
 
         var utcNow = DateTimeOffset.UtcNow;
         var finished = false;
+        var atRecoveryPoint = false;
         switch (integrationEvent.Phase)
         {
             case RobotCommandLifecycleChanged.Phases.AckAccepted:
@@ -115,6 +116,19 @@ public sealed class RobotCommandLifecycleJobStepHandler(
                 finished = true;
                 break;
 
+            case RobotCommandLifecycleChanged.Phases.Result
+                when integrationEvent.Outcome == RobotCommandOutcomes.Succeeded
+                     && step.OutputValues.ContainsKey(JobExecutionEngine.CancelRecoveryToKey):
+                // TRN-03: the cancelled cargo reached its recovery point. The MOVE is not done (its own target is
+                // still ahead): the Job is held there for the unload by scan.
+                step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    [JobExecutionEngine.CancelRecoveryArrivedKey] = JsonSerializer.SerializeToElement(utcNow)
+                };
+                step.Status = JobStepStatus.WAITING;
+                atRecoveryPoint = true;
+                finished = true;
+                break;
             case RobotCommandLifecycleChanged.Phases.Result
                 when integrationEvent.Outcome == RobotCommandOutcomes.Succeeded
                      && step.OutputValues.ContainsKey(JobExecutionEngine.AreaQueueLegKey):
@@ -166,6 +180,12 @@ public sealed class RobotCommandLifecycleJobStepHandler(
         await events.PublishAsync(
             new JobStepStatusChanged(step.JobTask.JobId, step.JobTaskId, step.Id, stepKey, step.Status.ToString(), step.ErrorCode),
             cancellationToken);
+
+        if (atRecoveryPoint)
+        {
+            await engine.HoldAtRecoveryAsync(step.JobTask.JobId, step.Id, cancellationToken);
+            return;
+        }
 
         await engine.AdvanceAsync(step.JobTask.JobId, cancellationToken);
     }

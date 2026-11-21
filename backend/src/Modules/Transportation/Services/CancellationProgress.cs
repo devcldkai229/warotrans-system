@@ -43,8 +43,14 @@ public static class CancellationProgress
         item.Containers = containers;
         item.RobotId = job.RobotId ?? item.RobotId;
         item.RobotCode = job.RobotCode ?? item.RobotCode;
+        item.InitialPhase ??= job.Phase;
+        item.Phase = job.Phase;
+        if (job.RecoveryEndpointCode is { } recovery)
+        {
+            item.RecoveryPointCode = recovery;
+        }
 
-        var stage = Stage(job, containers, requestedAt, now, stopTimeout ?? DefaultStopTimeout);
+        var stage = Stage(job, containers, item.HandoverRequestedAt is not null, requestedAt, now, stopTimeout ?? DefaultStopTimeout);
         item.Stage = stage;
         return stage;
     }
@@ -63,6 +69,7 @@ public static class CancellationProgress
     private static string Stage(
         RequestJobCancellationView job,
         IReadOnlyList<CancellationContainer> containers,
+        bool handoverRequested,
         DateTimeOffset requestedAt,
         DateTimeOffset now,
         TimeSpan stopTimeout)
@@ -86,7 +93,7 @@ public static class CancellationProgress
 
         if (job.Status == "RUNNING")
         {
-            return CancellationStages.Delivering;
+            return job.Phase == CancelRobotPhases.ToRecovery ? CancellationStages.ToRecovery : CancellationStages.Delivering;
         }
 
         if (job.Status is "RECOVERY_REQUIRED" or "FAILED" || (job.Terminal && onboard))
@@ -101,7 +108,23 @@ public static class CancellationProgress
 
         if (job.RobotMotionHeld)
         {
-            return CancellationStages.CargoOnRobot;
+            // Destination policy: where it holds decides what comes next.
+            if (job.Phase == CancelRobotPhases.AtRecovery)
+            {
+                return CancellationStages.AtRecovery;
+            }
+
+            if (!job.RobotLocalized)
+            {
+                return CancellationStages.SafeStop; // cannot drive safely: a technician, cargo by hand only
+            }
+
+            if (handoverRequested)
+            {
+                return CancellationStages.HandoverRequested;
+            }
+
+            return job.Phase == CancelRobotPhases.AtDropoff ? CancellationStages.AtDropoff : CancellationStages.CargoOnRobot;
         }
 
         return now - requestedAt > stopTimeout ? CancellationStages.WaitingRobot : CancellationStages.StopRequested;
@@ -111,10 +134,10 @@ public static class CancellationProgress
     public static string Overall(IEnumerable<string> stages)
     {
         var all = stages.ToList();
-        if (all.Contains(CancellationStages.Manual)) return CancellationStatuses.ManualIntervention;
+        if (all.Contains(CancellationStages.Manual) || all.Contains(CancellationStages.SafeStop)) return CancellationStatuses.ManualIntervention;
         if (all.Contains(CancellationStages.WaitingRobot)) return CancellationStatuses.WaitingRobot;
         if (all.Contains(CancellationStages.StopRequested) || all.Contains(CancellationStages.Pending)) return CancellationStatuses.Stopping;
-        if (all.Contains(CancellationStages.CargoOnRobot) || all.Contains(CancellationStages.Delivering)) return CancellationStatuses.Recovering;
+        if (all.Any(s => s != CancellationStages.Done)) return CancellationStatuses.Recovering;
         return CancellationStatuses.Finalized;
     }
 

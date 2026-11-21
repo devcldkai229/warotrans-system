@@ -408,3 +408,25 @@ Cancel is not an E-stop and not a robot command of its own. The backend:
 
 MQTT QoS 1 may deliver a command twice or late: `commandId` dedupe, `expiresAt` and the `jobAssignmentId` check on
 CANCEL keep a late or repeated message from acting on newer work. A PUBACK is never proof that a robot stopped.
+
+### Destination policy (where each robot goes)
+
+Wait Point = Queue Point = Recovery Point: an enabled, non-charger endpoint coded `EP-QUEUE*` / `EP-WAIT*` /
+`EP-RECOVERY*`, named with "wait" / "queue" / "recovery", or listed in `FleetIdle:FallbackEndpointCodes`.
+
+| Robot state when cancelled | Destination |
+|---|---|
+| Nothing picked up, had not started | Parking (left alone when already parked) |
+| On its way to a pickup | The nearer free one of a wait point and parking |
+| Carrying containers | A recovery point, on request ("Send to recovery point"); it holds still there for the unload by scan |
+| At its drop-off, unload not confirmed | Nowhere: reconcile first (confirm the delivery, or unload by scan) |
+| Cannot drive safely (not localized, robot fault) | Safe stop (it keeps its `STOP PAUSE` hold) and a technician issue |
+| Every container accounted for | Parking (a positioning NAVIGATE; a new Job takes the robot over) |
+
+The recovery leg is the Job's own open MOVE with another goal (`cancelRecoveryToEndpointId`), so it goes through
+traffic like any MOVE (Semantic / Shadow; refused in Active mode). Its RESULT does not complete the MOVE: the Job is
+held again with `STOP PAUSE`, and "continue delivery" later drives to the real drop-off. Per robot the server lists the
+open next steps (`CONTINUE_DELIVERY`, `SEND_TO_RECOVERY`, `REQUEST_MANUAL_HANDOVER`, `UNLOAD_BY_SCAN`) and why the others
+are closed. "Continue delivery" is open only for the reasons in `TransportCancellation:ContinueDeliveryReasonCodes`
+(default OPERATOR_REQUESTED, CUSTOMER_CANCELLED, OTHER), and always at a drop-off. `TransportCancellation:SendRobotsToParking`
+(default true) turns the trip to parking off; a robot that cannot be sent yet is retried for `ParkingRetrySeconds` (90).

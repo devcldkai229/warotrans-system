@@ -161,6 +161,11 @@ public sealed class TransportCancellationEndpointTests(WaroTransWebApplicationFa
         var done = await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}/cancellation");
         Assert.Equal("FINALIZED", done.GetProperty("status").GetString());
         Assert.Equal(2, done.GetProperty("handedOver").GetInt32());
+        // Destination policy: the robot is sent to parking once nothing is on it; the test map has no parking place,
+        // so it stays where it is and the note says why.
+        var finished = done.GetProperty("items")[0];
+        Assert.Equal("SKIPPED", finished.GetProperty("destinationStatus").GetString());
+        Assert.Equal("no_free_parking", finished.GetProperty("destinationNote").GetString());
         Assert.Equal("CANCELLED", (await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}")).GetProperty("status").GetString());
 
         await using var scope = Services.CreateAsyncScope();
@@ -196,6 +201,70 @@ public sealed class TransportCancellationEndpointTests(WaroTransWebApplicationFa
         var cancellation = await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}/cancellation");
         Assert.Equal("WAITING_ROBOT", cancellation.GetProperty("status").GetString());
         Assert.Null(cancellation.GetProperty("finalizedAt").GetString());
+    }
+
+    [Fact]
+    public async Task A_held_robot_offers_its_next_steps_and_a_manual_handover_is_asked_for_once()
+    {
+        var (seed, requestId, trips) = await RequestAsync(containers: 1, queue: true);
+        var robot = await SeedRobotAsync(seed);
+        var trip = trips.Single();
+        await StartAsync(trip, robot.Id);
+        await PutCargoOnRobotAsync(trip);
+        (await Client.PostAsJsonAsync($"{Route}/{requestId}/cancel", new { reason = "pallet damaged", reasonCode = "STOCK_PROBLEM" }))
+            .EnsureSuccessStatusCode();
+        await HoldRobotAsync(robot.Id);
+
+        var held = (await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}/cancellation")).GetProperty("items")[0];
+        var actions = held.GetProperty("actions").EnumerateArray().Select(a => a.GetString()).ToList();
+        Assert.Contains("UNLOAD_BY_SCAN", actions);
+        Assert.Contains("REQUEST_MANUAL_HANDOVER", actions);
+        // A stock problem is not delivered: "continue delivery" is closed, and says why.
+        Assert.DoesNotContain("CONTINUE_DELIVERY", actions);
+        Assert.Equal("reason_forbids_delivery", held.GetProperty("blockedActions").GetProperty("CONTINUE_DELIVERY").GetString());
+        var deliver = await Client.PostAsync($"{Route}/{requestId}/cancellation/jobs/{trip}/deliver", null);
+        Assert.Equal(HttpStatusCode.Conflict, deliver.StatusCode);
+        Assert.Equal("reason_forbids_delivery", await deliver.ReadErrorCodeAsync());
+
+        for (var i = 0; i < 2; i++)
+        {
+            var ask = await Client.PostAsJsonAsync($"{Route}/{requestId}/cancellation/jobs/{trip}/manual-handover", new { note = "use the blue trolley" });
+            Assert.True(ask.IsSuccessStatusCode, await ask.Content.ReadAsStringAsync());
+        }
+
+        var asked = await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}/cancellation");
+        var item = asked.GetProperty("items")[0];
+        Assert.Equal("HANDOVER_REQUESTED", item.GetProperty("stage").GetString());
+        Assert.Equal("RECOVERING", asked.GetProperty("status").GetString());
+        Assert.NotEqual(JsonValueKind.Null, item.GetProperty("handoverRequestedAt").ValueKind);
+        Assert.DoesNotContain("REQUEST_MANUAL_HANDOVER", item.GetProperty("actions").EnumerateArray().Select(a => a.GetString()));
+    }
+
+    [Fact]
+    public async Task Sending_cargo_to_a_recovery_point_is_refused_without_moving_the_robot_when_it_cannot_go()
+    {
+        var (seed, requestId, trips) = await RequestAsync(containers: 1, queue: true);
+        var robot = await SeedRobotAsync(seed);
+        var trip = trips.Single();
+        await StartAsync(trip, robot.Id);
+        await PutCargoOnRobotAsync(trip);
+        (await Client.PostAsJsonAsync($"{Route}/{requestId}/cancel", new { reason = "customer cancelled", reasonCode = "CUSTOMER_CANCELLED" }))
+            .EnsureSuccessStatusCode();
+        await HoldRobotAsync(robot.Id);
+
+        var points = await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}/cancellation/jobs/{trip}/recovery-points");
+        Assert.Equal(JsonValueKind.Array, points.ValueKind);
+
+        // The test map has no wait point (and runs Active traffic): nothing is sent, the robot keeps holding still.
+        var send = await Client.PostAsJsonAsync($"{Route}/{requestId}/cancellation/jobs/{trip}/recovery", new { });
+        Assert.Equal(HttpStatusCode.Conflict, send.StatusCode);
+        Assert.Contains(await send.ReadErrorCodeAsync(), new[] { "no_recovery_point", "recovery_not_supported_in_traffic_mode" });
+
+        await using var scope = Services.CreateAsyncScope();
+        var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        Assert.Equal(JobStatus.PAUSED, (await execution.Jobs.AsNoTracking().SingleAsync(j => j.Id == trip)).Status);
+        var item = (await Client.GetFromJsonAsync<JsonElement>($"{Route}/{requestId}/cancellation")).GetProperty("items")[0];
+        Assert.Contains("CONTINUE_DELIVERY", item.GetProperty("actions").EnumerateArray().Select(a => a.GetString()));
     }
 
     // ------------------------------------------------------------------ helpers

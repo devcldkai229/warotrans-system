@@ -87,7 +87,23 @@ public sealed record CancellationItemResponse(
     string Stage,
     bool CanHandOver,
     bool CanDeliver,
-    IReadOnlyList<CancellationContainerResponse> Containers);
+    IReadOnlyList<CancellationContainerResponse> Containers,
+    string? Phase = null,
+    string? InitialPhase = null,
+    bool RobotLocalized = false,
+    string? RecoveryPointCode = null,
+    DateTimeOffset? HandoverRequestedAt = null,
+    string? DestinationStatus = null,
+    string? DestinationEndpointCode = null,
+    string? DestinationNote = null,
+    IReadOnlyList<string>? Actions = null,
+    IReadOnlyDictionary<string, string>? BlockedActions = null);
+
+/// <summary>Body of "send to recovery point": none = the nearest free one.</summary>
+public sealed record SendToRecoveryBody(Guid? EndpointId);
+
+/// <summary>Body of "request manual handover": what the person should know.</summary>
+public sealed record ManualHandoverBody(string? Note);
 
 public sealed record CancellationContainerResponse(
     Guid ContainerId,

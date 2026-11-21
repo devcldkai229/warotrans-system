@@ -422,6 +422,198 @@ public sealed class RobotCareService(
     /// <summary>Telemetry older than this does not count as knowing where the robot is.</summary>
     private const double FreshPoseSeconds = 10;
 
+    // ------------------------------------------------------------------ TRN-03 cancellation destinations
+
+    /// <summary>
+    /// Wait = Queue = Recovery Point: an enabled, non-charger endpoint named or coded as one (EP-QUEUE*, EP-WAIT*,
+    /// EP-RECOVERY*, "wait" / "queue" / "recovery" in its name) or listed in FleetIdle:FallbackEndpointCodes.
+    /// </summary>
+    public bool IsRecoveryPoint(EndpointPoseWithType e)
+    {
+        if (!e.IsEnabled || e.EndpointType == EndpointType.CHARGER)
+        {
+            return false;
+        }
+
+        if (idle.Value.FallbackCodes().Contains(e.Code, StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        var code = e.Code.ToUpperInvariant();
+        if (code.StartsWith("EP-QUEUE", StringComparison.Ordinal) || code.StartsWith("EP-WAIT", StringComparison.Ordinal)
+            || code.StartsWith("EP-RECOVERY", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var name = e.Name ?? string.Empty;
+        return name.Contains("wait", StringComparison.OrdinalIgnoreCase) || name.Contains("queue", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("recovery", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The recovery points on the robot's map, free ones first, nearest first.</summary>
+    public async Task<IReadOnlyList<RecoveryPointView>> RecoveryPointsAsync(Guid robotId, CancellationToken cancellationToken)
+    {
+        var robot = await RobotAsync(robotId, cancellationToken);
+        var endpoints = (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken))
+            .Where(IsRecoveryPoint)
+            .ToList();
+        if (endpoints.Count == 0)
+        {
+            return [];
+        }
+
+        var taken = await TakenEndpointsAsync(robot, endpoints, cancellationToken);
+        var known = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
+        return endpoints
+            .Select(e => new RecoveryPointView(e.Id, e.Code, e.Name, !taken.Contains(e.Id), known ? Math.Round(Distance(robot, e), 2) : null))
+            .OrderByDescending(p => p.Free)
+            .ThenBy(p => p.DistanceMeters ?? double.MaxValue)
+            .ThenBy(p => p.Code, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// After a cancellation: to a free parking place (or, with <paramref name="allowWaitPoint"/>, the nearer of a free
+    /// parking place and a free wait point). Uses a positioning intent, so a new Job takes the robot over at once.
+    /// Never sends a robot that is offline, held, lost, in manual mode, still on a Job or already parked.
+    /// </summary>
+    public async Task<RobotDestinationResult> SendAfterCancelAsync(Guid robotId, bool allowWaitPoint, CancellationToken cancellationToken)
+    {
+        var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+        if (robot is null)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Skipped, null, "robot_not_found");
+        }
+
+        if (!robot.IsEnabled || robot.InManualMode)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Skipped, null, robot.InManualMode ? "robot_in_manual_mode" : "robot_disabled");
+        }
+
+        var now = clock.GetUtcNow();
+        if (!robot.IsOnline)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Retry, null, "robot_offline");
+        }
+
+        if (robot.MotionHeld)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Retry, null, "robot_motion_held");
+        }
+
+        if (robot.LocalizationStatus != LocalizationStatus.LOCALIZED
+            || robot.LastTelemetryAt is not { } seen || (now - seen).TotalSeconds > FreshPoseSeconds)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Retry, null, "robot_not_localized");
+        }
+
+        var liveJobIds = await db.Jobs.AsNoTracking().Where(j => Live.Contains(j.Status)).Select(j => j.Id).ToListAsync(cancellationToken);
+        var onJob = await db.JobRobotAssignments.AsNoTracking()
+            .AnyAsync(a => a.RobotId == robotId && a.EndedAt == null && liveJobIds.Contains(a.JobId), cancellationToken);
+        if (onJob)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.NotNeeded, null, "robot_on_another_job");
+        }
+
+        if ((await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(robotId))
+        {
+            return new RobotDestinationResult(RobotDestinationResult.NotNeeded, null, "robot_already_positioning");
+        }
+
+        var endpoints = await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken);
+        if (endpoints.FirstOrDefault(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= ParkedRadius(e)) is { } parked)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.NotNeeded, parked.Code, "already_parked");
+        }
+
+        Guid? target;
+        if (allowWaitPoint)
+        {
+            var candidates = endpoints.Where(e => e.IsEnabled && (e.EndpointType == EndpointType.PARK || IsRecoveryPoint(e))).ToList();
+            if (candidates.FirstOrDefault(e => IsRecoveryPoint(e) && Distance(robot, e) <= ParkedRadius(e)) is { } waiting)
+            {
+                return new RobotDestinationResult(RobotDestinationResult.NotNeeded, waiting.Code, "already_at_wait_point");
+            }
+
+            var taken = await TakenEndpointsAsync(robot, candidates, cancellationToken);
+            target = candidates.Where(e => !taken.Contains(e.Id)).OrderBy(e => Distance(robot, e)).Select(e => (Guid?)e.Id).FirstOrDefault();
+        }
+        else
+        {
+            target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken);
+            if (target is null)
+            {
+                if (endpoints.Where(IsRecoveryPoint).FirstOrDefault(e => Distance(robot, e) <= ParkedRadius(e)) is { } waiting)
+                {
+                    return new RobotDestinationResult(RobotDestinationResult.NotNeeded, waiting.Code, "already_at_wait_point");
+                }
+
+                target = await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, ParkInput, cancellationToken);
+            }
+        }
+
+        var pose = target is { } id ? await navigation.GetEndpointPoseAsync(id, cancellationToken) : null;
+        if (pose is not { IsEnabled: true })
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Retry, null, "no_free_parking");
+        }
+
+        try
+        {
+            await fleet.StartReturnToParkAsync(robotId, pose.Id, pose.X, pose.Y, pose.Yaw, cancellationToken);
+        }
+        catch (AppException refused)
+        {
+            return new RobotDestinationResult(RobotDestinationResult.Retry, pose.Code, refused.Code);
+        }
+
+        logger.LogInformation("Robot {RobotCode}: cancellation over, going to {Endpoint}", robot.Code, pose.Code);
+        return new RobotDestinationResult(RobotDestinationResult.Sent, pose.Code, null);
+    }
+
+    /// <summary>Endpoints another robot stands on or is driving to (positioning, a recovery leg).</summary>
+    private async Task<HashSet<Guid>> TakenEndpointsAsync(RobotSnapshot robot, IReadOnlyList<EndpointPoseWithType> endpoints, CancellationToken cancellationToken)
+    {
+        var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))
+            .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
+            .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == robot.CurrentMapVersionId)
+            .ToList();
+        var busyRobots = await db.JobRobotAssignments.AsNoTracking()
+            .Where(a => a.RobotId != robot.Id && a.EndedAt == null)
+            .Select(a => a.RobotId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var busyId in busyRobots.Where(id => others.All(o => o.Id != id)))
+        {
+            if (await fleet.GetRobotAsync(busyId, cancellationToken) is { } busy && busy.CurrentMapVersionId == robot.CurrentMapVersionId)
+            {
+                others.Add(busy);
+            }
+        }
+
+        var taken = (await fleet.GetPositioningTargetsAsync(robot.CurrentMapVersionId, cancellationToken)).ToHashSet();
+        var legs = await db.JobSteps.AsNoTracking()
+            .Where(s => s.StepType == StepType.MOVE && s.Status != JobStepStatus.COMPLETED && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => s.OutputValues)
+            .ToListAsync(cancellationToken);
+        foreach (var outputs in legs)
+        {
+            if (outputs.TryGetValue(JobExecutionEngine.CancelRecoveryToKey, out var leg) && leg.ValueKind == JsonValueKind.String)
+            {
+                taken.Add(leg.GetGuid());
+            }
+        }
+
+        foreach (var e in endpoints.Where(e => others.Any(r => Distance(r, e) <= OccupiedRadius(e))))
+        {
+            taken.Add(e.Id);
+        }
+
+        return taken;
+    }
+
     private async Task<Job> RunAsync(RobotSnapshot robot, string workflowCode, string input, Guid endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
