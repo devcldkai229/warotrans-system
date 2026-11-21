@@ -11,9 +11,9 @@ public enum ContainerStatus
     EMPTY,
     OUT_OF_SERVICE,
 
-    /// <summary>Left the warehouse on a CONFIRMED outbound StockVoucher; it holds no StorageLocation.</summary>
-    ISSUED,
-
-    /// <summary>Delivered to an Outbound gate, still owned by the warehouse until the issue voucher posts.</summary>
-    STAGED_OUTBOUND
+    /// <summary>
+    /// Left the warehouse: a robot delivered it to an Outbound gate for a CONFIRMED outbound StockVoucher, and its
+    /// stock was taken off the shelf it came from. It holds no StorageLocation.
+    /// </summary>
+    ISSUED
 }

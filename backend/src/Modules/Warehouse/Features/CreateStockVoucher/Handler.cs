@@ -2,10 +2,13 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
+using WaroTrans.Warehouse.Features.AddStockVoucherLines;
+using WaroTrans.Warehouse.Features.ConfirmStockVoucher;
 using WaroTrans.Warehouse.Features.Shared;
 using WaroTrans.Warehouse.Persistence;
 
@@ -16,6 +19,8 @@ public sealed class CreateStockVoucherHandler(
     IBusinessCodeGenerator businessCodeGenerator,
     ICurrentUser currentUser,
     IValidator<CreateStockVoucherRequest> validator,
+    AddStockVoucherLinesHandler lines,
+    ConfirmStockVoucherHandler confirmation,
     ILogger<CreateStockVoucherHandler> logger)
 {
     public async Task<StockVoucherDetailResponse> HandleAsync(
@@ -30,6 +35,10 @@ public sealed class CreateStockVoucherHandler(
 
         var accountId = currentUser.AccountId
             ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
+        if (request.Confirm && !currentUser.Can(Permissions.VoucherWrite))
+        {
+            throw new AppException("Voucher confirmation is not allowed.", 403, "forbidden");
+        }
 
         var warehouse = await dbContext.Warehouses
             .AsNoTracking()
@@ -54,14 +63,28 @@ public sealed class CreateStockVoucherHandler(
             accountId,
             DateTimeOffset.UtcNow);
 
+        // The voucher, its lines and the confirmation commit together: no half-made phiếu is left behind.
+        await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         dbContext.StockVouchers.Add(voucher);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (request.ContainerIds is { Count: > 0 } containerIds)
+        {
+            await lines.AddAsync(voucher, containerIds, cancellationToken);
+            if (request.Confirm)
+            {
+                await confirmation.ConfirmAsync(voucher, accountId, cancellationToken);
+            }
+        }
+
+        await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation(
-            "Stock voucher {VoucherId} ({Code}, {Type}) created in warehouse {WarehouseId} by {AccountId}",
+            "Stock voucher {VoucherId} ({Code}, {Type}, {Status}, {Count} Containers) created in warehouse {WarehouseId} by {AccountId}",
             voucher.Id,
             voucher.Code,
             voucher.Type,
+            voucher.Status,
+            voucher.Lines.Count,
             warehouse.Id,
             accountId);
 

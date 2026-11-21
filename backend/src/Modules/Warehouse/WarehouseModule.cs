@@ -9,6 +9,7 @@ using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Features.AddStockVoucherLines;
 using WaroTrans.Warehouse.Features.CancelStockVoucher;
+using WaroTrans.Warehouse.Features.CloseStockVoucherShort;
 using WaroTrans.Warehouse.Features.ConfirmStockVoucher;
 using WaroTrans.Warehouse.Features.CreateContainer;
 using WaroTrans.Warehouse.Features.CreateProduct;
@@ -68,6 +69,7 @@ public static class WarehouseModule
         services.AddScoped<RemoveStockVoucherLineHandler>();
         services.AddScoped<ConfirmStockVoucherHandler>();
         services.AddScoped<CancelStockVoucherHandler>();
+        services.AddScoped<CloseStockVoucherShortHandler>();
 
         services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
         services.AddScoped<IStorageLocationEndpointRebinder, StorageLocationEndpointRebinder>();
@@ -107,6 +109,7 @@ public static class WarehouseModule
         group.MapRemoveStockVoucherLine();
         group.MapConfirmStockVoucher();
         group.MapCancelStockVoucher();
+        group.MapCloseStockVoucherShort();
         GetContainerEndpoint.Map(group);
         // Receiving: was mapped in 3a8dc58 and lost when the module's endpoints were regrouped, so no client could
         // register a container (and therefore never create a Transport Request).

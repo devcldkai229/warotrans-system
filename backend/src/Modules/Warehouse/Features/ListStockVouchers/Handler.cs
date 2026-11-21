@@ -51,8 +51,11 @@ public sealed class ListStockVouchersHandler(WarehouseDbContext db)
                 v.Lines.Count,
                 // Same rule as StockVoucherProgress.IsDone, written out so it runs in SQL.
                 v.Type == StockVoucherType.INBOUND
-                    ? v.Lines.Count(l => l.Container!.Status == ContainerStatus.STORED || l.Container.Status == ContainerStatus.STAGED_OUTBOUND || l.Container.Status == ContainerStatus.ISSUED)
-                    : v.Lines.Count(l => l.Container!.Status == ContainerStatus.ISSUED)))
+                    ? v.Lines.Count(l => l.ClosedShortAt == null
+                        && (l.Container!.Status == ContainerStatus.STORED || l.Container.Status == ContainerStatus.ISSUED))
+                    : v.Lines.Count(l => l.ClosedShortAt == null && l.Container!.Status == ContainerStatus.ISSUED),
+                v.CompletedAt,
+                v.Lines.Count(l => l.ClosedShortAt != null)))
             .ToListAsync(cancellationToken);
 
         return new ListStockVouchersResponse(items, total);

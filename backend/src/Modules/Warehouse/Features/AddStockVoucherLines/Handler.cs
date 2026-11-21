@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Warehouse.Contracts;
+using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Features.Shared;
 using WaroTrans.Warehouse.Persistence;
@@ -15,8 +16,7 @@ public sealed class AddStockVoucherLinesHandler(
     IContainerTransportLookup transports,
     ICurrentUser currentUser,
     IValidator<AddStockVoucherLinesRequest> validator,
-    ILogger<AddStockVoucherLinesHandler> logger,
-    IMapEndpointCatalog map)
+    ILogger<AddStockVoucherLinesHandler> logger)
 {
     public async Task<StockVoucherDetailResponse> HandleAsync(
         Guid voucherId,
@@ -31,16 +31,39 @@ public sealed class AddStockVoucherLinesHandler(
 
         await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         var voucher = await WarehouseWriteLocks.VoucherAsync(dbContext, voucherId, cancellationToken);
+        var added = await AddAsync(voucher, request.ContainerIds!, cancellationToken);
+        if (added == 0)
+            return await StockVoucherQueries.LoadDetailAsync(dbContext, voucherId, cancellationToken);
+        await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+
+        logger.LogInformation(
+            "{Count} Containers added to stock voucher {Code} by {AccountId}",
+            added,
+            voucher.Code,
+            currentUser.AccountId);
+
+        return await StockVoucherQueries.LoadDetailAsync(dbContext, voucher.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Adds the named Containers to a DRAFT voucher, locked by the caller, without saving. Inbound takes received
+    /// Containers not on another warehouse's shelf; outbound takes Containers on a shelf of the voucher's warehouse
+    /// (<see cref="OutboundStock"/>). Replaying the same ids adds nothing.
+    /// </summary>
+    /// <returns>How many lines were added.</returns>
+    internal async Task<int> AddAsync(StockVoucher voucher, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
         if (voucher.Status != StockVoucherStatus.DRAFT)
             throw new ConflictException("Only a DRAFT voucher can be changed.", "voucher_not_draft");
-        if (request.ContainerIds is not { Count: > 0 } ids)
+        if (ids is not { Count: > 0 })
             throw new DomainValidationException("Select the exact Containers for this voucher.", "voucher_container_ids_required");
 
         // Replaying a completed add on the same draft does not duplicate lines or select replacement stock.
         var existing = voucher.Lines.Select(l => l.ContainerId).ToHashSet();
-        var toAdd = ids.Where(id => !existing.Contains(id)).ToArray();
+        var toAdd = ids.Where(id => !existing.Contains(id)).Distinct().ToArray();
         if (toAdd.Length == 0)
-            return await StockVoucherQueries.LoadDetailAsync(dbContext, voucherId, cancellationToken);
+            return 0;
 
         var locked = await WarehouseWriteLocks.ContainersAsync(dbContext, toAdd, cancellationToken);
         var byId = locked.ToDictionary(c => c.Id);
@@ -53,7 +76,7 @@ public sealed class AddStockVoucherLinesHandler(
         await StockVoucherStore.EnsureNotInTransportAsync(transports, containers, cancellationToken);
         if (voucher.Type == StockVoucherType.OUTBOUND)
         {
-            await OutboundStaging.EnsureEligibleAsync(map, voucher.WarehouseId, containers, cancellationToken);
+            await OutboundStock.EnsureEligibleAsync(dbContext, voucher.WarehouseId, containers, cancellationToken);
         }
         else
         {
@@ -69,17 +92,8 @@ public sealed class AddStockVoucherLinesHandler(
                 StockVoucherStore.EnsureSameWarehouse(voucher, container.Barcode, owner);
             }
         }
+
         dbContext.StockVoucherLines.AddRange(voucher.AddLines(containers, DateTimeOffset.UtcNow));
-        await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
-        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-
-        logger.LogInformation(
-            "{Count} Containers added to stock voucher {Code} by {AccountId}",
-            containers.Count,
-            voucher.Code,
-            currentUser.AccountId);
-
-        return await StockVoucherQueries.LoadDetailAsync(dbContext, voucher.Id, cancellationToken);
+        return containers.Count;
     }
-
 }

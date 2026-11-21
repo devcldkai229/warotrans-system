@@ -1,4 +1,5 @@
 import type { StockVoucherDetail } from '@/shared/api/warehouses'
+import { dispatchableLine } from '@/features/management/stockVouchers'
 import { newLocalId } from './labels'
 import { emptyDraft, type ComposerContainer, type TransportRequestDraft } from './types'
 
@@ -13,7 +14,7 @@ export interface ComposerPrefill {
  * Container's current shelf when it has one (outbound); staff still pick the workflow and the destinations.
  */
 export function voucherPrefill(voucher: StockVoucherDetail, mapVersionId: string): ComposerPrefill {
-  const lines = voucher.lines.filter((line) => !line.done)
+  const lines = voucher.lines.filter((line) => dispatchableLine(voucher.type, line))
   return {
     draft: {
       ...emptyDraft(),

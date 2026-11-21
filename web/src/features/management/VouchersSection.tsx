@@ -8,12 +8,14 @@ import type { Product } from '@/shared/api/contracts'
 import {
   addStockVoucherLines,
   cancelStockVoucher,
+  closeStockVoucherShort,
   confirmStockVoucher,
   createStockVoucher,
   getStockVoucher,
   listContainers,
   listWarehouses,
   removeStockVoucherLine,
+  type ContainerListItem,
   type StockVoucherDetail,
   type StockVoucherStatus,
   type StockVoucherType,
@@ -31,10 +33,12 @@ import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { AddButton, SectionHead } from './SectionHead'
 import {
+  VOUCHER_STATUS_LABEL,
   VOUCHER_STATUS_TONE,
   VOUCHER_TYPE_LABEL,
   VOUCHER_TYPE_TONE,
   VOUCHERS_KEY,
+  dispatchableLine,
   doneLabel,
   printVoucher,
   useStockVouchers,
@@ -48,17 +52,19 @@ function errorText(failure: unknown, fallback: string): string {
 interface VouchersSectionProps {
   /** The working Warehouse, shown first; null when no active one exists yet. */
   warehouse: { id: string; name: string } | null
-  products: Product[]
+  /** Kept for callers; Containers are picked one by one, not by product. */
+  products?: Product[]
 }
 
 type WarehouseOption = { id: string; code: string; name: string }
 
 /**
  * warehouse.stock_vouchers: phiếu nhập (INBOUND) and phiếu xuất (OUTBOUND). The quantity is a Container count, one line
- * per Container. The status is set by people only (DRAFT → CONFIRMED, or CANCELLED); robot progress is read from the
- * Containers (on a shelf / issued) and never changes it. A Container goes onto or off a shelf only on a CONFIRMED voucher.
+ * per Container. People take it DRAFT → CONFIRMED (or create it confirmed at once); it becomes COMPLETED by itself when
+ * its last Container is on a shelf (inbound) or issued at an Outbound gate (outbound), or when people close it short.
+ * Stock follows each Container as robots deliver it, never the voucher status.
  */
-export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
+export function VouchersSection({ warehouse }: VouchersSectionProps) {
   const queryClient = useQueryClient()
   const warehousesQuery = useQuery({
     queryKey: ['warehouses', 'active'],
@@ -98,7 +104,7 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
         hint={[current?.name, t('Quantities are Containers, not units.')].filter(Boolean).join(' · ')}
         info={{
           label: t('How stock vouchers work'),
-          text: t('Confirming a voucher does not wait for robots: progress fills in as Containers reach a shelf (inbound) or are issued at the outbound dock (outbound). Only a draft can be changed or cancelled.'),
+          text: t('Create a voucher as a draft, or create and confirm it at once. Robots then move its Containers: stock is added as each one reaches a shelf (inbound) or taken off as each one is delivered to an Outbound gate (outbound), and the voucher completes with the last one. Only a draft can be changed or cancelled; a confirmed voucher can be closed short.'),
         }}
       >
         <select
@@ -123,6 +129,7 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
           <option value="">{t('All statuses')}</option>
           <option value="DRAFT">{t('Draft')}</option>
           <option value="CONFIRMED">{t('Confirmed')}</option>
+          <option value="COMPLETED">{t('Completed')}</option>
           <option value="CANCELLED">{t('Cancelled')}</option>
         </select>
         <SearchInput className="w-48" placeholder={t('Search code or reference')} value={query} onChange={setQuery} />
@@ -159,7 +166,7 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
               <Td tone="faint">{voucher.referenceNo ?? '—'}</Td>
               <Td>
                 <StatusBadge tone={VOUCHER_STATUS_TONE[voucher.status]} withDot>
-                  {voucher.status}
+                  {VOUCHER_STATUS_LABEL[voucher.status]}
                 </StatusBadge>
               </Td>
               <Td align="right" tone="strong">
@@ -206,7 +213,6 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
       {openId ? (
         <VoucherDetailModal
           id={openId}
-          products={products}
           onChanged={refreshList}
           onClose={() => setOpenId(null)}
         />
@@ -244,11 +250,17 @@ function CreateVoucherDialog({
   const [type, setType] = useState<StockVoucherType>('INBOUND')
   const [referenceNo, setReferenceNo] = useState('')
   const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState<'draft' | 'confirm' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function save() {
-    setBusy(true)
+  async function save(confirm: boolean) {
+    if (confirm && selected.size === 0) {
+      setError(t('Select the Containers to confirm the voucher with.'))
+      return
+    }
+
+    setBusy(confirm ? 'confirm' : 'draft')
     setError(null)
     try {
       onCreated(
@@ -257,46 +269,87 @@ function CreateVoucherDialog({
           type,
           referenceNo: referenceNo.trim() || undefined,
           note: note.trim() || undefined,
+          containerIds: selected.size > 0 ? [...selected] : undefined,
+          confirm,
         }),
       )
     } catch (failure) {
       setError(errorText(failure, t('The voucher could not be created.')))
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
   return (
-    <Dialog title={t('New stock voucher')} submitLabel={t('Create draft')} busy={busy} onClose={onClose} onSubmit={save}>
-      <Field label={t('Type')}>
-        <select className={controlClass()} value={type} onChange={(event) => setType(event.target.value as StockVoucherType)}>
-          <option value="INBOUND">{t('Inbound (phiếu nhập)')}</option>
-          <option value="OUTBOUND">{t('Outbound (phiếu xuất)')}</option>
-        </select>
-      </Field>
-      <Field label={t('Warehouse')}>
-        <select className={controlClass()} value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
-          {warehouses.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.code ? `${item.code} · ${item.name}` : item.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label={t('Reference no.')}>
-        <input
-          className={controlClass()}
-          value={referenceNo}
-          maxLength={100}
-          placeholder={t('Supplier PO, sales order…')}
-          onChange={(event) => setReferenceNo(event.target.value)}
-        />
-      </Field>
-      <Field label={t('Note')}>
-        <textarea className={controlClass('area')} value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} />
-      </Field>
-      {error ? <FormError>{error}</FormError> : null}
-    </Dialog>
+    <Modal title={t('New stock voucher')} onClose={onClose} width="w-[720px]">
+      <div className="flex flex-col gap-4 px-6 py-5">
+        <FieldRow>
+          <Field label={t('Type')}>
+            <select
+              className={controlClass()}
+              value={type}
+              onChange={(event) => {
+                setType(event.target.value as StockVoucherType)
+                setSelected(new Set())
+              }}
+            >
+              <option value="INBOUND">{t('Inbound (phiếu nhập)')}</option>
+              <option value="OUTBOUND">{t('Outbound (phiếu xuất)')}</option>
+            </select>
+          </Field>
+          <Field label={t('Warehouse')}>
+            <select
+              className={controlClass()}
+              value={warehouseId}
+              onChange={(event) => {
+                setWarehouseId(event.target.value)
+                setSelected(new Set())
+              }}
+            >
+              {warehouses.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.code ? `${item.code} · ${item.name}` : item.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FieldRow>
+        <FieldRow>
+          <Field label={t('Reference no.')}>
+            <input
+              className={controlClass()}
+              value={referenceNo}
+              maxLength={100}
+              placeholder={t('Supplier PO, sales order…')}
+              onChange={(event) => setReferenceNo(event.target.value)}
+            />
+          </Field>
+          <Field label={t('Note')}>
+            <input className={controlClass()} value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} />
+          </Field>
+        </FieldRow>
+        <Field
+          label={t('Containers')}
+          hint={
+            type === 'INBOUND'
+              ? t('Received Containers not on a shelf yet. Robots put them away after the voucher is confirmed.')
+              : t('Containers on a shelf of this warehouse. Stock comes off each one when a robot delivers it to an Outbound gate.')
+          }
+        >
+          <ContainerPicker warehouseId={warehouseId} type={type} selected={selected} onChange={setSelected} />
+        </Field>
+        {error ? <FormError>{error}</FormError> : null}
+      </div>
+      <footer className="flex flex-wrap justify-end gap-2 px-6 pb-6">
+        <Button variant="ghost" onClick={onClose}>{t('Cancel')}</Button>
+        <Button variant="tonal" disabled={busy !== null} onClick={() => void save(false)}>
+          {busy === 'draft' ? t('Saving…') : t('Save as draft')}
+        </Button>
+        <Button variant="primary" disabled={busy !== null || selected.size === 0} onClick={() => void save(true)}>
+          {busy === 'confirm' ? t('Saving…') : t('Create and confirm')}
+        </Button>
+      </footer>
+    </Modal>
   )
 }
 
@@ -304,12 +357,10 @@ function CreateVoucherDialog({
 
 function VoucherDetailModal({
   id,
-  products,
   onChanged,
   onClose,
 }: {
   id: string
-  products: Product[]
   onChanged: () => void
   onClose: () => void
 }) {
@@ -318,9 +369,8 @@ function VoucherDetailModal({
   const detailQuery = useQuery({
     queryKey: [...VOUCHERS_KEY, 'detail', id],
     queryFn: () => getStockVoucher(id),
-    // Robots fill the progress in after confirmation; poll until every Container is done.
-    refetchInterval: (q) =>
-      q.state.data?.status === 'CONFIRMED' && q.state.data.doneCount < q.state.data.containerCount ? 4000 : false,
+    // Robots fill the progress in after confirmation; poll until the voucher completes.
+    refetchInterval: (q) => (q.state.data?.status === 'CONFIRMED' ? 4000 : false),
   })
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -355,7 +405,19 @@ function VoucherDetailModal({
   }
 
   const draft = voucher.status === 'DRAFT'
-  const remaining = voucher.lines.filter((line) => !line.done).length
+  const confirmed = voucher.status === 'CONFIRMED'
+  const remaining = voucher.lines.filter((line) => !line.done && !line.closedShort).length
+  const dispatchable = voucher.lines.filter((line) => dispatchableLine(voucher.type, line)).length
+
+  function closeShort() {
+    if (!voucher) return
+    const reason = window.prompt(
+      t('Close {code} short: the {remaining} Containers not done leave the voucher. Why?', { code: voucher.code, remaining }),
+    )
+    if (reason && reason.trim()) {
+      void run(() => closeStockVoucherShort(voucher.id, reason.trim()), t('The voucher could not be closed.'))
+    }
+  }
 
   return (
     <Modal
@@ -367,14 +429,27 @@ function VoucherDetailModal({
       <div className="flex flex-col gap-5 px-6 py-5">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <StatusBadge tone={VOUCHER_STATUS_TONE[voucher.status]} withDot>
-            {voucher.status}
+            {VOUCHER_STATUS_LABEL[voucher.status]}
           </StatusBadge>
           <Progress done={voucher.doneCount} total={voucher.containerCount} type={voucher.type} />
           <span className="text-xs text-muted">{t('Created')}{' '}{formatIsoDateTime(voucher.createdAt)}</span>
           {voucher.confirmedAt ? <span className="text-xs text-muted">{t('Confirmed')}{' '}{formatIsoDateTime(voucher.confirmedAt)}</span> : null}
+          {voucher.completedAt ? <span className="text-xs text-muted">{t('Completed')}{' '}{formatIsoDateTime(voucher.completedAt)}</span> : null}
           {voucher.cancelledAt ? <span className="text-xs text-muted">{t('Cancelled')}{' '}{formatIsoDateTime(voucher.cancelledAt)}</span> : null}
         </div>
         {voucher.note ? <p className="text-sm text-ink-2">{voucher.note}</p> : null}
+        {voucher.closedShortAt ? (
+          <p className="rounded-sm bg-container-high px-3 py-2 text-sm text-ink-2">
+            {t('Closed short {date}: {reason}', { date: formatIsoDateTime(voucher.closedShortAt), reason: voucher.closedShortReason ?? '' })}
+          </p>
+        ) : null}
+        {confirmed ? (
+          <p className="text-xs text-muted">
+            {voucher.type === 'INBOUND'
+              ? t('Stock is added shelf by shelf as robots put each Container away. The voucher completes with the last one.')
+              : t('Stock comes off each shelf when a robot delivers the Container to an Outbound gate. The voucher completes with the last one.')}
+          </p>
+        ) : null}
 
         {voucher.products.length > 0 ? (
           <div className="flex flex-wrap gap-2">
@@ -402,7 +477,7 @@ function VoucherDetailModal({
               {voucher.lines.map((line) => (
                 <Tr key={line.id}>
                   <Td tone="faint">{line.lineNo}</Td>
-                  <Td className="font-mono text-xs">{line.containerBarcode}</Td>
+                  <Td className={cx('font-mono text-xs', line.closedShort && 'line-through opacity-60')}>{line.containerBarcode}</Td>
                   <Td>
                     <span className="font-mono text-xs text-muted">{line.productSku}</span> {line.productName}
                   </Td>
@@ -425,6 +500,10 @@ function VoucherDetailModal({
                       </Can>
                     ) : line.done ? (
                       <Icon name="check" size={16} className="ml-auto text-green-ink" />
+                    ) : line.closedShort ? (
+                      <span className="text-xs text-muted">{t('closed short')}</span>
+                    ) : voucher.status === 'CANCELLED' ? (
+                      <span className="text-xs text-muted">—</span>
                     ) : (
                       <span className="text-xs text-muted">{t('waiting')}</span>
                     )}
@@ -435,7 +514,7 @@ function VoucherDetailModal({
                 <EmptyRow colSpan={6}>
                   {voucher.type === 'INBOUND'
                     ? t('No Containers yet. Add received Containers, or scan goods into this voucher in the mobile app.')
-                    : t('No Containers yet. Pick stored Containers by product or one by one.')}
+                    : t('No Containers yet. Add Containers that are on a shelf.')}
                 </EmptyRow>
               ) : null}
             </tbody>
@@ -464,9 +543,14 @@ function VoucherDetailModal({
             >{t('Confirm voucher')}</Button>
           </Can>
         ) : null}
-        {voucher.status === 'CONFIRMED' && remaining > 0 ? (
+        {confirmed && remaining > 0 ? (
+          <Can permission={PERMISSIONS.voucherWrite}>
+            <Button variant="ghost" disabled={busy} onClick={closeShort}>{t('Close short')}</Button>
+          </Can>
+        ) : null}
+        {confirmed && dispatchable > 0 ? (
           <Can permission={PERMISSIONS.transportCreate}>
-          <Button variant="primary" onClick={() => navigate(`/monitor/requests?voucher=${voucher.id}`)}>{t('Dispatch robots ({remaining})', { remaining })}</Button>
+            <Button variant="primary" onClick={() => navigate(`/monitor/requests?voucher=${voucher.id}`)}>{t('Dispatch robots ({remaining})', { remaining: dispatchable })}</Button>
           </Can>
         ) : null}
       </footer>
@@ -474,8 +558,6 @@ function VoucherDetailModal({
       {adding ? (
         <AddContainersDialog
           voucher={voucher}
-          warehouseId={voucher.warehouseId}
-          products={products}
           onClose={() => setAdding(false)}
           onAdded={(updated) => {
             setAdding(false)
@@ -491,69 +573,20 @@ function VoucherDetailModal({
 
 function AddContainersDialog({
   voucher,
-  warehouseId,
-  products,
   onClose,
   onAdded,
 }: {
   voucher: StockVoucherDetail
-  warehouseId: string
-  products: Product[]
   onClose: () => void
   onAdded: (voucher: StockVoucherDetail) => void
 }) {
-  const inbound = voucher.type === 'INBOUND'
-  const [mode, setMode] = useState<'pick' | 'product'>(inbound ? 'pick' : 'product')
-  const [productId, setProductId] = useState(products.find((product) => product.isActive)?.id ?? '')
-  const [count, setCount] = useState('1')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const containersQuery = useQuery({
-    queryKey: ['warehouse', 'containers', 'eligible', warehouseId],
-    queryFn: () => listContainers({ warehouseId, eligibleOnly: true, take: 500 }),
-    enabled: mode === 'pick',
-  })
-
   const onVoucher = useMemo(() => new Set(voucher.lines.map((line) => line.containerId)), [voucher.lines])
-  // Inbound takes received Containers (CREATED/PACKED, wherever they were received); outbound takes stored ones.
-  // Containers a robot is already moving stay listed (so staff see why they are missing) but cannot be ticked.
-  const candidates = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    return (containersQuery.data?.items ?? [])
-      .filter(
-        (container) =>
-          !onVoucher.has(container.id) &&
-          (inbound
-            ? container.status === 'CREATED' || container.status === 'PACKED'
-            : container.status === 'STORED' && container.currentStorageLocationId !== null) &&
-          (needle === '' ||
-            container.barcode.toLowerCase().includes(needle) ||
-            container.productSku.toLowerCase().includes(needle) ||
-            container.productName.toLowerCase().includes(needle)),
-      )
-      .sort((a, b) => Number(a.inActiveTransport) - Number(b.inActiveTransport))
-  }, [containersQuery.data, onVoucher, inbound, search])
-  const free = candidates.filter((container) => !container.inActiveTransport).length
-
-  function toggle(containerId: string) {
-    setSelected((current) => {
-      const next = new Set(current)
-      if (next.has(containerId)) next.delete(containerId)
-      else next.add(containerId)
-      return next
-    })
-  }
 
   async function save() {
-    const amount = Number(count)
-    if (mode === 'product' && (!productId || !Number.isInteger(amount) || amount < 1 || amount > 200)) {
-      setError(t('Choose a product and a count between 1 and 200.'))
-      return
-    }
-    if (mode === 'pick' && selected.size === 0) {
+    if (selected.size === 0) {
       setError(t('Select at least one Container.'))
       return
     }
@@ -561,12 +594,7 @@ function AddContainersDialog({
     setBusy(true)
     setError(null)
     try {
-      onAdded(
-        await addStockVoucherLines(
-          voucher.id,
-          mode === 'product' ? { productId, count: amount } : { containerIds: [...selected] },
-        ),
-      )
+      onAdded(await addStockVoucherLines(voucher.id, { containerIds: [...selected] }))
     } catch (failure) {
       setError(errorText(failure, t('The Containers could not be added.')))
     } finally {
@@ -583,82 +611,141 @@ function AddContainersDialog({
       onClose={onClose}
       onSubmit={save}
     >
-      {!inbound ? (
-        <Field label={t('How')}>
-          <select className={controlClass()} value={mode} onChange={(event) => setMode(event.target.value as 'pick' | 'product')}>
-            <option value="product">{t('By product, oldest stored first (FIFO)')}</option>
-            <option value="pick">{t('Pick Containers one by one')}</option>
-          </select>
-        </Field>
-      ) : null}
-
-      {mode === 'product' ? (
-        <FieldRow>
-          <Field label={t('Product')}>
-            <select className={controlClass()} value={productId} onChange={(event) => setProductId(event.target.value)}>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.sku} · {product.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={t('Containers')} hint={t('Stored in this warehouse and not on another live phiếu xuất.')}>
-            <input className={controlClass()} type="number" min={1} max={200} value={count} onChange={(event) => setCount(event.target.value)} />
-          </Field>
-        </FieldRow>
-      ) : (
-        <>
-          <SearchInput variant="field" placeholder={t('Search barcode, SKU or product')} value={search} onChange={setSearch} />
-          <div className="max-h-96 overflow-auto rounded-sm border border-outline-soft">
-            {containersQuery.isLoading ? <p className="px-3 py-6 text-center text-xs text-muted">{t('Loading Containers…')}</p> : null}
-            {containersQuery.isError ? <p className="px-3 py-6 text-center text-xs text-red-ink">{t('Could not load Containers.')}</p> : null}
-            {containersQuery.isSuccess && candidates.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs text-muted">
-                {inbound ? t('No received Container waiting for putaway.') : t('No stored Container left to pick.')}
-              </p>
-            ) : null}
-            {candidates.map((container) => (
-              <label
-                key={container.id}
-                className={cx(
-                  'flex items-start gap-3 border-b border-outline-soft px-3 py-2.5 text-xs last:border-b-0',
-                  container.inActiveTransport ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-container',
-                )}
-                title={container.inActiveTransport ? t('A robot is already moving this Container on another Transport Request.') : undefined}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={selected.has(container.id)}
-                  disabled={container.inActiveTransport}
-                  onChange={() => toggle(container.id)}
-                />
-                <span className={cx('flex min-w-0 flex-1 flex-col gap-0.5', container.inActiveTransport && 'opacity-60')}>
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="font-mono font-medium text-ink">{container.barcode}</span>
-                    {container.inActiveTransport ? (
-                      <StatusBadge tone="amber">{t('In transport request')}</StatusBadge>
-                    ) : (
-                      <span className="shrink-0 text-muted">
-                        {container.currentStorageLocationCode
-                          ? `${container.currentStorageLocationCode}${container.currentLevelNo ? ` · L${container.currentLevelNo}` : ''}`
-                          : t('Not on a shelf')}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-ink-2">
-                    {container.productName} <span className="font-mono text-muted">{container.productSku}</span>
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-          <p className="text-xs text-muted">{t('{size} selected · {free} free', { size: selected.size, free })}{candidates.length > free ? t(' · {value} busy in a transport request', { value: candidates.length - free }) : ''}
-          </p>
-        </>
-      )}
+      <ContainerPicker
+        warehouseId={voucher.warehouseId}
+        type={voucher.type}
+        exclude={onVoucher}
+        selected={selected}
+        onChange={setSelected}
+      />
       {error ? <FormError>{error}</FormError> : null}
     </Dialog>
   )
+}
+
+/* ------------------------------------------------------------------------------------------ container picker */
+
+/**
+ * The Containers a voucher of this type may name. Inbound: received ones (CREATED / PACKED) not on a shelf yet.
+ * Outbound: ones STORED on a shelf. A Container a robot is moving, or already on another live voucher of the same type,
+ * stays listed (so staff see why) but cannot be ticked.
+ */
+function ContainerPicker({
+  warehouseId,
+  type,
+  exclude,
+  selected,
+  onChange,
+}: {
+  warehouseId: string
+  type: StockVoucherType
+  exclude?: Set<string>
+  selected: Set<string>
+  onChange: (next: Set<string>) => void
+}) {
+  const [search, setSearch] = useState('')
+  const containersQuery = useQuery({
+    queryKey: ['warehouse', 'containers', 'eligible', warehouseId],
+    queryFn: () => listContainers({ warehouseId, eligibleOnly: true, take: 500 }),
+    enabled: Boolean(warehouseId),
+  })
+
+  const candidates = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return (containersQuery.data?.items ?? [])
+      .filter(
+        (container) =>
+          !exclude?.has(container.id) &&
+          (type === 'INBOUND'
+            ? (container.status === 'CREATED' || container.status === 'PACKED') && container.currentStorageLocationId === null
+            : container.status === 'STORED' && container.currentStorageLocationId !== null) &&
+          (needle === '' ||
+            container.barcode.toLowerCase().includes(needle) ||
+            container.productSku.toLowerCase().includes(needle) ||
+            container.productName.toLowerCase().includes(needle)),
+      )
+      .map((container) => ({ container, blocked: pickBlock(container, type) }))
+      .sort((a, b) => Number(Boolean(a.blocked)) - Number(Boolean(b.blocked)))
+  }, [containersQuery.data, exclude, type, search])
+  const free = candidates.filter((item) => !item.blocked).length
+
+  function toggle(containerId: string) {
+    const next = new Set(selected)
+    if (next.has(containerId)) next.delete(containerId)
+    else next.add(containerId)
+    onChange(next)
+  }
+
+  function selectAllFree() {
+    onChange(new Set([...selected, ...candidates.filter((item) => !item.blocked).map((item) => item.container.id)]))
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <SearchInput variant="field" className="flex-1" placeholder={t('Search barcode, SKU or product')} value={search} onChange={setSearch} />
+        <Button size="sm" variant="ghost" disabled={free === 0} onClick={selectAllFree}>{t('Select all')}</Button>
+      </div>
+      <div className="max-h-72 overflow-auto rounded-sm border border-outline-soft">
+        {containersQuery.isLoading ? <p className="px-3 py-6 text-center text-xs text-muted">{t('Loading Containers…')}</p> : null}
+        {containersQuery.isError ? <p className="px-3 py-6 text-center text-xs text-red-ink">{t('Could not load Containers.')}</p> : null}
+        {containersQuery.isSuccess && candidates.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs text-muted">
+            {type === 'INBOUND' ? t('No received Container waiting for putaway.') : t('No Container on a shelf to ship.')}
+          </p>
+        ) : null}
+        {candidates.map(({ container, blocked }) => (
+          <label
+            key={container.id}
+            className={cx(
+              'flex items-start gap-3 border-b border-outline-soft px-3 py-2.5 text-xs last:border-b-0',
+              blocked ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-container',
+            )}
+            title={blocked ?? undefined}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={!blocked && selected.has(container.id)}
+              disabled={Boolean(blocked)}
+              onChange={() => toggle(container.id)}
+            />
+            <span className={cx('flex min-w-0 flex-1 flex-col gap-0.5', blocked && 'opacity-60')}>
+              <span className="flex items-center justify-between gap-3">
+                <span className="font-mono font-medium text-ink">{container.barcode}</span>
+                {container.inActiveTransport ? (
+                  <StatusBadge tone="amber">{t('In transport request')}</StatusBadge>
+                ) : blocked ? (
+                  <StatusBadge tone="grey">{container.voucher?.code ?? ''}</StatusBadge>
+                ) : (
+                  <span className="shrink-0 text-muted">
+                    {container.currentStorageLocationCode
+                      ? `${container.currentStorageLocationCode}${container.currentLevelNo ? ` · L${container.currentLevelNo}` : ''}`
+                      : t('Not on a shelf')}
+                  </span>
+                )}
+              </span>
+              <span className="text-ink-2">
+                {container.productName} <span className="font-mono text-muted">{container.productSku}</span>
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-muted">
+        {t('{size} selected · {free} free', { size: selected.size, free })}
+        {candidates.length > free ? t(' · {value} busy', { value: candidates.length - free }) : ''}
+      </p>
+    </div>
+  )
+}
+
+/** Why this Container cannot be ticked for a voucher of this type, or null. */
+function pickBlock(container: ContainerListItem, type: StockVoucherType): string | null {
+  if (container.inActiveTransport) return t('A robot is already moving this Container on another Transport Request.')
+  const voucher = container.voucher
+  if (voucher && voucher.type === type && (voucher.status === 'DRAFT' || voucher.status === 'CONFIRMED')) {
+    return t('Already on voucher {code}.', { code: voucher.code })
+  }
+  return null
 }

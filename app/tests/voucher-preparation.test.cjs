@@ -84,50 +84,48 @@ test('incomplete committed cache is surfaced as an error instead of an empty dra
   await assert.rejects(store.read(scope), /incomplete/);
 });
 
-const { outboundPreviewItems, loadOutboundPreview } = createLoader({
+const { outboundPreviewItems } = createLoader({
   'src/shared/api/client.ts': { ApiError: class ApiError extends Error { constructor(status, code, message) { super(message); this.code = code; } } },
-  'src/shared/api/navigationApi.ts': {}, 'src/shared/api/warehouseApi.ts': {},
+  'src/shared/api/warehouseApi.ts': {},
 })('src/features/inventory/outboundPreparation.ts');
-const point = { id: 'out', code: 'OUTBOUND-01', mapVersionId: 'map', endpointType: 'WAYPOINT', isEnabled: true };
-const map = { id: 'map', warehouseId: 'warehouse-1', endpoints: [point] };
-const container = { id: 'c1', barcode: 'CT-1', status: 'STAGED_OUTBOUND', inActiveTransport: false, currentStorageLocationId: null, currentEndpointId: 'out' };
+const container = { id: 'c1', barcode: 'CT-1', status: 'STORED', inActiveTransport: false, currentStorageLocationId: 'shelf-a', currentStorageLocationCode: 'A-1', currentEndpointId: 'ep-shelf-a' };
 
-test('outbound preview only returns STAGED_OUTBOUND containers at enabled outbound gates', () => {
-  const result = outboundPreviewItems(map, scope.warehouseId, [container,
+test('outbound preview only returns STORED containers on a shelf that no live phiếu xuất holds', () => {
+  const result = outboundPreviewItems([container,
     { ...container, id: 'moving', inActiveTransport: true }, { ...container, id: 'unknown', inActiveTransport: undefined },
-    { ...container, id: 'stored', status: 'STORED' }, { ...container, id: 'elsewhere', currentEndpointId: 'shelf' },
-    { ...container, id: 'shelved', currentStorageLocationId: 'loc' }, { ...container, id: 'no-gate', currentEndpointId: null }, container]);
-  assert.deepEqual(plain(result.items).map(value => [value.id, value.currentEndpointCode]), [['c1', 'OUTBOUND-01']]);
-  assert.throws(() => outboundPreviewItems(map, 'another-warehouse', [container]), /another warehouse/);
-  for (const change of [{ isEnabled: false }, { mapVersionId: 'old-map' }, { code: 'NOTOUTBOUND' }, { endpointType: 'PARK' }]) {
-    assert.equal(outboundPreviewItems({ ...map, endpoints: [{ ...point, ...change }] }, scope.warehouseId, [container]).items.length, 0);
-  }
+    { ...container, id: 'received', status: 'CREATED' }, { ...container, id: 'issued', status: 'ISSUED' },
+    { ...container, id: 'unshelved', currentStorageLocationId: null }, { ...container, id: 'no-point', currentEndpointId: null },
+    { ...container, id: 'draft', voucher: { type: 'OUTBOUND', status: 'DRAFT', code: 'PX-1' } },
+    { ...container, id: 'confirmed', voucher: { type: 'OUTBOUND', status: 'CONFIRMED', code: 'PX-2' } },
+    { ...container, id: 'received-earlier', voucher: { type: 'INBOUND', status: 'COMPLETED', code: 'PN-1' } },
+    { ...container, id: 'closed', voucher: { type: 'OUTBOUND', status: 'COMPLETED', code: 'PX-3' } },
+    container]);
+  assert.deepEqual(plain(result.items).map(value => value.id), ['c1', 'received-earlier', 'closed']);
 });
 
-test('outbound preview paginates staged containers, forwards cancellation and never turns a truncated list into empty success', async () => {
+test('outbound preview paginates stored containers, forwards cancellation and never turns a truncated list into empty success', async () => {
   let calls = [];
   const signal = new AbortController().signal;
   let truncate = false;
   const api = createLoader({
     'src/shared/api/client.ts': { ApiError: class ApiError extends Error { constructor(status, code, message) { super(message); this.code = code; } } },
-    'src/shared/api/navigationApi.ts': { getActiveMapVersion: async () => map, getMapVersionDetail: async () => map },
     'src/shared/api/warehouseApi.ts': { listContainers: async (params, actualSignal) => { calls.push(params); assert.equal(actualSignal, signal); return params.skip === 0 ? { items: [container], total: 2 } : { items: truncate ? [] : [{ ...container, id: 'c2' }], total: 2 }; } },
   })('src/features/inventory/outboundPreparation.ts');
   assert.equal((await api.loadOutboundPreview(scope.warehouseId, signal)).items.length, 2);
   assert.deepEqual(calls.map(value => ({ skip: value.skip, status: value.status, eligibleOnly: value.eligibleOnly })), [
-    { skip: 0, status: 'STAGED_OUTBOUND', eligibleOnly: false },
-    { skip: 1, status: 'STAGED_OUTBOUND', eligibleOnly: false },
+    { skip: 0, status: 'STORED', eligibleOnly: false },
+    { skip: 1, status: 'STORED', eligibleOnly: false },
   ]);
   truncate = true;
   await assert.rejects(api.loadOutboundPreview(scope.warehouseId, signal), error => error.code === 'incomplete_container_list');
 });
 
 test('outbound review detects changed barcode, point or product after refresh', () => {
-  const { staleOutboundSelections } = createLoader({ 'src/shared/api/client.ts': {}, 'src/shared/api/navigationApi.ts': {}, 'src/shared/api/warehouseApi.ts': {} })('src/features/inventory/outboundPreparation.ts');
+  const { staleOutboundSelections } = createLoader({ 'src/shared/api/client.ts': {}, 'src/shared/api/warehouseApi.ts': {} })('src/features/inventory/outboundPreparation.ts');
   const current = { ...container, productName: 'Rice', productSku: 'RICE' };
   const selection = [{ id: current.id, barcode: current.barcode, endpointId: current.currentEndpointId, productName: current.productName, productSku: current.productSku }];
   assert.equal(staleOutboundSelections(selection, [current]).length, 0);
-  for (const change of [{ barcode: 'different' }, { currentEndpointId: 'other-outbound' }, { productName: 'Changed' }, { productSku: 'NEW' }]) assert.equal(staleOutboundSelections(selection, [{ ...current, ...change }]).length, 1);
+  for (const change of [{ barcode: 'different' }, { currentEndpointId: 'other-shelf' }, { productName: 'Changed' }, { productSku: 'NEW' }]) assert.equal(staleOutboundSelections(selection, [{ ...current, ...change }]).length, 1);
   assert.equal(staleOutboundSelections(selection, []).length, 1);
 });
 

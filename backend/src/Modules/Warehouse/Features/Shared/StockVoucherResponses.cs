@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.Warehouse.Features.Shared;
 
 /// <param name="Done">INBOUND: the Container reached a shelf (STORED, or ISSUED later). OUTBOUND: it is ISSUED.</param>
+/// <param name="ClosedShort">The voucher was closed short before this line got done; it no longer counts.</param>
 public sealed record StockVoucherLineResponse(
     Guid Id,
     int LineNo,
@@ -21,7 +23,8 @@ public sealed record StockVoucherLineResponse(
     short? CurrentLevelNo,
     bool Done,
     decimal? ContentsQuantity = null,
-    string? ContentsUnit = null);
+    string? ContentsUnit = null,
+    bool ClosedShort = false);
 
 public sealed record StockVoucherProductSummary(
     Guid ProductId,
@@ -30,8 +33,8 @@ public sealed record StockVoucherProductSummary(
     int ContainerCount,
     int DoneCount);
 
-/// <param name="ContainerCount">The voucher quantity: one line per Container (rules/00).</param>
-/// <param name="DoneCount">Robot progress, read from the Containers; it never changes <paramref name="Status"/>.</param>
+/// <param name="ContainerCount">The voucher quantity: one line per Container (rules/00), closed-short lines included.</param>
+/// <param name="DoneCount">Robot progress, read from the Containers. The last open line done makes the voucher COMPLETED.</param>
 public sealed record StockVoucherDetailResponse(
     Guid Id,
     string Code,
@@ -53,15 +56,11 @@ public sealed record StockVoucherDetailResponse(
     int DoneCount,
     IReadOnlyList<StockVoucherProductSummary> Products,
     IReadOnlyList<StockVoucherLineResponse> Lines,
-    DateTimeOffset? StockPostedAt = null);
-
-internal static class StockVoucherProgress
-{
-    public static bool IsDone(StockVoucherType type, ContainerStatus status) =>
-        type == StockVoucherType.INBOUND
-            ? status is ContainerStatus.STORED or ContainerStatus.STAGED_OUTBOUND or ContainerStatus.ISSUED
-            : status == ContainerStatus.ISSUED;
-}
+    DateTimeOffset? StockPostedAt = null,
+    DateTimeOffset? CompletedAt = null,
+    DateTimeOffset? ClosedShortAt = null,
+    string? ClosedShortReason = null,
+    int ClosedShortCount = 0);
 
 internal static class StockVoucherQueries
 {
@@ -89,7 +88,10 @@ internal static class StockVoucherQueries
                 v.CancelledBy,
                 v.CancelledAt,
                 v.UpdatedAt,
-                v.StockPostedAt
+                v.StockPostedAt,
+                v.CompletedAt,
+                v.ClosedShortAt,
+                v.ClosedShortReason
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException($"Stock voucher '{id}' was not found.", "stock_voucher_not_found");
@@ -119,7 +121,8 @@ internal static class StockVoucherQueries
                 EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : l.Container.CurrentEndpointId,
                 l.Container.CurrentLevelNo,
                 l.Container.ContentsQuantity,
-                l.Container.ContentsUnit
+                l.Container.ContentsUnit,
+                l.ClosedShortAt
             })
             .ToListAsync(cancellationToken);
 
@@ -137,7 +140,10 @@ internal static class StockVoucherQueries
                 r.LocationCode,
                 r.EndpointId,
                 r.CurrentLevelNo,
-                StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus), r.ContentsQuantity, r.ContentsUnit))
+                StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus) && r.ClosedShortAt is null,
+                r.ContentsQuantity,
+                r.ContentsUnit,
+                r.ClosedShortAt is not null))
             .ToList();
 
         var products = lines
@@ -166,6 +172,11 @@ internal static class StockVoucherQueries
             lines.Count,
             lines.Count(l => l.Done),
             products,
-            lines, voucher.StockPostedAt);
+            lines,
+            voucher.StockPostedAt,
+            voucher.CompletedAt,
+            voucher.ClosedShortAt,
+            voucher.ClosedShortReason,
+            lines.Count(l => l.ClosedShort));
     }
 }

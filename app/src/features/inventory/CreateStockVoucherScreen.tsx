@@ -6,7 +6,7 @@ import { Box, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
-import { addStockVoucherLines, createContainerBatch, createStockVoucherDraft } from '../../shared/api/warehouseApi';
+import { confirmStockVoucher, createContainerBatch, createStockVoucher, createStockVoucherDraft } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import type { StockVoucherType } from '../../shared/types/contracts';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -41,7 +41,7 @@ export function CreateStockVoucherScreen() {
   const [outboundReady, setOutboundReady] = useState(false);
   const preparation = useVoucherPreparation(session?.id || '', warehouse?.id || '', `new-${type}`, type);
   const { referenceNo, note, requestedCount, groups = [] } = preparation.value;
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<false | 'draft' | 'confirm'>(false);
   const [error, setError] = useState<string | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef(false);
@@ -97,14 +97,27 @@ export function CreateStockVoucherScreen() {
     setError(null); setReview(true); scroll.current?.scrollTo({ y: 0, animated: false });
   };
   const back = () => { if (review && !saving && !uncertain) { animateLayout(); setReview(false); setError(null); } else goBack(); };
-  const create = async () => {
+  /** `confirm`: the voucher is born CONFIRMED (outbound in one call; inbound once its Container codes are allocated). */
+  const create = async (confirm: boolean) => {
     if (pending.current || !editable || !warehouse || !preparation.ready || !review) return;
     const problem = validate();
     if (problem) { showError(problem); return; }
-    pending.current = true; setSaving(true); setError(null);
+    pending.current = true; setSaving(confirm ? 'confirm' : 'draft'); setError(null);
     const snapshot = preparation.value;
     const controller = new AbortController(); request.current = controller;
     try {
+      if (!inbound) {
+        // Outbound: the voucher, its Containers on their shelves and (if asked) the confirmation commit together.
+        const created = await createStockVoucher({ warehouseId: warehouse.id, type, referenceNo, note, containerIds: Object.keys(snapshot.selected), confirm }, controller.signal);
+        if (!alive.current || controller.signal.aborted) return;
+        preparation.reset(emptyPreparation('OUTBOUND'));
+        void preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: 'new-OUTBOUND' }, emptyPreparation('OUTBOUND')).catch(() => {});
+        client.setQueryData(['stock-voucher', session?.id, created.id], created);
+        void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+        void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
+        replace('stock_voucher_detail', { voucherId: created.id, warehouseId: warehouse.id });
+        return;
+      }
       const result = await createStockVoucherDraft({ warehouseId: warehouse.id, type, referenceNo, note }, controller.signal);
       if (!alive.current || controller.signal.aborted) return;
       client.setQueryData(['stock-voucher', session?.id, result.id], result);
@@ -120,27 +133,6 @@ export function CreateStockVoucherScreen() {
         void preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: 'new-INBOUND' }, emptyPreparation('INBOUND')).catch(() => {});
       }
       if (!alive.current || controller.signal.aborted) return;
-      if (!inbound && !preparationCopyFailed) {
-        preparation.reset(emptyPreparation('OUTBOUND'));
-        void preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: 'new-OUTBOUND' }, emptyPreparation('OUTBOUND')).catch(() => {});
-        try {
-          const attached = await addStockVoucherLines(result.id, Object.keys(snapshot.selected), controller.signal);
-          if (!alive.current || controller.signal.aborted) return;
-          client.setQueryData(['stock-voucher', session?.id, result.id], attached);
-          void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
-          void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
-          replace('stock_voucher_detail', { voucherId: result.id, warehouseId: warehouse.id });
-          return;
-        } catch (attachFailure) {
-          if (!alive.current || controller.signal.aborted) return;
-          replace('stock_voucher_detail', {
-            voucherId: result.id,
-            warehouseId: warehouse.id,
-            batchError: getUserErrorMessage(attachFailure, 'Could not save selected containers to this draft. Retry from this voucher.'),
-          });
-          return;
-        }
-      }
       if (batchPlan && !preparationCopyFailed) {
         try {
           const batch = await createContainerBatch(batchPlan.body, controller.signal);
@@ -153,6 +145,21 @@ export function CreateStockVoucherScreen() {
           client.setQueryData(['stock-voucher', session?.id, result.id], batch.stockVoucher || result);
           void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
           void client.invalidateQueries({ queryKey: ['inventory-containers'] });
+          if (confirm) {
+            try {
+              const confirmed = await confirmStockVoucher(result.id, 'INBOUND', controller.signal);
+              if (!alive.current || controller.signal.aborted) return;
+              client.setQueryData(['stock-voucher', session?.id, result.id], confirmed);
+            } catch (confirmFailure) {
+              if (!alive.current || controller.signal.aborted) return;
+              replace('stock_voucher_detail', {
+                voucherId: result.id,
+                warehouseId: warehouse.id,
+                batchError: getUserErrorMessage(confirmFailure, 'The containers were saved, but the voucher could not be confirmed. Confirm it from this draft.'),
+              });
+              return;
+            }
+          }
           replace('stock_voucher_detail', { voucherId: result.id, warehouseId: warehouse.id });
           return;
         } catch (batchFailure) {
@@ -220,7 +227,10 @@ export function CreateStockVoucherScreen() {
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         {!canCreateVoucher(session) && <Text variant="caption" color="textSecondary">Your account cannot create vouchers.</Text>}
-        <Button title={review ? inbound ? 'Create Inbound Voucher' : 'Create Outbound Voucher' : inbound ? 'Review Batch' : 'Review Selection'} onPress={() => { if (review) void create(); else openReview(); }} loading={saving} disabled={!editable || !preparation.ready || (!review && !inbound && !outboundReady)} fullWidth />
+        {review ? <View style={styles.row}>
+          <Button title="Save As Draft" variant="outline" style={styles.flex} onPress={() => { void create(false); }} loading={saving === 'draft'} disabled={!editable || !preparation.ready} />
+          <Button title="Create And Confirm" style={styles.flex} onPress={() => { void create(true); }} loading={saving === 'confirm'} disabled={!editable || !preparation.ready} />
+        </View> : <Button title={inbound ? 'Review Batch' : 'Review Selection'} onPress={openReview} disabled={!editable || !preparation.ready || (!inbound && !outboundReady)} fullWidth />}
       </View>
     </KeyboardAvoidingView>}
   </View>;

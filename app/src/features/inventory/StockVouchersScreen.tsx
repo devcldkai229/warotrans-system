@@ -16,7 +16,7 @@ import { createVoucherStyles } from './voucherStyles';
 
 const STATUSES = [
   { value: '', label: 'All Statuses' }, { value: 'DRAFT', label: 'Draft' },
-  { value: 'CONFIRMED', label: 'Confirmed' }, { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'CONFIRMED', label: 'Confirmed' }, { value: 'COMPLETED', label: 'Completed' }, { value: 'CANCELLED', label: 'Cancelled' },
 ] as const;
 
 export function StockVouchersScreen() {

@@ -27,13 +27,28 @@ public sealed class ConfirmStockVoucherHandler(
 
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         var voucher = await WarehouseWriteLocks.VoucherAsync(db, voucherId, cancellationToken);
-        if (voucher.Status == StockVoucherStatus.CONFIRMED)
+        if (voucher.Status is StockVoucherStatus.CONFIRMED or StockVoucherStatus.COMPLETED)
         {
             if (voucher.StockPostedAt is null)
                 throw new ConflictException("This legacy confirmed voucher has no stock posting receipt. Reconcile it before using it.",
                     voucher.Type == StockVoucherType.INBOUND ? "inbound_stock_not_posted" : "outbound_stock_not_posted");
             return await StockVoucherQueries.LoadDetailAsync(db, voucherId, cancellationToken);
         }
+
+        await ConfirmAsync(voucher, accountId, cancellationToken);
+        await StockVoucherStore.SaveAsync(db, voucher, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation("{Type} voucher {Code} confirmed with {Count} Containers by {AccountId}", voucher.Type, voucher.Code, voucher.Lines.Count, accountId);
+        return await StockVoucherQueries.LoadDetailAsync(db, voucher.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Confirms a DRAFT voucher locked by the caller, without saving. Inbound admits the received Containers (no stock
+    /// yet: it is booked shelf by shelf as robots put them away). Outbound reserves Containers still on their shelves
+    /// (no stock change: it comes off when a robot delivers each one to an Outbound gate).
+    /// </summary>
+    internal async Task ConfirmAsync(StockVoucher voucher, Guid accountId, CancellationToken cancellationToken)
+    {
         if (voucher.Status != StockVoucherStatus.DRAFT)
             throw new ConflictException("Only a DRAFT voucher can be confirmed.", "voucher_not_draft");
         if (voucher.Lines.Count == 0)
@@ -55,14 +70,9 @@ public sealed class ConfirmStockVoucherHandler(
         if (voucher.Type == StockVoucherType.INBOUND)
             await AdmitAsync(voucher, containers, now, cancellationToken);
         else
-            await IssueAsync(voucher, containers, accountId, now, cancellationToken);
+            await OutboundStock.EnsureEligibleAsync(db, voucher.WarehouseId, containers, cancellationToken);
 
         voucher.Confirm(accountId, now);
-        voucher.StockPostedAt = now;
-        await StockVoucherStore.SaveAsync(db, voucher, cancellationToken);
-        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-        logger.LogInformation("{Type} voucher {Code} posted {Count} Containers by {AccountId}", voucher.Type, voucher.Code, containers.Count, accountId);
-        return await StockVoucherQueries.LoadDetailAsync(db, voucher.Id, cancellationToken);
     }
 
     private async Task AdmitAsync(StockVoucher voucher, IReadOnlyList<Container> boxes, DateTimeOffset now, CancellationToken ct)
@@ -107,41 +117,6 @@ public sealed class ConfirmStockVoucherHandler(
             box.Status = ContainerStatus.CREATED;
             box.CurrentStorageLocationId = null;
             box.CurrentLevelNo = null;
-            box.UpdatedAt = now;
-        }
-    }
-
-    private async Task IssueAsync(StockVoucher voucher, IReadOnlyList<Container> boxes, Guid actor, DateTimeOffset now, CancellationToken ct)
-    {
-        await OutboundStaging.EnsureEligibleAsync(map, voucher.WarehouseId, boxes, ct);
-        var slots = boxes.GroupBy(c => (c.ProductId, LocationId: c.InventoryStorageLocationId!.Value, Level: c.InventoryLevelNo!.Value)).ToList();
-        var locationIds = slots.Select(g => g.Key.LocationId).Distinct().ToArray();
-        if (await db.StorageLocations.CountAsync(l => locationIds.Contains(l.Id) && l.WarehouseId == voucher.WarehouseId, ct) != locationIds.Length)
-            throw new ConflictException("The accounting location belongs to another warehouse.", "inventory_transfer_location_invalid");
-        await WarehouseWriteLocks.StockAsync(db, boxes.Select(c => c.ProductId), ct);
-        foreach (var slot in slots)
-            await InventoryAccounting.AdjustAsync(db, slot.Key.ProductId, slot.Key.LocationId, slot.Key.Level, -slot.Count(), now, ct);
-
-        foreach (var box in boxes)
-        {
-            db.ContainerMovements.Add(new ContainerMovement
-            {
-                Id = Guid.NewGuid(),
-                ContainerId = box.Id,
-                Type = ContainerMovementType.ISSUED,
-                FromStatus = box.Status,
-                ToStatus = ContainerStatus.ISSUED,
-                FromEndpointId = box.CurrentEndpointId,
-                ActorAccountId = actor,
-                IdempotencyKey = $"{voucher.Id:N}:{box.Id:N}:ISSUED",
-                OccurredAt = now
-            });
-            box.Status = ContainerStatus.ISSUED;
-            box.CurrentStorageLocationId = null;
-            box.CurrentEndpointId = null;
-            box.CurrentLevelNo = null;
-            box.InventoryStorageLocationId = null;
-            box.InventoryLevelNo = null;
             box.UpdatedAt = now;
         }
     }

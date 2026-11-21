@@ -146,8 +146,8 @@ test('addStockVoucherLines chunks batches over 200 containers and verifies every
       containerCount: accumulated.length,
       lines: accumulated.map((containerId, index) => ({
         id: `l-${index + 1}`, lineNo: index + 1, containerId, containerBarcode: `CTN-${index + 1}`,
-        containerStatus: 'STAGED_OUTBOUND', productId: 'p1', productSku: 'SKU1', productName: 'Rice',
-        currentStorageLocationId: null, currentStorageLocationCode: null, currentEndpointId: 'ep-out', currentLevelNo: null, done: false,
+        containerStatus: 'STORED', productId: 'p1', productSku: 'SKU1', productName: 'Rice',
+        currentStorageLocationId: 'shelf-a', currentStorageLocationCode: 'A-1', currentEndpointId: 'ep-shelf-a', currentLevelNo: 1, done: false,
       })),
     });
   })('src/shared/api/warehouseApi.ts');
@@ -262,7 +262,7 @@ test('voucher contents editor never accepts missing or duplicate Container ident
   assert.equal((await api.getStockVoucher('voucher-1')).lines[0].containerId, 'container-1');
 });
 
-test('voucherLineLocation resolves shelf code, staged outbound gate label, unlocated None, and omits location once issued', () => {
+test('voucherLineLocation resolves shelf code, endpoint label, unlocated None, and omits location once issued', () => {
   const { voucherLineLocation } = modules(async () => {})('src/features/inventory/stockVoucherData.ts');
   const endpoints = new Map([['ep-out-1', 'Outbound Dock 1']]);
   assert.equal(
@@ -270,12 +270,8 @@ test('voucherLineLocation resolves shelf code, staged outbound gate label, unloc
     'SHELF-A-1',
   );
   assert.equal(
-    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-out-1', containerStatus: 'STAGED_OUTBOUND' }, endpoints),
+    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-out-1', containerStatus: 'HOLD' }, endpoints),
     'Outbound Dock 1',
-  );
-  assert.equal(
-    voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-unknown', containerStatus: 'STAGED_OUTBOUND' }, endpoints),
-    'Outbound Gate',
   );
   assert.equal(
     voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: 'ep-custom', containerStatus: 'PACKED' }, new Map()),
@@ -289,4 +285,50 @@ test('voucherLineLocation resolves shelf code, staged outbound gate label, unloc
     voucherLineLocation({ currentStorageLocationCode: null, currentEndpointId: null, containerStatus: 'ISSUED' }, endpoints),
     null,
   );
+});
+
+const outboundLine = (containerId, index) => ({ id: `l-${index + 1}`, lineNo: index + 1, containerId, containerBarcode: `CTN-${index + 1}`,
+  containerStatus: 'STORED', productId: 'p1', productSku: 'SKU1', productName: 'Rice', currentStorageLocationId: 'shelf-a',
+  currentStorageLocationCode: 'A-1', currentEndpointId: 'ep-shelf-a', currentLevelNo: 1, done: false });
+
+test('create and confirm sends the containers with the voucher and verifies it was born CONFIRMED', async () => {
+  let body;
+  const api = modules(async (_, init) => {
+    body = JSON.parse(init.body);
+    return detail({ type: 'OUTBOUND', status: body.confirm ? 'CONFIRMED' : 'DRAFT', containerCount: 2, lines: body.containerIds.map(outboundLine) });
+  })('src/shared/api/warehouseApi.ts');
+  const confirmed = await api.createStockVoucher({ warehouseId: 'warehouse-1', type: 'OUTBOUND', referenceNo: ' SO-9 ', containerIds: [' c1 ', 'c2'], confirm: true });
+  assert.deepEqual(body, { warehouseId: 'warehouse-1', type: 'OUTBOUND', referenceNo: 'SO-9', note: null, containerIds: ['c1', 'c2'], confirm: true });
+  assert.equal(confirmed.status, 'CONFIRMED');
+  const draft = await api.createStockVoucher({ warehouseId: 'warehouse-1', type: 'OUTBOUND', containerIds: ['c1', 'c2'], confirm: false });
+  assert.equal(draft.status, 'DRAFT');
+  await assert.rejects(() => api.createStockVoucher({ warehouseId: 'warehouse-1', type: 'OUTBOUND', containerIds: [], confirm: true }), error => error.code === 'validation_failed');
+  await assert.rejects(() => api.createStockVoucher({ warehouseId: 'warehouse-1', type: 'OUTBOUND', containerIds: ['c1', 'c1'], confirm: true }), error => error.code === 'validation_failed');
+});
+
+test('create and confirm refuses a response that is not confirmed or lost a container', async () => {
+  for (const response of [
+    detail({ type: 'OUTBOUND', status: 'DRAFT', containerCount: 1, lines: [outboundLine('c1', 0)] }),
+    detail({ type: 'OUTBOUND', status: 'CONFIRMED', containerCount: 1, lines: [outboundLine('other', 0)] }),
+  ]) {
+    const api = modules(async () => response)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(() => api.createStockVoucher({ warehouseId: 'warehouse-1', type: 'OUTBOUND', containerIds: ['c1'], confirm: true }), error => error.code === 'voucher_creation_unverified');
+  }
+});
+
+test('closing a voucher short needs a reason and accepts COMPLETED or CANCELLED', async () => {
+  let request;
+  const api = modules(async (url, init) => { request = { url, body: JSON.parse(init.body) }; return detail({ status: 'COMPLETED', completedAt: '2026-11-20T10:00:00Z' }); })('src/shared/api/warehouseApi.ts');
+  const closed = await api.closeStockVoucherShort('voucher-1', '  Job cancelled  ');
+  assert.equal(request.url, '/api/warehouse/stock-vouchers/voucher-1/close-short');
+  assert.deepEqual(request.body, { reason: 'Job cancelled' });
+  assert.equal(closed.status, 'COMPLETED');
+  await assert.rejects(() => api.closeStockVoucherShort('voucher-1', ' '), error => error.code === 'voucher_close_reason_required');
+  const stillOpen = modules(async () => detail({ status: 'CONFIRMED' }))('src/shared/api/warehouseApi.ts');
+  await assert.rejects(() => stillOpen.closeStockVoucherShort('voucher-1', 'why'), error => error.code === 'voucher_close_unverified');
+});
+
+test('a COMPLETED voucher is a valid document', async () => {
+  const api = modules(async () => detail({ status: 'COMPLETED', completedAt: '2026-11-20T10:00:00Z' }))('src/shared/api/warehouseApi.ts');
+  assert.equal((await api.getStockVoucher('voucher-1')).status, 'COMPLETED');
 });
