@@ -152,4 +152,6 @@ export const vi_requests: Record<string, string> = {
   'Not on a confirmed issue voucher': 'Chưa có trong phiếu xuất đã xác nhận',
   'Other containers': 'Container khác',
   '{count} containers → {trips} trip(s), at most {max} per robot': '{count} container → {trips} chuyến, tối đa {max} container mỗi robot',
+  'Set by the workflow': 'Do quy trình quy định',
+  'Endpoint not on this map': 'Điểm không có trên bản đồ này',
 }

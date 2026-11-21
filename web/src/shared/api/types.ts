@@ -66,6 +66,10 @@ export interface WorkflowRequestInputSchema {
   workflowId: string
   workflowInputs: WorkflowRequestInputField[]
   movementInputs: WorkflowRequestInputField[]
+  /** The workflow always picks up here (e.g. INBOUND at its Inbound gate): every movement must start here. */
+  fixedPickupEndpointId?: string | null
+  /** The workflow always delivers here (e.g. OUTBOUND_RETRIEVAL at its Outbound gate): every movement must end here. */
+  fixedDropoffEndpointId?: string | null
 }
 
 export interface WorkflowMetadata {
@@ -95,6 +99,11 @@ export interface WorkflowVariable {
   configuredValue?: unknown
   description?: string | null
   sequenceNo: number
+  /**
+   * 'WAYPOINT': a UUID picked from the Endpoints of the published map; 'WAYPOINT_GROUP': a UUID of an EndpointGroup (a
+   * MOVE to it goes to a free member). The value stays a UUID either way.
+   */
+  format?: 'WAYPOINT' | 'WAYPOINT_GROUP' | null
 }
 
 export interface WorkflowStepDraft {

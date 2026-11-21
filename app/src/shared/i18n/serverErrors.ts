@@ -132,6 +132,8 @@ export const viServerErrors: Record<string, string> = {
   voucher_close_reason_required: 'Hãy nhập lý do đóng phiếu thiếu.',
   voucher_container_duplicate: 'Container \'{q1}\' đã có trên phiếu này.',
   voucher_container_in_transit: 'Container \'{q1}\' vẫn đang được ghi nhận trên robot. Hãy Recover nó về kệ đang chứa trước.',
+  workflow_pickup_endpoint_fixed: 'Quy trình này luôn lấy hàng tại điểm đã cấu hình (ví dụ cổng Inbound). Hãy chọn đúng điểm đó làm điểm lấy.',
+  workflow_dropoff_endpoint_fixed: 'Quy trình này luôn giao hàng tại điểm đã cấu hình (ví dụ cổng Outbound). Hãy chọn đúng điểm đó làm điểm giao.',
   voucher_container_in_transport: 'Container \'{q1}\' đang thuộc một yêu cầu vận chuyển đang chạy; hãy chờ đến khi hoàn tất.',
   voucher_container_not_eligible: 'Container \'{q1}\' không thể đưa vào loại phiếu này.',
   voucher_container_not_on_shelf: 'Container \'{q1}\' phải đang nằm trên kệ của kho này.',

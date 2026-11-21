@@ -80,6 +80,7 @@ public static class WorkflowExecutionModule
         services.Configure<Execution.JobQueueOptions>(configuration.GetSection(Execution.JobQueueOptions.SectionName));
         services.AddScoped<Services.JobQueueProcessor>();
         services.Configure<Features.RobotCare.FleetIdleOptions>(configuration.GetSection(Features.RobotCare.FleetIdleOptions.SectionName));
+        services.AddScoped<Services.FreeEndpointSelector>();
         services.AddScoped<Features.RobotCare.RobotCareService>();
         services.AddHostedService<Services.JobQueueHostedService>();
 

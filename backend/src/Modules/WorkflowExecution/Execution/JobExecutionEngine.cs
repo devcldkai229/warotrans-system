@@ -60,7 +60,8 @@ public sealed partial class JobExecutionEngine(
     IWarehouseModule? warehouse = null,
     IOptions<HumanTaskOptions>? humanTasks = null,
     IOptions<RecoveryOptions>? recoveryOptions = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    WaroTrans.WorkflowExecution.Services.FreeEndpointSelector? freeEndpoints = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -2171,6 +2172,65 @@ public sealed partial class JobExecutionEngine(
         return false;
     }
 
+    public const string EndpointGroupKey = "endpointGroupId";
+    public const string SelectedEndpointKey = "selectedEndpointId";
+    private const string GroupWaitSinceKey = "endpointGroupWaitSince";
+
+    /// <summary>
+    /// A MOVE whose target is an EndpointGroup goes to a free member (FreeEndpointSelector: the group's policy, places no
+    /// robot stands on and no other Job is headed to). The choice is kept on the step, so a retry drives to the same place.
+    /// With every member taken the step waits and says why; it never fails for that.
+    /// </summary>
+    /// <returns>Done = null and the Endpoint to drive to; or Done = the executor result when the step waits / failed.</returns>
+    private async Task<(bool? Done, Guid EndpointId)> ResolveEndpointGroupAsync(
+        Job job, JobTask task, JobStep step, string stepKey, Guid robotId, Guid targetId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (step.OutputValues.TryGetValue(EndpointGroupKey, out var keptGroup) && keptGroup.GetGuid() == targetId
+            && step.OutputValues.TryGetValue(SelectedEndpointKey, out var kept))
+        {
+            return (null, kept.GetGuid());
+        }
+
+        var group = await navigation.GetEndpointGroupAsync(targetId, cancellationToken);
+        if (group is null)
+        {
+            return (null, targetId);
+        }
+
+        if (!group.IsActive || group.MapVersionId != job.MapVersionId || freeEndpoints is null)
+        {
+            Fail(job, task, step, stepKey, "endpoint_group_unavailable",
+                $"Endpoint group '{group.Code}' is inactive or not on the Job's map.", now);
+            return (true, targetId);
+        }
+
+        var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+        var choice = robot is null
+            ? null
+            : await freeEndpoints.ChooseAsync(robot, group.Members, group.SelectionPolicy, job.Id, cancellationToken);
+        var outputs = new Dictionary<string, JsonElement>(step.OutputValues);
+        if (choice is not { } endpointId)
+        {
+            var since = outputs.TryGetValue(GroupWaitSinceKey, out var s) ? s.GetDateTimeOffset() : now;
+            outputs[GroupWaitSinceKey] = JsonSerializer.SerializeToElement(since);
+            outputs[WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(2));
+            outputs["waitingFor"] = JsonSerializer.SerializeToElement($"a free place in {group.Code}");
+            step.OutputValues = outputs;
+            SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+            return (false, targetId);
+        }
+
+        outputs.Remove(GroupWaitSinceKey);
+        outputs.Remove(WaitUntilKey);
+        outputs.Remove("waitingFor");
+        outputs[EndpointGroupKey] = JsonSerializer.SerializeToElement(group.Id);
+        outputs[SelectedEndpointKey] = JsonSerializer.SerializeToElement(endpointId);
+        step.OutputValues = outputs;
+        logger.LogInformation("Job {JobNo} step {StepKey}: group {Group} → {Endpoint}", job.JobNo, stepKey, group.Code,
+            group.Members.First(m => m.Id == endpointId).Code);
+        return (null, endpointId);
+    }
+
     private async Task<bool> StartMoveAsync(Job job, JobTask task, JobStep step, string stepKey, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -2210,6 +2270,13 @@ public sealed partial class JobExecutionEngine(
         }
 
         var endpointId = step.ResolvedInputs["targetEndpointId"].GetGuid();
+        var chosen = await ResolveEndpointGroupAsync(job, task, step, stepKey, robotId, endpointId, now, cancellationToken);
+        if (chosen.Done is { } finished)
+        {
+            return finished;
+        }
+
+        endpointId = chosen.EndpointId;
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
         if (pose is null || !pose.IsEnabled || pose.MapVersionId != job.MapVersionId)
         {

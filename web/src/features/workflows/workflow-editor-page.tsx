@@ -31,6 +31,8 @@ import {
   updateWorkflow,
 } from '@/shared/api/workflows'
 import { BindingEditor } from './binding-editor'
+import { fromTypeChoice, isEndpointField, variableTypeChoice, WAYPOINT_GROUP_TYPE, WAYPOINT_TYPE } from './endpointOptions'
+import { EndpointValuePicker } from './EndpointValuePicker'
 import { shouldLoadDraft } from './draftSync'
 import { ReadOnlyInfo, WorkflowReadOnlyView } from './WorkflowReadOnlyView'
 import { ScopeBadge } from './scope-badge'
@@ -775,19 +777,26 @@ export function WorkflowEditor({
                 />
                 <select
                   aria-label={t('Data type')}
-                  value={variable.dataType}
+                  value={variableTypeChoice(variable)}
                   disabled={variable.source === 'SYSTEM_VALUE'}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const next = fromTypeChoice(e.target.value)
+                    const switchesKind = (next.format ?? null) !== (variable.format ?? null)
                     updateVariable(index, {
-                      dataType: e.target.value as WorkflowVariable['dataType'],
+                      dataType: next.dataType as WorkflowVariable['dataType'],
+                      format: next.format,
+                      // A pasted text is no waypoint and a waypoint ID means nothing as text: start empty.
+                      ...(switchesKind ? { configuredValue: undefined } : {}),
                     })
-                  }
+                  }}
                 >
                   {metadata.dataTypes.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
                   ))}
+                  <option value={WAYPOINT_TYPE}>{t('WAYPOINT (map point)')}</option>
+                  <option value={WAYPOINT_GROUP_TYPE}>{t('WAYPOINT_GROUP (any free point of a group)')}</option>
                 </select>
                 <select
                   aria-label={t('Variable source')}
@@ -813,7 +822,18 @@ export function WorkflowEditor({
                     onChange={(e) => updateVariable(index, { isRequired: e.target.checked })}
                   />
                 </label>
-                {variable.source === 'ADMIN_INPUT' ? (
+                {variable.source === 'ADMIN_INPUT' &&
+                (variable.format === WAYPOINT_TYPE ||
+                  variable.format === WAYPOINT_GROUP_TYPE ||
+                  isEndpointField(variable.key, variable.dataType)) ? (
+                  <EndpointValuePicker
+                    group={variable.format === WAYPOINT_GROUP_TYPE}
+                    value={variable.configuredValue}
+                    required={variable.isRequired}
+                    ariaLabel={t('Configured value')}
+                    onChange={(id) => updateVariable(index, { configuredValue: id })}
+                  />
+                ) : variable.source === 'ADMIN_INPUT' ? (
                   <input
                     type={
                       variable.dataType === 'INTEGER' || variable.dataType === 'DECIMAL'

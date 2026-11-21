@@ -124,6 +124,7 @@ public sealed class WorkflowRequestValidator(WorkflowExecutionDbContext db) : IW
         WorkflowMovementRules.Ensure(workflow.Code, request.Details);
 
         var model = WorkflowMapping.ToDefinitionModel(workflow);
+        WorkflowFixedStops.Ensure(model, request.Details);
         var inputs = request.WorkflowInputs ?? new Dictionary<string, JsonElement>();
 
         foreach (var variable in model.Variables.Where(v => v.Source == WorkflowVariableSource.STAFF_INPUT))

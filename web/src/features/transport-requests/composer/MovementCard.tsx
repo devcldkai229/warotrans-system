@@ -115,6 +115,9 @@ export function MovementCard({
       ) : null}
 
       <div className="flex flex-col gap-3">
+        {data.fixedPickupEndpointId ? (
+          <FixedStop label={t('From')} data={data} endpointId={data.fixedPickupEndpointId} />
+        ) : (
         <LocationEndpointPicker
           label={t('From')}
           data={data}
@@ -135,6 +138,10 @@ export function MovementCard({
             })
           }
         />
+        )}
+        {data.fixedDropoffEndpointId ? (
+          <FixedStop label={t('To')} data={data} endpointId={data.fixedDropoffEndpointId} />
+        ) : (
         <LocationEndpointPicker
           label={t('To')}
           data={data}
@@ -154,6 +161,7 @@ export function MovementCard({
             })
           }
         />
+        )}
       </div>
 
       {errors?.length ? (
@@ -166,5 +174,20 @@ export function MovementCard({
         </ul>
       ) : null}
     </article>
+  )
+}
+
+/** A From / To the workflow decides (its Inbound or Outbound gate): shown, not editable. */
+function FixedStop({ label, data, endpointId }: { label: string; data: ComposerData; endpointId: string }) {
+  const endpoint = data.endpoints.find((item) => item.id === endpointId)
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-medium tracking-wide text-muted uppercase">{label}</span>
+      <div className="flex items-center gap-2 rounded-lg bg-container-high px-3 py-2 text-sm">
+        <Icon name="lock" size={14} />
+        <span className="font-medium">{endpoint ? `${endpoint.code} · ${endpoint.name}` : t('Endpoint not on this map')}</span>
+      </div>
+      <span className="text-[11px] text-muted">{t('Set by the workflow')}</span>
+    </div>
   )
 }

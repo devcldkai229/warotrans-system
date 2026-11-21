@@ -62,7 +62,8 @@ public sealed class RobotCareService(
     IOptions<FleetIdleOptions> idle,
     TimeProvider clock,
     ILogger<RobotCareService> logger,
-    WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator? traffic = null)
+    WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator? traffic = null,
+    Services.FreeEndpointSelector? freeEndpoints = null)
 {
     /// <summary>A robot waits this long behind an idle robot before that robot is asked to make way.</summary>
     public const double YieldAfterSeconds = 5;
@@ -88,7 +89,7 @@ public sealed class RobotCareService(
     public async Task<Job> ReturnToParkAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken)
+        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow)
             ?? throw new ConflictException("No parking place is free on this map.", "no_free_parking");
         return await RunAsync(robot, ParkWorkflow, ParkInput, target, actor, cancellationToken);
     }
@@ -96,7 +97,7 @@ public sealed class RobotCareService(
     public async Task<Job> GoToChargerAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.CHARGER, ChargerInput, cancellationToken)
+        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.CHARGER, cancellationToken, ChargeWorkflow)
             ?? throw new ConflictException("No charger is free on this map.", "no_free_charger");
         return await RunAsync(robot, ChargeWorkflow, ChargerInput, target, actor, cancellationToken);
     }
@@ -385,13 +386,13 @@ public sealed class RobotCareService(
 
             // A parking place first; when all are taken, the fallback (the queue point), unless the robot already stands on it.
             var fallbackCodes = idle.Value.FallbackCodes();
-            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken);
+            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
                 var atFallback = endpoints.Any(e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal) && Distance(robot, e) <= ParkedRadius(e));
                 target = atFallback
                     ? null
-                    : await ChooseFreeEndpointAsync(robot, e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal), ParkInput, cancellationToken);
+                    : await ChooseFreeEndpointAsync(robot, e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal), cancellationToken);
                 if (target is not null)
                 {
                     logger.LogInformation("Robot {RobotCode}: every parking place is taken, going to the fallback endpoint", robot.Code);
@@ -468,36 +469,51 @@ public sealed class RobotCareService(
         return id ?? throw new ConflictException($"Publish the workflow {code} first (samples/workflows has one).", "workflow_not_published");
     }
 
-    /// <summary>The nearest enabled place matching <paramref name="kind"/> where no other robot is standing and none is headed.</summary>
-    private async Task<Guid?> ChooseFreeEndpointAsync(RobotSnapshot robot, Func<EndpointPoseWithType, bool> kind, string input, CancellationToken cancellationToken)
+    /// <summary>
+    /// A free place for the robot. When <paramref name="workflowCode"/>'s published version names an EndpointGroup (an
+    /// ADMIN_INPUT variable of format WAYPOINT_GROUP) on the robot's map, its members are the candidates and its selection
+    /// policy decides; otherwise every enabled place matching <paramref name="kind"/>, nearest first.
+    /// </summary>
+    private async Task<Guid?> ChooseFreeEndpointAsync(
+        RobotSnapshot robot,
+        Func<EndpointPoseWithType, bool> kind,
+        CancellationToken cancellationToken,
+        string? workflowCode = null)
     {
-        var endpoints = (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken))
-            .Where(e => kind(e) && e.IsEnabled)
-            .ToList();
-        if (endpoints.Count == 0)
+        var group = workflowCode is null ? null : await ConfiguredGroupAsync(workflowCode, robot, cancellationToken);
+        var candidates = group?.Members
+            ?? (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken)).Where(e => kind(e) && e.IsEnabled).ToList();
+        var selector = freeEndpoints ?? new Services.FreeEndpointSelector(db, fleet, idle);
+        return await selector.ChooseAsync(robot, candidates, group?.SelectionPolicy ?? EndpointSelectionPolicy.NEAREST, null, cancellationToken);
+    }
+
+    /// <summary>The EndpointGroup an administrator chose in the published workflow, when it is active and on the robot's map.</summary>
+    private async Task<EndpointGroupSnapshot?> ConfiguredGroupAsync(string workflowCode, RobotSnapshot robot, CancellationToken cancellationToken)
+    {
+        var variables = await db.Workflows.AsNoTracking()
+            .Where(w => w.Code == workflowCode && w.Status == WorkflowStatus.PUBLISHED)
+            .OrderByDescending(w => w.VersionNo)
+            .Select(w => w.VariablesSchema)
+            .FirstOrDefaultAsync(cancellationToken);
+        var configured = variables?
+            .Where(v => v.Format == ValueObjects.WorkflowVariableDefinition.WaypointGroupFormat && v.ConfiguredValue is { ValueKind: JsonValueKind.String })
+            .Select(v => v.ConfiguredValue!.Value.TryGetGuid(out var id) ? id : (Guid?)null)
+            .FirstOrDefault(id => id is not null);
+        if (configured is not { } groupId)
         {
             return null;
         }
 
-        var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))
-            .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
-            .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == robot.CurrentMapVersionId)
-            .ToList();
-        // FL-08: a place another robot is already driving to on its own is taken too.
-        var claimed = await fleet.GetPositioningTargetsAsync(robot.CurrentMapVersionId, cancellationToken);
-        var liveJobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProvisioningKey.StartsWith("robot-care:") && Live.Contains(j.Status))
-            .ToListAsync(cancellationToken);
-        var headedFor = liveJobs
-            .Select(j => j.ContextValues.TryGetValue(input, out var v) && v.ValueKind == JsonValueKind.String ? v.GetGuid() : (Guid?)null)
-            .OfType<Guid>()
-            .ToHashSet();
+        var group = await navigation.GetEndpointGroupAsync(groupId, cancellationToken);
+        if (group is not { IsActive: true } || group.MapVersionId != robot.CurrentMapVersionId)
+        {
+            logger.LogWarning(
+                "{Workflow}: endpoint group {GroupId} is inactive or not on {Robot}'s map; choosing by endpoint type instead",
+                workflowCode, groupId, robot.Code);
+            return null;
+        }
 
-        return endpoints
-            .Where(e => !headedFor.Contains(e.Id) && !claimed.Contains(e.Id) && !others.Any(r => Distance(r, e) <= OccupiedRadius(e)))
-            .OrderBy(e => Distance(robot, e))
-            .Select(e => (Guid?)e.Id)
-            .FirstOrDefault();
+        return group;
     }
 
     private double OccupiedRadius(EndpointPoseWithType endpoint) => Math.Max(endpoint.PositionTolerance, idle.Value.OccupiedRadiusMeters);

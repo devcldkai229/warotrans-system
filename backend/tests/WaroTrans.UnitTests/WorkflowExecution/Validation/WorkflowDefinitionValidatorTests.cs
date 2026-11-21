@@ -438,4 +438,63 @@ public class WorkflowDefinitionValidatorTests
         Assert.False(typeResult.IsValid);
         Assert.Contains(typeResult.Errors, e => e.Message.Contains("BOOLEAN", StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData(WorkflowDataType.UUID, "WAYPOINT", true)]
+    [InlineData(WorkflowDataType.STRING, "WAYPOINT", false)]
+    [InlineData(WorkflowDataType.UUID, "SHELF", false)]
+    public void A_variable_format_is_only_WAYPOINT_on_a_UUID(WorkflowDataType dataType, string format, bool valid)
+    {
+        var model = InboundPutawayWorkflowFactory.CreateValid();
+        model.Variables.Add(new WorkflowVariableDefinition
+        {
+            Key = "inspectionPoint",
+            Name = "Inspection point",
+            DataType = dataType,
+            Source = WorkflowVariableSource.ADMIN_INPUT,
+            IsRequired = true,
+            ConfiguredValue = dataType == WorkflowDataType.UUID
+                ? JsonSerializer.SerializeToElement(Guid.NewGuid())
+                : JsonSerializer.SerializeToElement("EP-INSPECTION"),
+            Format = format,
+            SequenceNo = model.Variables.Count
+        });
+
+        var result = WorkflowDefinitionValidator.ValidateForPublish(model);
+
+        Assert.Equal(valid, !result.Errors.Any(e => e.Path.EndsWith(".format", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void An_optional_admin_value_may_stay_empty_but_a_required_one_may_not()
+    {
+        var model = InboundPutawayWorkflowFactory.CreateValid();
+        model.Variables.Add(new WorkflowVariableDefinition
+        {
+            Key = "parkGroup", Name = "Parking group", DataType = WorkflowDataType.UUID, Source = WorkflowVariableSource.ADMIN_INPUT,
+            IsRequired = false, Format = "WAYPOINT_GROUP", SequenceNo = model.Variables.Count
+        });
+        Assert.True(WorkflowDefinitionValidator.ValidateForPublish(model).IsValid);
+
+        model.Variables[^1].IsRequired = true;
+        Assert.Contains(WorkflowDefinitionValidator.ValidateForPublish(model).Errors, e => e.Path.EndsWith(".configuredValue", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_empty_optional_admin_value_cannot_feed_a_required_step_input()
+    {
+        var model = InboundPutawayWorkflowFactory.CreateValid();
+        model.Variables.Add(new WorkflowVariableDefinition
+        {
+            Key = "gate", Name = "Gate", DataType = WorkflowDataType.UUID, Source = WorkflowVariableSource.ADMIN_INPUT,
+            IsRequired = false, SequenceNo = model.Variables.Count
+        });
+        var move = model.Tasks.SelectMany(t => t.Steps).First(s => s.StepType == StepType.MOVE);
+        move.InputBindings["targetEndpointId"] = new StepInputBinding { SourceType = BindingSourceType.WORKFLOW_VAR, SourceReference = "gate" };
+
+        var result = WorkflowDefinitionValidator.ValidateForPublish(model);
+
+        Assert.Contains(result.Errors, e => e.Message.Contains("ADMIN_INPUT 'gate' is empty", StringComparison.Ordinal));
+        Assert.DoesNotContain(WorkflowDefinitionValidator.ValidateDraft(model).Errors, e => e.Message.Contains("is empty", StringComparison.Ordinal));
+    }
 }

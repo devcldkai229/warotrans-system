@@ -1,0 +1,231 @@
+{
+  "code": "INBOUND",
+  "name": "INBOUND",
+  "description": "Transport incoming goods from the inbound area to their assigned storage locations within the warehouse.",
+  "variables": [
+    {
+      "key": "assignedRobotId",
+      "name": "assignedRobotId",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "description": "Robot assigned to the current Job.",
+      "sequenceNo": 0
+    },
+    {
+      "key": "checkQuality",
+      "name": "Check Quality?",
+      "dataType": "BOOLEAN",
+      "source": "STAFF_INPUT",
+      "isRequired": true,
+      "description": "Confirm whether the robot must visit Quality Inspection before delivery.",
+      "sequenceNo": 1
+    },
+    {
+      "key": "inspectionEndpointId",
+      "name": "Inspection Endpoint",
+      "dataType": "UUID",
+      "source": "ADMIN_INPUT",
+      "isRequired": true,
+      "description": "EP-INSPECTION configured by Admin.",
+      "sequenceNo": 2,
+      "format": "WAYPOINT"
+    },
+    {
+      "key": "inboundEndpointId",
+      "name": "Inbound Gate",
+      "dataType": "UUID",
+      "source": "ADMIN_INPUT",
+      "isRequired": true,
+      "description": "Inbound gate where every pickup happens (chosen by Admin).",
+      "sequenceNo": 3,
+      "format": "WAYPOINT"
+    }
+  ],
+  "tasks": [
+    {
+      "taskKey": "COLLECT_INBOUND_GOODS",
+      "name": "Collect Inbound Goods",
+      "sequenceNo": 1,
+      "steps": [
+        {
+          "stepKey": "MOVE_TO_INBOUND_AREA",
+          "name": "Move to Inbound Area",
+          "stepType": "MOVE",
+          "sequenceNo": 1,
+          "operationCode": "PICKUP",
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "PICKUP"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "inboundEndpointId"
+            },
+            "commandTimeoutSeconds": {
+              "sourceType": "CONSTANT",
+              "constantValue": 360
+            }
+          },
+          "timeoutSeconds": 360,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "stepKey": "CONFIRM_GOODS_PICKUP",
+          "name": "Confirm Goods Pickup",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 2,
+          "operationCode": "PICKUP_CONFIRM",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
+            },
+            "containerId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "containerId"
+            }
+          },
+          "timeoutSeconds": 300,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        }
+      ]
+    },
+    {
+      "taskKey": "QUALITY_INSPECTION",
+      "name": "Quality Inspection",
+      "sequenceNo": 2,
+      "runCondition": {
+        "variableKey": "checkQuality",
+        "equals": true
+      },
+      "steps": [
+        {
+          "stepKey": "MOVE_TO_INSPECTION",
+          "name": "Move to Inspection",
+          "stepType": "MOVE",
+          "sequenceNo": 1,
+          "operationCode": "TRANSIT",
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "TRANSIT"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "inspectionEndpointId"
+            },
+            "commandTimeoutSeconds": {
+              "sourceType": "CONSTANT",
+              "constantValue": 360
+            }
+          },
+          "timeoutSeconds": 360,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        },
+        {
+          "stepKey": "CONFIRM_QUALITY_INSPECTION",
+          "name": "Confirm Quality Inspection",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 2,
+          "operationCode": "INSPECTION_CONFIRM",
+          "instructionText": "Inspect outbound containers at EP-INSPECTION and confirm.",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "endpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "inspectionEndpointId"
+            }
+          },
+          "timeoutSeconds": 300,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        }
+      ]
+    },
+    {
+      "taskKey": "PUT_GOODS_INTO_STORAGE",
+      "name": "Put Goods into Storage",
+      "sequenceNo": 3,
+      "steps": [
+        {
+          "stepKey": "MOVE_TO_STORAGE_LOCATION",
+          "name": "Move to Storage Location",
+          "stepType": "MOVE",
+          "sequenceNo": 1,
+          "operationCode": "DROPOFF",
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "DROPOFF"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
+            },
+            "commandTimeoutSeconds": {
+              "sourceType": "CONSTANT",
+              "constantValue": 357
+            }
+          },
+          "timeoutSeconds": 356,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        },
+        {
+          "stepKey": "CONFIRM_GOODS_STORAGE",
+          "name": "Confirm Goods Storage",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 2,
+          "operationCode": "DROPOFF_CONFIRM",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
+            },
+            "containerId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "containerId"
+            }
+          },
+          "timeoutSeconds": 358,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        }
+      ]
+    }
+  ]
+}

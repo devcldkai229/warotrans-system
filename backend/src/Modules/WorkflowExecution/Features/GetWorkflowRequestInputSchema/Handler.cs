@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Services;
 using WaroTrans.WorkflowExecution.Validation;
 
 namespace WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
@@ -19,6 +20,7 @@ public sealed class GetWorkflowRequestInputSchemaHandler(WorkflowExecutionDbCont
 
         var model = WorkflowMapping.ToDefinitionModel(workflow);
         var schema = RequestInputSchemaBuilder.Build(model);
+        var fixedStops = WorkflowFixedStops.Resolve(model);
 
         return new WorkflowRequestInputSchemaDto(
             workflow.Id,
@@ -33,14 +35,19 @@ public sealed class GetWorkflowRequestInputSchemaHandler(WorkflowExecutionDbCont
                 f.DataType,
                 f.Required,
                 f.Label,
-                f.Description)).ToList());
+                f.Description)).ToList(),
+            fixedStops.PickupEndpointId,
+            fixedStops.DropoffEndpointId);
     }
 }
 
 public sealed record WorkflowRequestInputSchemaDto(
     Guid WorkflowId,
     IReadOnlyList<RequestInputFieldDto> WorkflowInputs,
-    IReadOnlyList<RequestInputFieldDto> MovementInputs);
+    IReadOnlyList<RequestInputFieldDto> MovementInputs,
+    // Set when the workflow always picks up / delivers at one Endpoint (WorkflowFixedStops): the request must use it.
+    Guid? FixedPickupEndpointId = null,
+    Guid? FixedDropoffEndpointId = null);
 
 public sealed record RequestInputFieldDto(
     string Key,

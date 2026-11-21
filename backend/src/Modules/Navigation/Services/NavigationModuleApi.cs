@@ -62,4 +62,21 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
             .Where(e => e.Id == endpointId)
             .Select(e => new EndpointPoseSnapshot(e.Id, e.MapVersionId, e.Code, e.X, e.Y, e.Yaw, e.IsEnabled, e.PositionTolerance))
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<EndpointGroupSnapshot?> GetEndpointGroupAsync(Guid groupId, CancellationToken cancellationToken = default)
+    {
+        var group = await dbContext.EndpointGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+        if (group is null)
+        {
+            return null;
+        }
+
+        var members = await dbContext.EndpointGroupMembers.AsNoTracking()
+            .Where(m => m.EndpointGroupId == groupId)
+            .Join(dbContext.Endpoints.AsNoTracking(), m => m.EndpointId, e => e.Id, (_, e) => e)
+            .OrderBy(e => e.Code)
+            .Select(e => new EndpointPoseWithType(e.Id, e.Code, e.Name, e.EndpointType, e.IsEnabled, e.X, e.Y, e.PositionTolerance))
+            .ToListAsync(cancellationToken);
+        return new EndpointGroupSnapshot(group.Id, group.MapVersionId, group.Code, group.Name, group.SelectionPolicy, group.IsActive, members);
+    }
 }

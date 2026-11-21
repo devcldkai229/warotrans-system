@@ -7,6 +7,8 @@ import type {
   WorkflowVariable,
 } from '@/shared/api/types'
 import { isMovementFieldAvailable } from './movement-scope'
+import { isEndpointField } from './endpointOptions'
+import { EndpointValuePicker } from './EndpointValuePicker'
 import { t } from '@/shared/i18n'
 interface BindingEditorProps {
 
@@ -270,6 +272,15 @@ export function BindingEditor({
               </option>
             ))}
           </select>
+        ) : isEndpointField(input.key, input.dataType) ? (
+          <EndpointValuePicker
+            value={binding?.constantValue}
+            required={input.required}
+            ariaLabel={input.key}
+            onChange={(id) =>
+              onChange({ sourceType, sourceReference: null, outputKey: null, constantValue: id })
+            }
+          />
         ) : (
           <input
             type={
