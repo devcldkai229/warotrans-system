@@ -27,6 +27,10 @@ public sealed partial class JobExecutionEngine
     /// <summary>Pseudo area of a MOVE waiting for its goal endpoint: <c>GOAL:EP-…</c>.</summary>
     public const string GoalQueuePrefix = "GOAL:";
 
+    /// <summary>MOVE output of a goal-queue wait: the robot standing on (or leaving) the goal. RobotCareService moves it
+    /// away when it is idle.</summary>
+    public const string GoalBlockerKey = "goalBlockedByRobotId";
+
     /// <summary>MOVE output of a deadlock retreat: the other robot's MOVE it gave way to.</summary>
     public const string RetreatFromStepKey = "retreatFromStepId";
 
@@ -62,9 +66,10 @@ public sealed partial class JobExecutionEngine
     /// <summary>
     /// Why this MOVE may not drive to <paramref name="goal"/> yet, and the robot it waits for; null when it may go.
     /// Busy: an earlier waiter for the same goal, another Job's MOVE already driving there, a robot with work standing on
-    /// it or still pulling out of it. An idle robot on it does not count: it is moved by RobotCareService once this robot
-    /// waits behind it in traffic. A robot that itself waits for a goal does not count either (two robots each waiting
-    /// for the other's place would wait forever; traffic and the deadlock retreat sort those out).
+    /// it or still pulling out of it, and an idle robot standing on it or driving away from it (RobotCareService moves an
+    /// idle one away: on a dead-end bay such as MAP-ONE OUTBOUND, driving up behind it left it no way out). A robot that
+    /// itself waits for a goal does not count (two robots each waiting for the other's place would wait forever;
+    /// traffic and the deadlock retreat sort those out).
     /// </summary>
     private async Task<(string Reason, Guid? Robot)?> GoalBusyByAsync(
         Job job, JobStep step, Guid robotId, EndpointPoseSnapshot goal, CancellationToken cancellationToken)
@@ -139,6 +144,35 @@ public sealed partial class JobExecutionEngine
                 {
                     return ($"{other.Code} is pulling out of it", other.Id);
                 }
+            }
+        }
+
+        // Robots without work: standing on the goal, or on their way off it (making way / going to park).
+        var positioning = await fleet.GetPositioningRobotIdsAsync(cancellationToken);
+        var withWork = busy.Select(a => a.RobotId).ToHashSet();
+        var idle = (await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken))
+            .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
+            .Select(r => r.Id)
+            .Concat(positioning)
+            .Where(id => id != robotId && !withWork.Contains(id) && !goalWaiters.Contains(id))
+            .Distinct();
+        foreach (var id in idle)
+        {
+            if (await fleet.GetRobotAsync(id, cancellationToken) is not { LocalizationStatus: LocalizationStatus.LOCALIZED } other
+                || other.CurrentMapVersionId != job.MapVersionId)
+            {
+                continue;
+            }
+
+            var d = Dist(other.PoseX, other.PoseY, goal.X, goal.Y);
+            if (d <= Math.Max(GoalOccupiedRadiusMeters, goal.PositionTolerance))
+            {
+                return ($"{other.Code} stands on it", other.Id);
+            }
+
+            if (d <= GoalPullOutRadiusMeters && positioning.Contains(id))
+            {
+                return ($"{other.Code} is leaving it", other.Id);
             }
         }
 
@@ -222,6 +256,19 @@ public sealed partial class JobExecutionEngine
         var since = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var s) ? s.GetDateTimeOffset() : now;
         if ((now - since).TotalSeconds >= RetreatMaxHoldSeconds)
         {
+            return null;
+        }
+
+        if (fromStep.GetGuid() == Guid.Empty)
+        {
+            // Gave way to an idle robot making way itself: wait while it is still on that way.
+            if (step.OutputValues.TryGetValue(RetreatFromRobotKey, out var idleEl) && idleEl.ValueKind == JsonValueKind.String
+                && (await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(idleEl.GetGuid()))
+            {
+                var idleRobot = await fleet.GetRobotAsync(idleEl.GetGuid(), cancellationToken);
+                return $"{idleRobot?.Code ?? "the other robot"} to get out of the way";
+            }
+
             return null;
         }
 

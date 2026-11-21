@@ -2604,15 +2604,23 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
-    public async Task An_idle_robot_on_the_goal_does_not_hold_the_move_back()
+    public async Task An_idle_robot_on_the_goal_is_named_so_it_is_moved_away_and_the_move_waits_until_it_has_left()
     {
         var job = await ProvisionAsync();
         var idle = _fleet.AddRobot(_mapVersionId);
-        PlaceRobot(idle, 1, 2);                 // no job: RobotCareService moves it once the MOVE waits behind it
+        AddStandAside("EP-PARKING-A", WaroTrans.Navigation.Enums.EndpointType.PARK, 0, 0);
+        PlaceRobot(idle, 1, 2);                 // no job, left on the goal (a dead-end bay: it needs the way out)
         PlaceRobot(_fleet.RobotId, 0, 0);
 
         await SemanticEngine().StartAsync(job, _fleet.RobotId);
 
+        Assert.Empty(_fleet.Commands);
+        var waiting = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Status == JobStepStatus.WAITING && s.StepType == StepType.MOVE);
+        Assert.Equal(idle, waiting.OutputValues[JobExecutionEngine.GoalBlockerKey].GetGuid());
+
+        // RobotCareService sent it off; once it is clear of the goal the MOVE goes.
+        PlaceRobot(idle, 4, 4);
+        await WakeAreaWaitsAsync(SemanticEngine());
         Assert.Equal((1.0, 2.0), (_fleet.Commands[^1].X, _fleet.Commands[^1].Y));
     }
 

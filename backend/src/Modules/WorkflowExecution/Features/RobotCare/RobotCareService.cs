@@ -80,6 +80,12 @@ public sealed class RobotCareService(
 
     private static readonly Dictionary<(Guid Waiter, Guid Blocker), DateTimeOffset> BlockedSince = [];
     private static readonly Dictionary<Guid, DateTimeOffset> LastYield = [];
+
+    /// <summary>When a waiting robot's unentered reservation was last freed so an idle robot could make way.</summary>
+    private static readonly Dictionary<Guid, DateTimeOffset> LastFreedForYield = [];
+
+    /// <summary>How long a waiting robot gets no new grant after its unentered cells were freed for a robot making way.</summary>
+    public const double YieldPassSeconds = 8;
     private static readonly object YieldLock = new();
 
     public const string ParkWorkflow = "ROBOT_RETURN_TO_PARK";
@@ -215,8 +221,23 @@ public sealed class RobotCareService(
             .Select(r => (Waiter: r.RobotId, Blocker: r.BlockingOwner!.Value))
             .Concat(snapshot.Waits.Where(w => w.BlockingOwner is not null).Select(w => (Waiter: w.RobotId, Blocker: w.BlockingOwner!.Value)))
             .Where(p => p.Waiter != p.Blocker)
-            .Distinct()
             .ToList();
+        // A robot waiting for its goal (goal queue) is not waiting in traffic: the robot on that goal is named on its MOVE.
+        var goalWaits = await db.JobSteps.AsNoTracking()
+            .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.WAITING && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => new { s.ResolvedInputs, s.OutputValues })
+            .ToListAsync(cancellationToken);
+        foreach (var wait in goalWaits)
+        {
+            if (wait.OutputValues.TryGetValue(Execution.JobExecutionEngine.GoalBlockerKey, out var b) && b.ValueKind == JsonValueKind.String
+                && wait.ResolvedInputs.TryGetValue("robotId", out var w) && w.ValueKind == JsonValueKind.String
+                && b.GetGuid() != w.GetGuid())
+            {
+                pairs.Add((w.GetGuid(), b.GetGuid()));
+            }
+        }
+
+        pairs = pairs.Distinct().ToList();
 
         List<(Guid Waiter, Guid Blocker)> due;
         lock (YieldLock)
@@ -241,6 +262,34 @@ public sealed class RobotCareService(
             .Where(r => r.WaitingReason == WaroTrans.Fleet.Traffic.TrafficWaitingReason.DeadlockRisk)
             .Select(r => r.RobotId)
             .ToHashSet();
+
+        // An idle robot sent to make way is refused (DEADLOCK_RISK): what the waiting robot was granted but has not
+        // entered lies across its way out (traffic cells do not know walls: MAP-ONE SHELF-B-2 next to the INBOUND
+        // corridor). Free those cells and hold the waiting robot a moment, as a deadlock retreat does, instead of
+        // cancelling the move and trying again a minute later.
+        foreach (var (waiterId, blockerId) in pairs)
+        {
+            bool sentByUs;
+            bool freedRecently;
+            lock (YieldLock)
+            {
+                sentByUs = LastYield.TryGetValue(blockerId, out var y) && (now - y).TotalSeconds < YieldCooldownSeconds;
+                freedRecently = LastFreedForYield.TryGetValue(waiterId, out var f) && (now - f).TotalSeconds < YieldPassSeconds + 2;
+            }
+
+            if (!sentByUs || freedRecently || !positioning.Contains(blockerId) || !deadlockIds.Contains(blockerId))
+            {
+                continue;
+            }
+
+            var freed = await traffic.ReleaseUnenteredReservationAsync(waiterId, YieldPassSeconds, "IDLE_YIELD", cancellationToken);
+            lock (YieldLock)
+            {
+                LastFreedForYield[waiterId] = now;
+            }
+
+            logger.LogInformation("Robot {Waiter} lets the robot making way for it pass ({Result})", waiterId, freed.Ok ? "freed" : freed.Reason);
+        }
         var sent = 0;
         foreach (var (waiterId, blockerId) in due)
         {
@@ -253,7 +302,14 @@ public sealed class RobotCareService(
 
             if (positioning.Contains(blockerId))
             {
-                if (deadlockIds.Contains(blockerId))
+                bool makingWay;
+                lock (YieldLock)
+                {
+                    makingWay = LastYield.TryGetValue(blockerId, out var y) && (now - y).TotalSeconds < YieldCooldownSeconds;
+                }
+
+                // A robot going home in the way of work gives up; one we sent to make way keeps going (freed above).
+                if (deadlockIds.Contains(blockerId) && !makingWay)
                 {
                     await fleet.YieldPositioningAsync(blockerId, Guid.Empty, cancellationToken);
                     logger.LogInformation("Robot {Blocker} positioning intent cancelled: deadlocked with {Waiter}", blocker.Code, waiter.Code);
@@ -272,7 +328,7 @@ public sealed class RobotCareService(
 
             // Where the waiting robot is going: the endpoint of its open MOVE, if any.
             var goal = await db.JobSteps.AsNoTracking()
-                .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING
+                .Where(s => s.StepType == StepType.MOVE && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING)
                             && s.JobTask.Job.Status == JobStatus.RUNNING && s.TargetEndpointId != null)
                 .Select(s => new { s.TargetEndpointId, s.ResolvedInputs })
                 .ToListAsync(cancellationToken);

@@ -1966,6 +1966,40 @@ public sealed partial class JobExecutionEngine(
 
             var mine = await OpenMoveAsync(robotId, cancellationToken);
             var theirs = await OpenMoveAsync(partnerId, cancellationToken);
+            if (mine is null != theirs is null)
+            {
+                // An idle robot sent out of the way (RobotCareService) is itself refused: the robot with work it makes
+                // way for stands across its only way out (a robot left in a dead-end bay). That one backs off first.
+                var idleId = mine is null ? robotId : partnerId;
+                var working = (mine ?? theirs)!.Value;
+                if ((await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(idleId)
+                    && !(working.Retreating && RetreatStillFresh(working.RobotId, now)))
+                {
+                    lock (DeadlockSince)
+                    {
+                        if (LastRetreat.TryGetValue(working.RobotId, out var lastBackOff)
+                            && (now - lastBackOff).TotalSeconds < DeadlockCooldownSeconds)
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (await RetreatAsync(working.JobId, working.StepId, working.RobotId, working.Target, idleId, Guid.Empty, null,
+                            cancellationToken))
+                    {
+                        lock (DeadlockSince)
+                        {
+                            LastRetreat[working.RobotId] = now;
+                            DeadlockSince.Remove(robotId);
+                        }
+
+                        retreats++;
+                    }
+                }
+
+                continue;
+            }
+
             if (mine is null || theirs is null)
             {
                 continue; // an idle robot in the way is moved by RobotCareService instead
@@ -2202,7 +2236,7 @@ public sealed partial class JobExecutionEngine(
                 [AreaWaitSinceKey] = JsonSerializer.SerializeToElement(now),
                 [AreaQueueZoneKey] = JsonSerializer.SerializeToElement(DeadlockRetreatZone),
                 [RetreatToKey] = JsonSerializer.SerializeToElement(pose.Id),
-                [RetreatFromStepKey] = JsonSerializer.SerializeToElement(winnerStepId),
+                [RetreatFromStepKey] = JsonSerializer.SerializeToElement(winnerStepId), // Guid.Empty: an idle robot
                 [RetreatFromRobotKey] = JsonSerializer.SerializeToElement(winnerId),
                 [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1)),
                 ["waitingFor"] = JsonSerializer.SerializeToElement($"area_queue:{DeadlockRetreatZone} (backing off to {pose.Code})")
@@ -2227,6 +2261,7 @@ public sealed partial class JobExecutionEngine(
     {
         var outputs = new Dictionary<string, JsonElement>(current);
         outputs.Remove(AreaQueueLegKey);
+        outputs.Remove(GoalBlockerKey);
         outputs.Remove(RobotCommandIdKey);
         outputs.Remove(RetryWaitSinceKey); // waiting for the area is not a transient refusal: its clock starts over
         outputs[AreaWaitSinceKey] = JsonSerializer.SerializeToElement(since);
@@ -2614,6 +2649,11 @@ public sealed partial class JobExecutionEngine(
                             }
 
                             step.OutputValues = AreaWaitOutputs(step.OutputValues, queueSince.Value, zone, goalBusy.Reason, now);
+                            if (goalBusy.Robot is { } blockedBy)
+                            {
+                                step.OutputValues[GoalBlockerKey] = JsonSerializer.SerializeToElement(blockedBy);
+                            }
+
                             SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
                             await SaveAndPublishAsync(cancellationToken);
                             return false;
