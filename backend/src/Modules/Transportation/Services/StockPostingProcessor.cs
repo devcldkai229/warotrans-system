@@ -87,6 +87,19 @@ public sealed class StockPostingProcessor(
                     new ContainerPickup(posting.ContainerId, posting.JobId, posting.TransportRequestId, outboundGate, destination?.WarehouseId),
                     cancellationToken);
             }
+            else if (posting.Type == StockPostingType.CANCEL_HANDOVER)
+            {
+                await movements.RecordCancelHandoverAsync(
+                    new ContainerCancelHandover(
+                        posting.ContainerId,
+                        posting.JobId,
+                        posting.DestinationStorageLocationId
+                            ?? throw new InvalidOperationException("A cancel handover needs the shelf the container was put on."),
+                        posting.DestinationLevelNo ?? 1,
+                        posting.ActorAccountId,
+                        null),
+                    cancellationToken);
+            }
             else
             {
                 await movements.RecordDeliveredAsync(

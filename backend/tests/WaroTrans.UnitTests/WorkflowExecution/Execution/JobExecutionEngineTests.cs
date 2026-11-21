@@ -345,6 +345,302 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(JobStatus.CANCELLED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
     }
 
+    [Fact]
+    public async Task Cancelling_a_cancelled_job_again_changes_nothing_and_finished_steps_keep_their_result()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId); // MOVE_PICKUP done
+
+        await Engine().CancelJobAsync(jobId, "not needed");
+        var again = await Engine().CancelJobAsync(jobId, "not needed");
+
+        Assert.Equal(JobStatus.CANCELLED, again.Status);
+        var steps = await StepsAsync(jobId);
+        Assert.Equal(JobStepStatus.COMPLETED, steps.First(s => s.Key == "MOVE_PICKUP").Status);
+        // Nothing is left half-open (READY / PAUSED included): every step is finished or cancelled.
+        Assert.All(steps, s => Assert.Contains(s.Status, new[] { JobStepStatus.COMPLETED, JobStepStatus.CANCELLED, JobStepStatus.SKIPPED }));
+    }
+
+    [Fact]
+    public async Task Cancelling_the_request_with_one_container_on_board_drops_the_ones_not_picked_up()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+
+        var outcomes = await Engine().CancelForTransportRequestAsync(jobId, requestId, "customer cancelled");
+
+        Assert.Equal(ContainerCancelOutcome.RecoveryRequired, outcomes.Single(o => o.ContainerId == C1).Outcome);
+        Assert.Equal(ContainerCancelOutcome.Cancelled, outcomes.Single(o => o.ContainerId == C2).Outcome);
+        var job = await _db.Jobs.Include(j => j.JobContainers).Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
+            .SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal(JobContainerStatus.ONBOARD, job.JobContainers.Single(c => c.ContainerId == C1).Status);
+        var c2 = job.JobContainers.Single(c => c.ContainerId == C2);
+        Assert.Equal(JobContainerStatus.CANCELLED, c2.Status);
+        Assert.Equal(JobExecutionEngine.DetailCancelledCode, c2.FailureCode);
+        // C2's own handovers will not run when the Job is resumed to deliver C1.
+        Assert.All(
+            job.JobTasks.Where(t => t.ContextValues.TryGetValue("containerId", out var id) && id.GetGuid() == C2).SelectMany(t => t.JobSteps),
+            s => Assert.Equal(JobStepStatus.SKIPPED, s.Status));
+    }
+
+    [Fact]
+    public async Task Cargo_is_unloaded_by_scan_only_from_a_robot_that_holds_still_and_the_last_one_closes_the_job()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+        await Engine().CancelForTransportRequestAsync(jobId, requestId, "customer cancelled");
+        _warehouse.Set(C1, ContainerStatus.IN_TRANSIT);
+        _warehouse.Set(C2, ContainerStatus.IN_TRANSIT);
+        var c1Label = _warehouse.Containers[C1].Barcode;
+        var c2Label = _warehouse.Containers[C2].Barcode;
+
+        // The STOP was sent but the robot does not report a motion hold yet: nobody unloads it.
+        var moving = await Assert.ThrowsAsync<ConflictException>(
+            () => Engine().HandOverCancelledCargoAsync(jobId, requestId, C1, c1Label, _staff, null));
+        Assert.Equal("robot_not_stopped", moving.Code);
+
+        SetRobot(r => r with { MotionHeld = true });
+        var wrong = await Assert.ThrowsAsync<DomainValidationException>(
+            () => Engine().HandOverCancelledCargoAsync(jobId, requestId, C1, c2Label, _staff, null));
+        Assert.Equal("handover_barcode_mismatch", wrong.Code);
+        var noScan = await Assert.ThrowsAsync<DomainValidationException>(
+            () => Engine().HandOverCancelledCargoAsync(jobId, requestId, C1, " ", _staff, null));
+        Assert.Equal("scan_required", noScan.Code);
+
+        var first = await Engine().HandOverCancelledCargoAsync(jobId, requestId, C1, c1Label, _staff, "on shelf B2");
+        Assert.False(first.JobCancelled);
+        Assert.Equal(JobStatus.PAUSED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.True((await Engine().HandOverCancelledCargoAsync(jobId, requestId, C1, c1Label, _staff, null)).AlreadyHandedOver);
+
+        var last = await Engine().HandOverCancelledCargoAsync(jobId, requestId, C2, c2Label, _staff, null);
+
+        Assert.True(last.JobCancelled);
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.CANCELLED, job.Status);
+        Assert.All(job.JobContainers, c =>
+        {
+            Assert.Equal(JobContainerStatus.CANCELLED, c.Status);
+            Assert.Equal(JobExecutionEngine.CancelHandedOverCode, c.FailureCode);
+        });
+        Assert.Equal(2, await _db.HandoverConfirmations.CountAsync(h => h.HandoverType == HandoverType.CANCEL_UNLOAD));
+        // The hold is released only once the Job is over and nothing is left on the robot.
+        Assert.Equal(_fleet.RobotId, Assert.Single(_fleet.Resumes));
+    }
+
+    // ------------------------------------------------------------------ TRN-03 destination policy
+
+    /// <summary>A wait point (Wait = Queue = Recovery Point) on the test map, by its code.</summary>
+    private Guid AddWaitPoint(string code, double x, double y = 0.0)
+    {
+        var id = Guid.NewGuid();
+        _navigation.Poses[id] = new EndpointPoseSnapshot(id, _mapVersionId, code, x, y, 0.0, true);
+        _navigation.OnMap.Add(new EndpointPoseWithType(id, code, "Wait Point", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, true, x, y, 0.25));
+        return id;
+    }
+
+    /// <summary>Both containers on the robot, the request cancelled: the Job is held and the robot reports its hold.</summary>
+    private async Task<(Guid JobId, Guid RequestId)> CancelledWithCargoAsync()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+        await Engine().CancelForTransportRequestAsync(jobId, requestId, "customer cancelled");
+        SetRobot(r => r with { MotionHeld = true });
+        return (jobId, requestId);
+    }
+
+    [Fact]
+    public async Task Cancelled_cargo_is_taken_to_a_recovery_point_where_the_robot_holds_for_the_unload_by_scan()
+    {
+        var (jobId, requestId) = await CancelledWithCargoAsync();
+        var wait = AddWaitPoint("EP-WAIT-POINT-1", 4.0, 1.0);
+        var view = Assert.Single(await Engine().GetCancellationViewAsync(requestId));
+        Assert.Equal(CancelRobotPhases.InTransit, view.Phase);
+        Assert.True(view.CanSendToRecovery);
+
+        await Engine().SendCancelledCargoToRecoveryAsync(jobId, wait, _staff);
+
+        // The hold is released and the robot drives to the point (not to the drop-off).
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Contains(_fleet.RobotId, _fleet.Resumes);
+        Assert.Equal((4.0, 1.0), (_fleet.Commands[^1].X, _fleet.Commands[^1].Y));
+        Assert.Equal(CancelRobotPhases.ToRecovery, Assert.Single(await Engine().GetCancellationViewAsync(requestId)).Phase);
+        var turning = await Assert.ThrowsAsync<ConflictException>(() => Engine().ContinueCancelledDeliveryAsync(jobId, _staff));
+        Assert.Equal("robot_driving_to_recovery", turning.Code);
+        // Sending it again to the same point while it drives there changes nothing.
+        var commands = _fleet.Commands.Count;
+        await Engine().SendCancelledCargoToRecoveryAsync(jobId, wait, _staff);
+        Assert.Equal(commands, _fleet.Commands.Count);
+
+        var stops = _fleet.Stops.Count;
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal(JobExecutionEngine.CargoOnboardCancelCode, job.FailureCode);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.ONBOARD, c.Status));
+        Assert.Equal((_fleet.RobotId, "PAUSE"), _fleet.Stops[stops]);
+        var atPoint = Assert.Single(await Engine().GetCancellationViewAsync(requestId));
+        Assert.Equal(CancelRobotPhases.AtRecovery, atPoint.Phase);
+        Assert.Equal("EP-WAIT-POINT-1", atPoint.RecoveryEndpointCode);
+
+        SetRobot(r => r with { MotionHeld = true });
+        _warehouse.Set(C1, ContainerStatus.IN_TRANSIT);
+        _warehouse.Set(C2, ContainerStatus.IN_TRANSIT);
+        await Engine().HandOverCancelledCargoAsync(jobId, requestId, C1, _warehouse.Containers[C1].Barcode, _staff, null);
+        var last = await Engine().HandOverCancelledCargoAsync(jobId, requestId, C2, _warehouse.Containers[C2].Barcode, _staff, null);
+        Assert.True(last.JobCancelled);
+    }
+
+    [Fact]
+    public async Task Continuing_the_delivery_from_a_recovery_point_drives_to_the_drop_off()
+    {
+        var (jobId, requestId) = await CancelledWithCargoAsync();
+        var wait = AddWaitPoint("EP-QUEUE-POINT", 4.0);
+        await Engine().SendCancelledCargoToRecoveryAsync(jobId, wait, _staff);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        SetRobot(r => r with { MotionHeld = true, PoseX = 4.0 });
+
+        await Engine().ContinueCancelledDeliveryAsync(jobId, _staff);
+
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Equal(9.0, _fleet.Commands[^1].X); // D, the first drop-off
+        var view = Assert.Single(await Engine().GetCancellationViewAsync(requestId));
+        Assert.Equal(CancelRobotPhases.InTransit, view.Phase);
+        Assert.Null(view.RecoveryEndpointCode);
+    }
+
+    [Fact]
+    public async Task At_the_drop_off_the_containers_are_reconciled_before_the_robot_is_sent_anywhere()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId); // at D, C1's drop-off not confirmed
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+        await Engine().CancelForTransportRequestAsync(jobId, requestId, "customer cancelled");
+        SetRobot(r => r with { MotionHeld = true });
+        var wait = AddWaitPoint("EP-WAIT-POINT-2", 4.0);
+
+        var view = Assert.Single(await Engine().GetCancellationViewAsync(requestId));
+        Assert.Equal(CancelRobotPhases.AtDropoff, view.Phase);
+        Assert.False(view.CanSendToRecovery);
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Engine().SendCancelledCargoToRecoveryAsync(jobId, wait, _staff));
+        Assert.Equal("at_dropoff_reconcile_first", refused.Code);
+        Assert.Equal(JobStatus.PAUSED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+    }
+
+    [Fact]
+    public async Task A_robot_that_cannot_drive_safely_is_not_sent_and_its_job_stays_held()
+    {
+        var (jobId, _) = await CancelledWithCargoAsync();
+        var wait = AddWaitPoint("EP-WAIT-POINT-1", 4.0);
+        SetRobot(r => r with { LocalizationStatus = LocalizationStatus.LOST });
+
+        await Assert.ThrowsAnyAsync<AppException>(() => Engine().SendCancelledCargoToRecoveryAsync(jobId, wait, _staff));
+
+        var job = await _db.Jobs.Include(j => j.JobTasks).ThenInclude(t => t.JobSteps).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        // A later "continue delivery" must not drive to the point.
+        Assert.DoesNotContain(job.JobTasks.SelectMany(t => t.JobSteps), s => s.OutputValues.ContainsKey(JobExecutionEngine.CancelRecoveryToKey));
+    }
+
+    [Fact]
+    public async Task After_a_cancellation_a_robot_goes_to_parking_or_the_nearer_wait_point_but_never_while_held_or_parked()
+    {
+        await ProvisionAsync();
+        var park = AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 6.0);
+        var wait = AddWaitPoint("EP-WAIT-POINT-1", 2.0);
+        var robot = _fleet.RobotId;
+
+        SetRobot(r => r with { MotionHeld = true });
+        Assert.Equal(RobotDestinationResult.Retry, (await Care().SendAfterCancelAsync(robot, false, default)).Status);
+        Assert.Empty(_fleet.Positioning);
+
+        SetRobot(r => r with { MotionHeld = false });
+        var parked = await Care().SendAfterCancelAsync(robot, false, default);
+        Assert.Equal(RobotDestinationResult.Sent, parked.Status);
+        Assert.Equal(park, _fleet.Positioning[robot]);
+        Assert.Equal(RobotDestinationResult.NotNeeded, (await Care().SendAfterCancelAsync(robot, false, default)).Status);
+
+        _fleet.Positioning.Clear();
+        var nearer = await Care().SendAfterCancelAsync(robot, allowWaitPoint: true, default);
+        Assert.Equal(RobotDestinationResult.Sent, nearer.Status);
+        Assert.Equal(wait, _fleet.Positioning[robot]);
+
+        _fleet.Positioning.Clear();
+        SetRobot(r => r with { PoseX = 6.0 });
+        var already = await Care().SendAfterCancelAsync(robot, false, default);
+        Assert.Equal(RobotDestinationResult.NotNeeded, already.Status);
+        Assert.Equal("already_parked", already.Note);
+    }
+
+    [Fact]
+    public async Task Recovery_points_are_the_wait_and_queue_points_and_one_another_robot_stands_on_is_not_free()
+    {
+        await ProvisionAsync();
+        var near = AddWaitPoint("EP-WAIT-POINT-1", 2.0);
+        var far = AddWaitPoint("EP-QUEUE-POINT", 5.0);
+        AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 3.0);
+        var other = _fleet.AddRobot(_mapVersionId);
+        _fleet.Robots[other] = _fleet.Robots[other] with { PoseX = 2.0 };
+
+        var points = await Care().RecoveryPointsAsync(_fleet.RobotId, default);
+
+        Assert.Equal([far, near], points.Select(p => p.EndpointId));
+        Assert.True(points[0].Free);
+        Assert.False(points[1].Free);
+    }
+
+    [Fact]
+    public async Task A_container_not_picked_up_yet_can_be_cancelled_alone_and_the_job_goes_on()
+    {
+        var (jobId, c1Pickup) = await AtFirstHandoverAsync();
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+
+        // C1's pickup is the step the Job is waiting at: it is skipped and the Job moves on to C2.
+        var outcomes = await Engine().CancelContainersBeforePickupAsync(jobId, requestId, [C1], "not needed");
+
+        Assert.Equal(ContainerCancelOutcome.Cancelled, Assert.Single(outcomes).Outcome);
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.RUNNING, job.Status);
+        Assert.Equal(JobContainerStatus.CANCELLED, job.JobContainers.Single(c => c.ContainerId == C1).Status);
+        Assert.Equal(JobStepStatus.SKIPPED, (await _db.JobSteps.SingleAsync(s => s.Id == c1Pickup)).Status);
+        var next = await CurrentStepIdAsync(jobId);
+        Assert.NotEqual(c1Pickup, next);
+        await Engine().ConfirmHumanStepAsync(next, C2, HumanConfirmationSource.StaffApp(_staff));
+
+        // C2 is on the robot now: it can no longer be cancelled on its own.
+        var picked = await Assert.ThrowsAsync<ConflictException>(
+            () => Engine().CancelContainersBeforePickupAsync(jobId, requestId, [C2], "changed my mind"));
+        Assert.Equal("detail_already_picked_up", picked.Code);
+    }
+
+    [Fact]
+    public async Task Cancelling_every_container_before_pickup_cancels_the_job()
+    {
+        var jobId = await ProvisionAsync();
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+
+        await Engine().CancelContainersBeforePickupAsync(jobId, requestId, [C1, C2], "wrong request");
+
+        Assert.Equal(JobStatus.CANCELLED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+    }
+
     /// <summary>Turns the workflow step <paramref name="stepKey"/> into WAIT.DURATION of <paramref name="seconds"/>.</summary>
     private async Task MakeWaitStepAsync(string stepKey, int seconds)
     {

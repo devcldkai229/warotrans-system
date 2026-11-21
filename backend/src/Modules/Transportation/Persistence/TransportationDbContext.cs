@@ -9,6 +9,8 @@ public sealed class TransportationDbContext(DbContextOptions<TransportationDbCon
     public DbSet<StockPosting> StockPostings => Set<StockPosting>();
     public DbSet<TransportRequest> TransportRequests => Set<TransportRequest>();
     public DbSet<TransportRequestDetail> TransportRequestDetails => Set<TransportRequestDetail>();
+    public DbSet<TransportCancellation> TransportCancellations => Set<TransportCancellation>();
+    public DbSet<TransportCancellationItem> TransportCancellationItems => Set<TransportCancellationItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

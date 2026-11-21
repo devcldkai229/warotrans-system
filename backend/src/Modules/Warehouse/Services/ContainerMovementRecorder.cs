@@ -27,6 +27,20 @@ public sealed class ContainerMovementRecorder(
 
     public static string DeliveryKey(Guid jobId, Guid containerId) => $"{jobId:N}:{containerId:N}:DELIVERY";
 
+    public static string CancelHandoverKey(Guid jobId, Guid containerId) => $"{jobId:N}:{containerId:N}:CANCEL_HANDOVER";
+
+    public Task RecordCancelHandoverAsync(ContainerCancelHandover handover, CancellationToken cancellationToken = default) =>
+        WithRetryAsync(async () =>
+        {
+            var key = CancelHandoverKey(handover.JobId, handover.ContainerId);
+            if (await AlreadyRecordedAsync(key, cancellationToken))
+                return;
+            await RecoverCoreAsync(
+                handover.ContainerId, handover.StorageLocationId, handover.LevelNo,
+                handover.Note ?? "Unloaded by hand after its transport request was cancelled.",
+                handover.ActorAccountId, cancellationToken, key);
+        }, cancellationToken);
+
     public Task RecordPickedUpAsync(ContainerPickup pickup, CancellationToken cancellationToken = default) =>
         WithRetryAsync(() => ApplyPickupAsync(pickup, cancellationToken), cancellationToken);
 
@@ -43,7 +57,8 @@ public sealed class ContainerMovementRecorder(
         short levelNo,
         string? note,
         Guid? actorAccountId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? idempotencyKey = null)
     {
         var container = await LoadForMovementAsync(containerId, cancellationToken)
             ?? throw new NotFoundException($"Container '{containerId}' was not found.", "container_not_found");
@@ -73,7 +88,7 @@ public sealed class ContainerMovementRecorder(
             ToStatus = container.Status,
             ToStorageLocationId = storageLocationId,
             ToLevelNo = levelNo,
-            IdempotencyKey = $"RECOVER:{Guid.NewGuid():N}",
+            IdempotencyKey = idempotencyKey ?? $"RECOVER:{Guid.NewGuid():N}",
             ActorAccountId = actorAccountId,
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
             OccurredAt = now

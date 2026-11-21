@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/shared/api/client'
 import type { TransportRequestView } from '@/shared/api/contracts'
-import { cancelTransportRequest, rejectTransportRequest } from '@/shared/api/transportRequests'
+import { rejectTransportRequest } from '@/shared/api/transportRequests'
 import { Button } from '@/shared/ui/Button'
+import { CancelImpactDialog } from './CancelImpactDialog'
 import { t } from '@/shared/i18n'
 /**
 
@@ -13,6 +14,7 @@ import { t } from '@/shared/i18n'
 export function RequestCloseActions({ request }: { request: TransportRequestView }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
   const act = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: () => {
@@ -49,18 +51,16 @@ export function RequestCloseActions({ request }: { request: TransportRequestView
             variant="danger"
             size="sm"
             disabled={act.isPending}
-            onClick={() =>
-              ask(
-                t('Cancel {requestCode}? Containers not picked up are cancelled; cargo already on a robot is held for recovery. Reason:', { requestCode: request.requestCode }),
-                (r) => cancelTransportRequest(request.id, r),
-              )
-            }
+            onClick={() => setPreviewing(true)}
           >{t('Cancel')}</Button>
         ) : null}
       </span>
+      {previewing ? (
+        <CancelImpactDialog requestId={request.id} requestCode={request.requestCode} onClose={() => setPreviewing(false)} />
+      ) : null}
       {error ? <span className="text-xs text-red-ink">{error}</span> : null}
       {!error && cancelling ? (
-        <span className="text-xs text-muted">{t('Cancelled; cargo on a robot is waiting to be unloaded or delivered.')}</span>
+        <span className="text-xs text-muted">{t('Cancelling: cargo on a robot is waiting to be delivered or unloaded by scan.')}</span>
       ) : null}
     </span>
   )
