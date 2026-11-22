@@ -312,32 +312,18 @@ export function HomeScreen() {
             {/* Optional Expanded Fleet Details */}
             {isFleetExpanded && (
               <View style={styles.expandedFleetSection}>
-                <View style={styles.fleetHeaderWithAction}>
-                  <Text variant="label" color={colors.textSecondary} style={styles.fleetSectionTitle}>
-                    Fleet On This Map
+                {(operating.isPending || operating.error || !fleetStatusCurrent) ? (
+                  <Text variant="caption" color={colors.textSecondary}>
+                    {operating.isPending
+                      ? 'Loading Fleet Context…'
+                      : operating.error
+                      ? 'Fleet context could not be refreshed.'
+                      : `${robots.length} Registered · ${fleetUpdateMode === 'paused' ? 'Updates Paused' : 'Live Status Unavailable'}`}
                   </Text>
-                  <Pressable
-                    onPress={() => {
-                      triggerHaptic('tap');
-                      navigate('fleet_recall');
-                    }}
-                    style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open command cancellation console"
-                  >
-                    <ShieldAlert size={13} color={colors.dangerText} />
-                    <Text style={styles.fleetRecallLinkText}>
-                      Command Cancellation
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <Text variant="caption" color={colors.textSecondary}>
-                  {operating.isPending ? 'Loading Fleet Context…' : operating.error ? 'Fleet context could not be refreshed.'
-                    : !fleetStatusCurrent ? `${robots.length} Registered · ${fleetUpdateMode === 'paused' ? 'Updates Paused' : 'Live Status Unavailable'}`
-                    : `${activeRobotCount} Online & Enabled · ${robots.length} Registered`}
-                </Text>
-                {!operating.isPending && !operating.error && !robots.length && <Text variant="caption">No robots are registered on this map.</Text>}
+                ) : null}
+                {!operating.isPending && !operating.error && !robots.length ? (
+                  <Text variant="caption">No robots are registered on this map.</Text>
+                ) : null}
                 <View style={styles.fleetRow}>
                   {robots.map((r) => (
                     <View key={r.id} style={styles.fleetItemCard}>
@@ -366,6 +352,20 @@ export function HomeScreen() {
                     </View>
                   ))}
                 </View>
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    navigate('fleet_recall');
+                  }}
+                  style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel active robot commands"
+                >
+                  <ShieldAlert size={14} color={colors.dangerText} />
+                  <Text style={styles.fleetRecallLinkText}>
+                    Cancel Commands
+                  </Text>
+                </Pressable>
               </View>
             )}
           </>
@@ -548,29 +548,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderTopColor: colors.border,
     gap: 8,
   },
-  fleetHeaderWithAction: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   fleetRecallLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     backgroundColor: colors.dangerBg,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
   },
   fleetRecallLinkText: {
-    fontSize: 10.5,
-    fontWeight: '800',
+    fontSize: 12.5,
+    fontWeight: '700',
     color: colors.dangerText,
-  },
-  fleetSectionTitle: {
-    fontWeight: '600',
   },
   fleetRow: {
     flexDirection: 'row',

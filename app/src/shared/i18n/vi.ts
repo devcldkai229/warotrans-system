@@ -409,6 +409,8 @@ export const vi: Record<string, string> = {
   'Fleet On This Map': 'Đội robot trên bản đồ này',
   'Open command cancellation console': 'Mở bảng hủy lệnh robot',
   'Command Cancellation': 'Hủy lệnh robot',
+  'Cancel Commands': 'Hủy lệnh',
+  'Cancel active robot commands': 'Hủy lệnh robot đang chạy',
   'Loading Fleet Context…': 'Đang tải thông tin đội robot…',
   'Fleet context could not be refreshed.': 'Không làm mới được thông tin đội robot.',
   '{total} Registered · Updates Paused': '{total} đã đăng ký · Đang tạm dừng cập nhật',

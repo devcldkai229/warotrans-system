@@ -852,6 +852,9 @@ function MapCanvas({
   };
 
   const showFollow = !onPickEndpoint && !compact;
+  const visibleMapHeight = fullBleed ? frame.height - topInset - bottomInset : frame.height;
+  const showOrientationFooter = !fullBleed || visibleMapHeight >= 175;
+  const showCameraCluster = !fullBleed || visibleMapHeight >= 120;
   const hudTop = fullBleed ? topInset + 10 : top;
   const scaleBottom = fullBleed ? bottomInset + 10 : undefined;
   const scaleTop = fullBleed ? undefined : top + (horizontal ? 56 : 0) + frame.height + 6;
@@ -1170,28 +1173,30 @@ function MapCanvas({
       </View>
 
       {/* Bottom-Right: Camera Cluster (+, -, Fit) */}
-      <View
-        style={{
-          position: 'absolute',
-          right: 12,
-          bottom: fullBleed ? bottomInset + 10 : 12,
-          zIndex: 12,
-        }}
-        pointerEvents="box-none"
-      >
-        <MapCameraCluster
-          horizontal={true}
-          zoom={camera.settledZoom}
-          onFit={() => {
-            triggerHaptic('tap');
-            camera.fit();
+      {showCameraCluster ? (
+        <View
+          style={{
+            position: 'absolute',
+            right: 12,
+            bottom: fullBleed ? bottomInset + 10 : 12,
+            zIndex: 12,
           }}
-          onZoom={factor => {
-            triggerHaptic('tap');
-            camera.zoomBy(factor);
-          }}
-        />
-      </View>
+          pointerEvents="box-none"
+        >
+          <MapCameraCluster
+            horizontal={true}
+            zoom={camera.settledZoom}
+            onFit={() => {
+              triggerHaptic('tap');
+              camera.fit();
+            }}
+            onZoom={factor => {
+              triggerHaptic('tap');
+              camera.zoomBy(factor);
+            }}
+          />
+        </View>
+      ) : null}
 
       {/* Quick-Inspect Banner for Zones & Lanes */}
       {inspected && !sheet ? (
@@ -1272,7 +1277,7 @@ function MapCanvas({
       ) : null}
 
       {/* Bottom-Left: OTTO Orientation Crosshair & Metric Coordinate Readout */}
-      {!(inspected && !sheet) ? (
+      {showOrientationFooter && !(inspected && !sheet) ? (
         <View
           pointerEvents="none"
           style={[
