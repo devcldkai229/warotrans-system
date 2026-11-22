@@ -1,0 +1,123 @@
+# Manual CD of the AWS demo (design §8 C): deploys images ALREADY in ECR (publish-images.yml) by digest.
+# Runs in the GitHub environment "demo" (required reviewers). Optional one-off migration task first; then for each
+# selected service a new task definition revision with the pinned digest, service update, wait for steady state, smoke
+# test through CloudFront, and the release recorded in SSM /warotrans-demo/release (what the next lab start uses).
+# Rollback: run this again with the previous sha (printed in the summary) - only if the migrations stay compatible.
+# Repository variables: AWS_ACCOUNT_ID, DEMO_WEB_URL (https://<id>.cloudfront.net).
+
+name: Deploy demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Image tag (12-char sha shown by publish-images)"
+        required: true
+      service:
+        type: choice
+        options: [all, system, evidence-recorder, evidence-worker]
+        default: all
+      run_migrations:
+        type: boolean
+        default: false
+      approved_change_note:
+        description: "What changes and why (kept in the run summary)"
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-1
+  CLUSTER: warotrans-demo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: demo
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/warotrans-demo-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Lab is on and the images exist
+        id: pre
+        run: |
+          set -euo pipefail
+          aws ecs describe-clusters --clusters "$CLUSTER" --query 'clusters[0].status' --output text | grep -q ACTIVE \
+            || { echo "::error::the lab is off (no ECS cluster): run lab-start first"; exit 1; }
+          reg="${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com"
+          declare -A repo=([system]=warotrans-system [evidence-recorder]=warotrans-evidence-recorder [evidence-worker]=warotrans-evidence-worker)
+          sel="${{ inputs.service }}"; [ "$sel" = all ] && sel="system evidence-recorder evidence-worker"
+          : > images.env
+          for s in $sel; do
+            d=$(aws ecr describe-images --repository-name "${repo[$s]}" --image-ids "imageTag=${{ inputs.git_sha }}" \
+              --query 'imageDetails[0].imageDigest' --output text) || { echo "::error::${repo[$s]}:${{ inputs.git_sha }} not in ECR"; exit 1; }
+            echo "$s=$reg/${repo[$s]}@$d" >> images.env
+          done
+          cat images.env
+          aws ssm get-parameter --name /warotrans-demo/release --query Parameter.Value --output text > previous-release.json
+          echo "previous release: $(jq -r .git_sha previous-release.json)" >> "$GITHUB_STEP_SUMMARY"
+          echo "change: ${{ inputs.approved_change_note }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # Register a new revision of <family> = the current one with only the image replaced.
+      - name: Helper
+        run: |
+          cat > register.sh <<'EOF'
+          set -euo pipefail
+          family="$1"; image="$2"
+          aws ecs describe-task-definition --task-definition "$family" --query taskDefinition > td.json
+          jq --arg img "$image" '.containerDefinitions[0].image = $img
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)' \
+            td.json > td-new.json
+          aws ecs register-task-definition --cli-input-json file://td-new.json --query taskDefinition.taskDefinitionArn --output text
+          EOF
+
+      - name: Migration task
+        if: inputs.run_migrations && (inputs.service == 'all' || inputs.service == 'system')
+        run: |
+          set -euo pipefail
+          image=$(grep '^system=' images.env | cut -d= -f2-)
+          td=$(bash register.sh warotrans-system-migrate "$image")
+          arn=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$td" \
+            --capacity-provider-strategy capacityProvider=warotrans-demo-business,weight=1 --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$arn"
+          code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$arn" --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "migration exit code $code (logs /warotrans-demo/migrate)"
+          [ "$code" = 0 ] || { echo "::error::migration failed: nothing deployed"; exit 1; }
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          while IFS='=' read -r s image; do
+            svc="warotrans-$s"
+            td=$(bash register.sh "$svc" "$image")
+            echo "$svc -> $td"
+            aws ecs update-service --cluster "$CLUSTER" --service "$svc" --task-definition "$td" --desired-count 1 >/dev/null
+          done < images.env
+          aws ecs wait services-stable --cluster "$CLUSTER" --services $(cut -d= -f1 images.env | sed 's/^/warotrans-/')
+
+      - name: Smoke test through CloudFront
+        run: |
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${{ vars.DEMO_WEB_URL }}/health"); [ "$code" = 200 ] && break; sleep 6
+          done
+          echo "/health: $code"; [ "$code" = 200 ]
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "${{ vars.DEMO_WEB_URL }}/api/identity/login")
+          echo "/api/identity/login (empty body): $code"; [ "$code" = 400 ] || [ "$code" = 401 ]
+
+      - name: Record the release
+        run: |
+          set -euo pipefail
+          jq --arg sha "${{ inputs.git_sha }}" --rawfile env images.env '
+            .git_sha = $sha
+            | .images += ($env | split("\n") | map(select(length > 0) | split("=") | {(.[0]): (.[1:] | join("="))}) | add)' \
+            previous-release.json > release.json
+          aws ssm put-parameter --name /warotrans-demo/release --type String --overwrite --value "$(cat release.json)" >/dev/null
+          echo "release now ${{ inputs.git_sha }}; rollback = run again with $(jq -r .git_sha previous-release.json)" >> "$GITHUB_STEP_SUMMARY"
