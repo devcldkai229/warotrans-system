@@ -1,5 +1,12 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Platform,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -19,24 +26,26 @@ interface ParticleDot {
 const ENTER_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const WAVE_EASE = Easing.inOut(Easing.sin);
 
-function buildWaveLayers(): { primary: ParticleDot[]; secondary: ParticleDot[] } {
-  const primary: ParticleDot[] = [];
-  const secondary: ParticleDot[] = [];
+const BUCKET_COUNT = 10;
+const WEB_COLS = 42;
+const WEB_ROWS = 18;
+const NATIVE_ROWS = 12;
+const NATIVE_COLS = 26;
 
-  // Primary 3D undulating particle field across the lower atmosphere.
-  const cols = 30;
-  const rows = 18;
-  for (let row = 0; row < rows; row++) {
-    const v = row / (rows - 1);
-    for (let col = 0; col < cols; col++) {
-      const u = (col / (cols - 1)) * 2 - 1;
+function buildNativeWaveRows(): ParticleDot[][] {
+  const rows: ParticleDot[][] = [];
+  for (let row = 0; row < NATIVE_ROWS; row++) {
+    const v = row / (NATIVE_ROWS - 1);
+    const rowDots: ParticleDot[] = [];
+    for (let col = 0; col < NATIVE_COLS; col++) {
+      const u = (col / (NATIVE_COLS - 1)) * 2 - 1;
       const wave =
         Math.sin(u * 2.5 + v * 1.9) * 0.55 +
         Math.cos(u * 1.35 - v * 2.7) * 0.45;
       const hill =
         Math.exp(-Math.pow((u - 0.05) / 0.54, 2)) * (1 - v * 0.42);
       const x = 200 + u * (195 + v * 58);
-      const y = 568 + v * 232 - wave * 24 - hill * 44;
+      const y = 558 + v * 238 - wave * 24 - hill * 44;
 
       const topFade = Math.min(1, v / 0.24);
       const sideFade = Math.max(0, 1 - Math.pow(Math.abs(u), 2.3));
@@ -44,57 +53,323 @@ function buildWaveLayers(): { primary: ParticleDot[]; secondary: ParticleDot[] }
       const opacity = Math.min(0.42, topFade * sideFade * crest * 0.36);
 
       if (opacity >= 0.045 && x >= -10 && x <= 410 && y >= 480 && y <= 805) {
-        primary.push({
+        rowDots.push({
           x: Math.round(x * 10) / 10,
           y: Math.round(y * 10) / 10,
-          r: Math.round((0.65 + (0.45 * v + 0.2 * crest)) * 100) / 100,
+          r: Math.round((0.72 + 0.45 * v + 0.22 * crest) * 100) / 100,
           o: Math.round(opacity * 1000) / 1000,
         });
       }
     }
+    rows.push(rowDots);
   }
-
-  // Secondary counter-drifting foreground wave for organic depth separation.
-  const subCols = 18;
-  const subRows = 11;
-  for (let row = 0; row < subRows; row++) {
-    const v = row / (subRows - 1);
-    for (let col = 0; col < subCols; col++) {
-      const t = col / (subCols - 1);
-      const u = -0.75 + t * 1.8;
-      const ripple = Math.sin(t * 3.1 + v * 2.2) * 16;
-      const arc = Math.cos((t - 0.55) * 2.4) * 22;
-      const x = 200 + u * 205 + (v - 0.5) * 20;
-      const y = 632 + v * 160 - ripple - arc * (1 - v * 0.35);
-
-      const env =
-        Math.sin(Math.min(1, t) * Math.PI) *
-        Math.min(1, v / 0.25) *
-        (1 - v * 0.22);
-      const opacity = Math.min(0.32, env * 0.32);
-
-      if (opacity >= 0.045 && x >= -10 && x <= 410 && y >= 590 && y <= 798) {
-        secondary.push({
-          x: Math.round(x * 10) / 10,
-          y: Math.round(y * 10) / 10,
-          r: Math.round((0.68 + 0.32 * v) * 100) / 100,
-          o: Math.round(opacity * 1000) / 1000,
-        });
-      }
-    }
-  }
-
-  return { primary, secondary };
+  return rows;
 }
 
-const { primary: PRIMARY_DOTS, secondary: SECONDARY_DOTS } = buildWaveLayers();
+const NATIVE_WAVE_ROWS = buildNativeWaveRows();
 
 /**
- * Antigravity-inspired Login Backdrop with GPU-composited ambient wave motion.
+ * Web-only 60/120fps Gerstner 3D particle silk wave drawn onto an HTML5 `<canvas>`
+ * inside `requestAnimationFrame` with zero React re-renders and quantized alpha
+ * batching.
+ */
+const WebParticleWave = memo(function WebParticleWave({
+  isDark,
+  reducedMotion,
+}: {
+  isDark: boolean;
+  reducedMotion: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof window === 'undefined') return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rgb = isDark ? '125, 211, 252' : '43, 92, 196';
+    const baseGain = isDark ? 0.36 : 0.40;
+    const buckets: number[][] = Array.from({ length: BUCKET_COUNT }, () => []);
+
+    let cssWidth = 0;
+    let cssHeight = 0;
+    let dpr = 1;
+    let rafId: number | null = null;
+    let startMs: number | null = null;
+    let disposed = false;
+
+    const syncSize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const nextW = Math.max(1, Math.round(rect.width));
+      const nextH = Math.max(1, Math.round(rect.height));
+      const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (nextW !== cssWidth || nextH !== cssHeight || nextDpr !== dpr) {
+        cssWidth = nextW;
+        cssHeight = nextH;
+        dpr = nextDpr;
+        canvas.width = Math.round(cssWidth * dpr);
+        canvas.height = Math.round(cssHeight * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+    };
+
+    const drawFrame = (tSec: number) => {
+      if (cssWidth <= 1 || cssHeight <= 1) return;
+      ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      for (let b = 0; b < BUCKET_COUNT; b++) {
+        buckets[b].length = 0;
+      }
+
+      const hillCenter = 0.06 + Math.sin(tSec * 0.38) * 0.22;
+      const ampWave = Math.min(cssHeight * 0.056, 44);
+      const ampHill = Math.min(cssHeight * 0.068, 54);
+
+      for (let row = 0; row < WEB_ROWS; row++) {
+        const v = row / (WEB_ROWS - 1);
+        const topFade = Math.min(1, v / 0.22);
+        const spanX = cssWidth * 0.54 * (0.84 + v * 0.34);
+
+        for (let col = 0; col < WEB_COLS; col++) {
+          const u = (col / (WEB_COLS - 1)) * 2 - 1;
+          const sideFade = Math.max(0, 1 - Math.pow(Math.abs(u), 2.3));
+          if (sideFade <= 0.01) continue;
+
+          const w1 = Math.sin(u * 2.8 - tSec * 1.35 + v * 2.3);
+          const w2 = Math.cos(u * 1.7 + tSec * 0.85 - v * 3.0) * 0.62;
+          const w3 = Math.sin((u * 1.4 - v * 2.1) * 2.6 - tSec * 1.05) * 0.25;
+          const h = (w1 + w2 + w3) / 1.87;
+
+          const hill =
+            Math.exp(-Math.pow((u - hillCenter) / 0.62, 2)) * (1 - v * 0.38);
+          const swayX = Math.cos(u * 2.1 - tSec * 1.1 + v * 2.5) * 7;
+
+          const x = cssWidth * 0.5 + u * spanX + swayX;
+          const y = cssHeight * 0.59 + v * cssHeight * 0.44 - h * ampWave - hill * ampHill;
+          if (x < -8 || x > cssWidth + 8 || y < cssHeight * 0.42 || y > cssHeight + 8) {
+            continue;
+          }
+
+          const crest = 0.34 + 0.58 * hill + 0.32 * Math.max(0, h);
+          const rawOpacity = Math.min(0.46, topFade * sideFade * crest * baseGain);
+          if (rawOpacity < 0.04) continue;
+
+          const radius = 0.72 + 0.52 * v + 0.42 * Math.max(0, h);
+          const bucketIdx = Math.min(
+            BUCKET_COUNT - 1,
+            Math.floor((rawOpacity / 0.46) * BUCKET_COUNT),
+          );
+          buckets[bucketIdx].push(x, y, radius);
+        }
+      }
+
+      for (let b = 0; b < BUCKET_COUNT; b++) {
+        const coords = buckets[b];
+        if (coords.length === 0) continue;
+        const alpha = ((b + 0.5) / BUCKET_COUNT) * 0.46;
+        ctx.fillStyle = `rgba(${rgb}, ${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        for (let i = 0; i < coords.length; i += 3) {
+          const cx = coords[i];
+          const cy = coords[i + 1];
+          const cr = coords[i + 2];
+          ctx.moveTo(cx + cr, cy);
+          ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      }
+    };
+
+    const tick = (nowMs: number) => {
+      if (disposed || reducedMotion || document.hidden) {
+        rafId = null;
+        return;
+      }
+      if (startMs === null) startMs = nowMs;
+      const tSec = (nowMs - startMs) / 1000;
+      drawFrame(tSec);
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    const startLoop = () => {
+      syncSize();
+      if (reducedMotion) {
+        drawFrame(0.8);
+        return;
+      }
+      if (rafId === null && !document.hidden) {
+        rafId = window.requestAnimationFrame(tick);
+      }
+    };
+
+    const stopLoop = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stopLoop();
+      } else {
+        startMs = null;
+        startLoop();
+      }
+    };
+
+    const onResize = () => {
+      syncSize();
+      if (reducedMotion) drawFrame(0.8);
+    };
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(onResize);
+      ro.observe(canvas);
+    } else {
+      window.addEventListener('resize', onResize);
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    startLoop();
+
+    return () => {
+      disposed = true;
+      stopLoop();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (ro) {
+        ro.disconnect();
+      } else {
+        window.removeEventListener('resize', onResize);
+      }
+    };
+  }, [isDark, reducedMotion]);
+
+  return React.createElement('canvas' as unknown as React.ElementType, {
+    ref: canvasRef,
+    'aria-hidden': true,
+    style: {
+      position: 'absolute',
+      inset: 0,
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',
+    },
+  });
+});
+
+/**
+ * Native fallback (iOS & Android): 12 depth-staggered animated SVG wave strips
+ * propagating smoothly upward through the bottom particle field.
+ */
+const NativeWaveRows = memo(function NativeWaveRows({
+  isDark,
+  reducedMotion,
+}: {
+  isDark: boolean;
+  reducedMotion: boolean;
+}) {
+  const rowPhases = useRef(
+    NATIVE_WAVE_ROWS.map(() => new Animated.Value(0.5)),
+  ).current;
+
+  useEffect(() => {
+    if (reducedMotion) {
+      rowPhases.forEach((v) => v.setValue(0.5));
+      return;
+    }
+
+    const loops = rowPhases.map((val, idx) => {
+      val.setValue(0);
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(idx * 260),
+          Animated.timing(val, {
+            toValue: 1,
+            duration: 1900,
+            easing: WAVE_EASE,
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: 0,
+            duration: 1900,
+            easing: WAVE_EASE,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+    });
+
+    loops.forEach((loop) => loop.start());
+    return () => {
+      loops.forEach((loop) => loop.stop());
+    };
+  }, [reducedMotion, rowPhases]);
+
+  const dotColor = isDark ? '#7dd3fc' : '#2b5cc4';
+  const dotScale = isDark ? 0.85 : 0.92;
+
+  return (
+    <>
+      {NATIVE_WAVE_ROWS.map((rowDots, rowIdx) => {
+        if (rowDots.length === 0) return null;
+        const phase = rowPhases[rowIdx];
+        const rowStyle = {
+          opacity: phase.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.68, 1],
+          }),
+          transform: [
+            {
+              translateY: phase.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-12, 12],
+              }),
+            },
+            {
+              translateX: phase.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-6, 6],
+              }),
+            },
+          ],
+        };
+
+        return (
+          <Animated.View key={rowIdx} style={[styles.overscan, rowStyle]}>
+            <Svg
+              width="100%"
+              height="100%"
+              viewBox="0 0 400 800"
+              preserveAspectRatio="xMidYMax slice"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              {rowDots.map((dot, idx) => (
+                <Circle
+                  key={idx}
+                  cx={dot.x}
+                  cy={dot.y}
+                  r={dot.r}
+                  fill={dotColor}
+                  fillOpacity={dot.o * dotScale}
+                />
+              ))}
+            </Svg>
+          </Animated.View>
+        );
+      })}
+    </>
+  );
+});
+
+/**
+ * Antigravity-inspired Login Backdrop with rolling 3D particle wave motion.
  *
- * Keeps the upper workspace crisp and steady while floating multi-lobe
- * sky/periwinkle mist and two counter-drifting particle wave contours along
- * the bottom edge. Honors system reduced-motion settings automatically.
+ * Keeps the upper workspace crisp and steady while breathing atmospheric mist
+ * and undulating 3D micro-dots across the lower horizon.
  */
 export const LoginBackdrop = memo(function LoginBackdrop({
   isDark,
@@ -105,8 +380,6 @@ export const LoginBackdrop = memo(function LoginBackdrop({
 
   const enterOpacity = useRef(new Animated.Value(0)).current;
   const mistPhase = useRef(new Animated.Value(0)).current;
-  const waveAPhase = useRef(new Animated.Value(0)).current;
-  const waveBPhase = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let active = true;
@@ -137,48 +410,34 @@ export const LoginBackdrop = memo(function LoginBackdrop({
 
     if (reducedMotion) {
       mistPhase.setValue(0.5);
-      waveAPhase.setValue(0.5);
-      waveBPhase.setValue(0.5);
       return () => {
         enterAnim.stop();
       };
     }
 
-    const createLoop = (val: Animated.Value, fullCycleMs: number) => {
-      const half = Math.round(fullCycleMs / 2);
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(val, {
-            toValue: 1,
-            duration: half,
-            easing: WAVE_EASE,
-            useNativeDriver: true,
-          }),
-          Animated.timing(val, {
-            toValue: 0,
-            duration: half,
-            easing: WAVE_EASE,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-    };
-
-    const mistLoop = createLoop(mistPhase, 9500);
-    const waveALoop = createLoop(waveAPhase, 7500);
-    const waveBLoop = createLoop(waveBPhase, 11000);
+    const mistLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(mistPhase, {
+          toValue: 1,
+          duration: 4750,
+          easing: WAVE_EASE,
+          useNativeDriver: true,
+        }),
+        Animated.timing(mistPhase, {
+          toValue: 0,
+          duration: 4750,
+          easing: WAVE_EASE,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
 
     mistLoop.start();
-    waveALoop.start();
-    waveBLoop.start();
-
     return () => {
       enterAnim.stop();
       mistLoop.stop();
-      waveALoop.stop();
-      waveBLoop.stop();
     };
-  }, [reducedMotion, enterOpacity, mistPhase, waveAPhase, waveBPhase]);
+  }, [reducedMotion, enterOpacity, mistPhase]);
 
   const mistStyle = {
     opacity: mistPhase.interpolate({
@@ -207,69 +466,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
     ],
   };
 
-  const waveAStyle = {
-    opacity: waveAPhase.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.76, 1],
-    }),
-    transform: [
-      {
-        translateX: waveAPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-12, 12],
-        }),
-      },
-      {
-        translateY: waveAPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [8, -9],
-        }),
-      },
-      {
-        scaleX: waveAPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 1.035],
-        }),
-      },
-      {
-        scaleY: waveAPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.985, 1.03],
-        }),
-      },
-    ],
-  };
-
-  const waveBStyle = {
-    opacity: waveBPhase.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.55, 0.95],
-    }),
-    transform: [
-      {
-        translateX: waveBPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [14, -12],
-        }),
-      },
-      {
-        translateY: waveBPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-7, 9],
-        }),
-      },
-      {
-        scale: waveBPhase.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1.03, 0.98],
-        }),
-      },
-    ],
-  };
-
   const baseColor = isDark ? '#0f1218' : '#ffffff';
-  const dotColor = isDark ? '#7dd3fc' : '#2b5cc4';
-  const dotScale = isDark ? 0.85 : 0.92;
 
   return (
     <View pointerEvents="none" style={styles.root}>
@@ -320,7 +517,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
         />
       </Svg>
 
-      {/* Atmospheric bloom + counter-drifting particle wave layers */}
+      {/* Atmospheric bloom + rolling wave particle field */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: enterOpacity }]}>
         <Animated.View style={[styles.overscan, mistStyle]}>
           <Svg
@@ -420,49 +617,11 @@ export const LoginBackdrop = memo(function LoginBackdrop({
           </Svg>
         </Animated.View>
 
-        <Animated.View style={[styles.overscan, waveAStyle]}>
-          <Svg
-            width="100%"
-            height="100%"
-            viewBox="0 0 400 800"
-            preserveAspectRatio="xMidYMax slice"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            {PRIMARY_DOTS.map((dot, idx) => (
-              <Circle
-                key={idx}
-                cx={dot.x}
-                cy={dot.y}
-                r={dot.r}
-                fill={dotColor}
-                fillOpacity={dot.o * dotScale}
-              />
-            ))}
-          </Svg>
-        </Animated.View>
-
-        <Animated.View style={[styles.overscan, waveBStyle]}>
-          <Svg
-            width="100%"
-            height="100%"
-            viewBox="0 0 400 800"
-            preserveAspectRatio="xMidYMax slice"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            {SECONDARY_DOTS.map((dot, idx) => (
-              <Circle
-                key={idx}
-                cx={dot.x}
-                cy={dot.y}
-                r={dot.r}
-                fill={dotColor}
-                fillOpacity={dot.o * dotScale}
-              />
-            ))}
-          </Svg>
-        </Animated.View>
+        {Platform.OS === 'web' ? (
+          <WebParticleWave isDark={isDark} reducedMotion={reducedMotion} />
+        ) : (
+          <NativeWaveRows isDark={isDark} reducedMotion={reducedMotion} />
+        )}
       </Animated.View>
     </View>
   );
