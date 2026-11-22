@@ -17,6 +17,7 @@ import { useAuth } from '../../features/auth/authContext';
 import { useNavigation } from '../navigation/NavigationContext';
 
 interface AppHeaderProps {
+  title?: string;
   operatorName?: string;
   operatorRole?: string;
   initials?: string;
@@ -44,6 +45,7 @@ function initialsOf(name: string): string {
  *   - Right: Quick Search (40px) + Notification Bell with Badge (40px) + Operator Avatar (40px).
  */
 export function AppHeader({
+  title,
   operatorName = 'Alex Tran',
   operatorRole = 'Staff',
   initials,
@@ -63,9 +65,15 @@ export function AppHeader({
   return (
     <View style={[styles.header, { paddingTop: topInset + 4 }]}>
       <View style={styles.row}>
-        {/* Left: Brand Mark (40px) */}
+        {/* Left: Screen Title (on secondary tabs) or Brand Mark (on Home) */}
         <View style={styles.leftGroup}>
-          <BrandMark size={40} />
+          {title ? (
+            <Text variant="display" color={colors.textPrimary} numberOfLines={1} style={styles.title}>
+              {title}
+            </Text>
+          ) : (
+            <BrandMark size={40} />
+          )}
         </View>
 
         {/* Right: Notification Bell + Operator Avatar */}
@@ -161,6 +169,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 10,
       flex: 1,
       minWidth: 0,
+    },
+    title: {
+      fontSize: 22,
+      lineHeight: 28,
+      fontWeight: '700',
+      letterSpacing: -0.4,
     },
     rightGroup: {
       flexDirection: 'row',

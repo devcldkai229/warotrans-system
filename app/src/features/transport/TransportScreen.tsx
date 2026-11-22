@@ -26,7 +26,7 @@ import { canReadVouchers } from '../inventory/stockVoucherData';
 import { JOB_STATUS_PRESENTATION } from '../jobs/jobData';
 import { requestStatusLabel } from './dispatchData';
 import { ThemeColors } from '../../shared/theme/colors';
-import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
+import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -103,7 +103,6 @@ export function TransportScreen() {
   }, [recent.data]);
 
   const bottomInset = dockReservedSpace(dockHeight);
-  const topInset = useTopInset();
 
   return (
     <View style={styles.container}>
@@ -111,18 +110,11 @@ export function TransportScreen() {
         style={styles.scrollArea}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: topInset + 14, paddingBottom: bottomInset + 20 },
+          { paddingTop: 14, paddingBottom: bottomInset + 20 },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Screen Title */}
-        <View style={styles.screenHeader}>
-          <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
-            Transport
-          </Text>
-        </View>
-
         {/* Stock lookup first: where a container, product or shelf is right now. */}
         <Pressable
           onPress={() => {
@@ -300,7 +292,7 @@ export function TransportScreen() {
                         numberOfLines={1}
                         style={[styles.boldText, { flexShrink: 0 }]}
                       >
-                        {dispatch.containerCount} Containers
+                        {dispatch.containerCount} {dispatch.containerCount === 1 ? 'Container' : 'Containers'}
                       </Text>
                       <Text variant="caption" color={colors.textMuted}>·</Text>
                       <Text variant="caption" color={colors.textPrimary} numberOfLines={1} style={[styles.boldMono, { flexShrink: 1 }]}>
@@ -337,14 +329,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   scrollContent: {
     paddingHorizontal: 16,
     gap: 18,
-  },
-  screenHeader: {
-    paddingTop: 6,
-    paddingBottom: 2,
-    gap: 2,
-  },
-  pageTitle: {
-    fontWeight: '800',
   },
   section: {
     gap: 8,

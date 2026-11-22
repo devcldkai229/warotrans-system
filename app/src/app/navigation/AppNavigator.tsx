@@ -101,8 +101,9 @@ export function AppNavigator() {
 
   return (
     <View style={styles.root}>
-      {currentScreen === 'home' && (
+      {isMainTab && (
         <AppHeader
+          title={currentScreen === 'jobs' ? 'Jobs' : currentScreen === 'transport' ? 'Transport' : undefined}
           operatorName={session.fullName}
           operatorRole={session.role === 'ADMIN' ? 'Admin' : session.role === 'TECHNICIAN' ? 'Technician' : 'Staff'}
           initials={session.avatarInitials}
