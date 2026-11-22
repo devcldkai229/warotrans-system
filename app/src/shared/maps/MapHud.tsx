@@ -1,8 +1,10 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { AlertTriangle, BookOpen, Focus, Layers, LocateFixed, Minus, Plus } from 'lucide-react-native';
 import { ThemeColors } from '../theme/colors';
 import { ThemeShadows } from '../theme/shadows';
+import { typography } from '../theme/typography';
 import { useTheme, useThemeColors, useThemedStyles } from '../theme/ThemeContext';
 import { Text } from '../ui';
 import type { MapUpdateMode } from './mapTelemetry';
@@ -292,6 +294,97 @@ export function MapHud({
   );
 }
 
+/**
+ * OTTO Motors bottom-left orientation crosshair (`0°` up, `90°` right) paired with a live
+ * tabular-monospace `(x, y)` metric coordinate readout.
+ */
+export function MapOrientationBox({
+  x,
+  y,
+  compact = false,
+}: {
+  x: number | null;
+  y: number | null;
+  compact?: boolean;
+}) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
+
+  const axisSize = compact ? 30 : 34;
+  const axisH = compact ? 26 : 30;
+  const cx = axisSize / 2;
+  const cy = Math.round(axisH * 0.56);
+  const fmt = (value: number | null) =>
+    value !== null && Number.isFinite(value) ? `${value.toFixed(2)} m` : '--';
+
+  return (
+    <View style={[styles.orientBox, compact && styles.orientBoxCompact]}>
+      <View style={styles.reticleWrap}>
+        <Text variant="caption" maxFontSizeMultiplier={1.15} style={styles.orientDeg}>
+          0°
+        </Text>
+        <View style={styles.crossRow}>
+          <View style={styles.orientSide} />
+          <Svg width={axisSize} height={axisH} viewBox={`0 0 ${axisSize} ${axisH}`}>
+            <Line
+              x1={cx}
+              y1={2.5}
+              x2={cx}
+              y2={axisH - 1.5}
+              stroke={colors.textSecondary}
+              strokeOpacity={0.72}
+              strokeWidth={1.2}
+            />
+            <Path
+              d={`M${cx - 3.2} 6.2 L${cx} 2.2 L${cx + 3.2} 6.2`}
+              fill="none"
+              stroke={colors.textSecondary}
+              strokeOpacity={0.85}
+              strokeWidth={1.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Line
+              x1={1.5}
+              y1={cy}
+              x2={axisSize - 1.5}
+              y2={cy}
+              stroke={colors.textSecondary}
+              strokeOpacity={0.72}
+              strokeWidth={1.2}
+            />
+            <Circle cx={cx} cy={cy} r={2.6} fill={colors.textPrimary} />
+          </Svg>
+          <View style={styles.orientSide}>
+            <Text variant="caption" maxFontSizeMultiplier={1.15} style={styles.orientDegRight}>
+              90°
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.coordGroup}>
+        <Text
+          variant="caption"
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.15}
+          style={[styles.coordText, compact && styles.coordTextCompact]}
+        >
+          {`x: ${fmt(x)}`}
+        </Text>
+        <Text
+          variant="caption"
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.15}
+          style={[styles.coordText, compact && styles.coordTextCompact]}
+        >
+          {`y: ${fmt(y)}`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
   StyleSheet.create({
     control: {
@@ -391,5 +484,68 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       height: 22,
       backgroundColor: colors.mapHudBorder,
       marginHorizontal: 1,
+    },
+
+    orientBox: {
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.mapHudBorder,
+      backgroundColor: colors.mapHudBg,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      minWidth: 84,
+      gap: 4,
+      ...shadows.sm,
+    },
+    orientBoxCompact: {
+      paddingHorizontal: 7,
+      paddingVertical: 5,
+      minWidth: 74,
+      gap: 3,
+    },
+    reticleWrap: {
+      alignItems: 'center',
+      gap: 1,
+    },
+    orientDeg: {
+      fontSize: 9.5,
+      lineHeight: 11,
+      color: colors.textSecondary,
+      fontWeight: '600',
+    },
+    crossRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '100%',
+    },
+    orientSide: {
+      flex: 1,
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+    },
+    orientDegRight: {
+      fontSize: 9.5,
+      lineHeight: 11,
+      color: colors.textSecondary,
+      fontWeight: '600',
+      paddingLeft: 2,
+      marginTop: 2,
+    },
+    coordGroup: {
+      alignItems: 'flex-start',
+      gap: 1,
+    },
+    coordText: {
+      fontSize: 10,
+      lineHeight: 13.5,
+      fontFamily: typography.fontMono,
+      fontVariant: ['tabular-nums'],
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    coordTextCompact: {
+      fontSize: 9.5,
+      lineHeight: 12.5,
     },
   });

@@ -534,3 +534,42 @@ test('dark-mode OTTO map style helpers provide calm desaturated steel lanes and 
   assert.equal(zoneStrokeColor('SINGLE_OCCUPANCY', true), '#a78bfa');
   assert.equal(zoneStrokeColor('JUNCTION', true), '#8b95b5');
 });
+
+test('screenToWorld and baseToWorld produce accurate metric orientation-box readouts across 1x and 4x zoom', () => {
+  const models = require('../src/shared/maps/rosMapModels.json');
+  const load = createLoader({ './rosMapModels.json': models });
+  const { createMapFrame, baseToWorld, screenToWorld, worldToBase, zoomAtPoint, FIT_CAMERA } = load(
+    'src/shared/maps/mapTransform.ts',
+  );
+  const snapshot = require('../../samples/maps/MAP-ONE-V013/snapshot.json');
+  const mv = snapshot.mapVersion;
+  const map = {
+    ...BASE_MAP,
+    id: mv.id,
+    imageWidthPixels: mv.image_width_pixels,
+    imageHeightPixels: mv.image_height_pixels,
+    resolution: mv.resolution,
+    originX: mv.origin_x,
+    originY: mv.origin_y,
+    originYaw: mv.origin_yaw,
+    frameId: mv.frame_id,
+  };
+  const frame = createMapFrame(map, 390, 680, { top: 56, right: 34, bottom: 52, left: 34 });
+  assert.ok(frame);
+
+  const probeWorld = { x: 1.05, y: -0.81 };
+  const basePt = worldToBase(probeWorld, map, frame);
+  assert.ok(basePt);
+
+  const fromBase = baseToWorld(basePt, map, frame);
+  const fromScreen1x = screenToWorld(basePt, map, frame, FIT_CAMERA);
+  const cam4x = zoomAtPoint(FIT_CAMERA, 4, { x: 195, y: 340 });
+  const screenAt4x = { x: basePt.x * cam4x.zoom + cam4x.x, y: basePt.y * cam4x.zoom + cam4x.y };
+  const fromScreen4x = screenToWorld(screenAt4x, map, frame, cam4x);
+
+  for (const pt of [fromBase, fromScreen1x, fromScreen4x]) {
+    assert.ok(pt);
+    assert.ok(Math.abs(pt.x - probeWorld.x) < 1e-4);
+    assert.ok(Math.abs(pt.y - probeWorld.y) < 1e-4);
+  }
+});

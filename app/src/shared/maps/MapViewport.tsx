@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type PointerEvent,
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
@@ -57,6 +58,7 @@ import { MapAnchor } from './MapAnchor';
 import {
   MapCameraCluster,
   MapControl,
+  MapOrientationBox,
   MapToolCluster,
   MapTopStatusPill,
 } from './MapHud';
@@ -86,8 +88,9 @@ import {
   type MapUpdateMode,
 } from './mapTelemetry';
 import {
+  baseToWorld,
   createMapFrame,
-  metricScale,
+  screenToWorld,
   worldToBase,
   type MapFrame,
   type MapPoint,
@@ -417,6 +420,9 @@ function MapCanvas({
   const [endpointId, setEndpointId] = useState<string | null>(null);
   const [labelsDetailed, setLabelsDetailed] = useState(false);
   const [inspected, setInspected] = useState<MapInspectTarget | null>(null);
+  const [cursorWorld, setCursorWorld] = useState<MapPoint | null>(null);
+  const [tappedWorld, setTappedWorld] = useState<MapPoint | null>(null);
+  const lastCursorKeyRef = useRef('');
 
   const lastEntityPressRef = useRef(0);
   const tapContextRef = useRef({
@@ -435,6 +441,11 @@ function MapCanvas({
     if (Date.now() - lastEntityPressRef.current < 240) return;
     if (Date.now() - ctx.lastGestureAt < 220) return;
 
+    const worldPt = baseToWorld(basePoint, ctx.map, ctx.frame);
+    if (worldPt) {
+      setTappedWorld(worldPt);
+    }
+
     const hit = hitTestInfrastructure(basePoint, ctx.map, ctx.frame, ctx.zoom, {
       zones: ctx.zones,
       lanes: ctx.lanes,
@@ -448,6 +459,58 @@ function MapCanvas({
   }, []);
 
   const camera = useMapCamera(frame, identity, reducedMotion, stopFollowing, handleSingleTap);
+
+  const handlePointerMove = useCallback(
+    (event: PointerEvent) => {
+      const ev = event as unknown as {
+        currentTarget?: { getBoundingClientRect?: () => { left: number; top: number } };
+        nativeEvent?: { locationX?: number; locationY?: number; clientX?: number; clientY?: number };
+        clientX?: number;
+        clientY?: number;
+      };
+      let sx = ev.nativeEvent?.locationX;
+      let sy = ev.nativeEvent?.locationY;
+      const clientX = ev.clientX ?? ev.nativeEvent?.clientX;
+      const clientY = ev.clientY ?? ev.nativeEvent?.clientY;
+      if (
+        typeof clientX === 'number' &&
+        typeof clientY === 'number' &&
+        typeof ev.currentTarget?.getBoundingClientRect === 'function'
+      ) {
+        const rect = ev.currentTarget.getBoundingClientRect();
+        sx = clientX - rect.left;
+        sy = clientY - rect.top;
+      }
+      if (typeof sx !== 'number' || typeof sy !== 'number') return;
+
+      const world = screenToWorld(
+        { x: sx, y: sy },
+        map,
+        frame,
+        { zoom: camera.zoom.get(), x: camera.x.get(), y: camera.y.get() },
+      );
+      if (!world) {
+        if (lastCursorKeyRef.current !== '') {
+          lastCursorKeyRef.current = '';
+          setCursorWorld(null);
+        }
+        return;
+      }
+      const key = `${world.x.toFixed(2)},${world.y.toFixed(2)}`;
+      if (key !== lastCursorKeyRef.current) {
+        lastCursorKeyRef.current = key;
+        setCursorWorld(world);
+      }
+    },
+    [camera.zoom, camera.x, camera.y, map, frame],
+  );
+
+  const handlePointerLeave = useCallback(() => {
+    if (lastCursorKeyRef.current !== '') {
+      lastCursorKeyRef.current = '';
+      setCursorWorld(null);
+    }
+  }, []);
 
   useEffect(() => {
     tapContextRef.current = {
@@ -463,6 +526,9 @@ function MapCanvas({
 
   useEffect(() => {
     setInspected(null);
+    setCursorWorld(null);
+    setTappedWorld(null);
+    lastCursorKeyRef.current = '';
   }, [identity]);
 
   useEffect(() => {
@@ -488,7 +554,16 @@ function MapCanvas({
   const endpoint = map.endpoints.find(
     e => e.id === endpointId && e.isEnabled && e.mapVersionId === map.id,
   );
-  const scale = metricScale(map, frame, camera.settledZoom);
+  const mapCenterWorld = useMemo(
+    () => baseToWorld({ x: frame.left + frame.mapWidth / 2, y: frame.top + frame.mapHeight / 2 }, map, frame),
+    [map, frame],
+  );
+  const readoutCoord: MapPoint | null =
+    cursorWorld ??
+    tappedWorld ??
+    (endpoint ? { x: endpoint.x, y: endpoint.y } : null) ??
+    (robot && state?.showPose ? { x: robot.poseX, y: robot.poseY } : null) ??
+    mapCenterWorld;
 
   const endpoints = useMemo(
     () =>
@@ -763,7 +838,7 @@ function MapCanvas({
   const hudTop = fullBleed ? topInset + 10 : top;
   const scaleBottom = fullBleed ? bottomInset + 10 : undefined;
   const scaleTop = fullBleed ? undefined : top + (horizontal ? 56 : 0) + frame.height + 6;
-  const inspectBottom = fullBleed ? bottomInset + 48 : 48;
+  const inspectBottom = fullBleed ? bottomInset + 10 : 12;
 
   return (
     <>
@@ -805,7 +880,12 @@ function MapCanvas({
         </Svg>
 
         <GestureDetector gesture={camera.gesture} touchAction="none">
-          <View style={StyleSheet.absoluteFill} accessibilityLabel="Interactive warehouse map">
+          <View
+            style={StyleSheet.absoluteFill}
+            accessibilityLabel="Interactive warehouse map"
+            onPointerMove={handlePointerMove}
+            onPointerLeave={handlePointerLeave}
+          >
             <Animated.View
               pointerEvents="none"
               style={[StyleSheet.absoluteFill, { transformOrigin: '0px 0px' }, camera.sceneStyle]}
@@ -1169,40 +1249,36 @@ function MapCanvas({
         </View>
       ) : null}
 
-      {/* Bottom-Left: Metric Scale Bar Pill (+ Optional Robot Freshness Chip) */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.footer,
-          scaleBottom !== undefined ? { bottom: scaleBottom } : { top: scaleTop },
-          { right: compact ? 68 : 74 },
-        ]}
-      >
-        <View style={styles.scalePill}>
-          <View
-            style={[
-              styles.scaleBar,
-              { width: scale.width, borderColor: colors.textSecondary },
-            ]}
+      {/* Bottom-Left: OTTO Orientation Crosshair & Metric Coordinate Readout */}
+      {!(inspected && !sheet) ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.footer,
+            scaleBottom !== undefined ? { bottom: scaleBottom } : { top: scaleTop },
+            { right: compact ? 68 : 74 },
+          ]}
+        >
+          <MapOrientationBox
+            x={readoutCoord?.x ?? null}
+            y={readoutCoord?.y ?? null}
+            compact={compact}
           />
-          <Text variant="caption" fontWeight="600" color="textPrimary" maxFontSizeMultiplier={1.2}>
-            {scale.meters} m · {camera.settledZoom.toFixed(1)}×
-          </Text>
-        </View>
 
-        {state && (following || state.lastReported) ? (
-          <View style={styles.telemetryChip}>
-            <Text
-              variant="caption"
-              color={state.lastReported ? 'warningText' : 'textSecondary'}
-              numberOfLines={1}
-              maxFontSizeMultiplier={1.2}
-            >
-              {`${following ? 'Following · ' : ''}${state.label} · ${sampleAgeLabel(state.ageSeconds)}`}
-            </Text>
-          </View>
-        ) : null}
-      </View>
+          {state && (following || state.lastReported) ? (
+            <View style={styles.telemetryChip}>
+              <Text
+                variant="caption"
+                color={state.lastReported ? 'warningText' : 'textSecondary'}
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.2}
+              >
+                {`${following ? 'Following · ' : ''}${state.label} · ${sampleAgeLabel(state.ageSeconds)}`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {sheet ? (
         <SheetContainer inline={compact} onClose={close} accessibilityLabel="map details">
@@ -2033,26 +2109,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       position: 'absolute',
       left: 12,
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-end',
       gap: 8,
       zIndex: 10,
-    },
-    scalePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 999,
-      borderWidth: 1,
-      backgroundColor: colors.mapHudBg,
-      borderColor: colors.mapHudBorder,
-      ...shadows.sm,
-    },
-    scaleBar: {
-      height: 5,
-      borderWidth: 1.2,
-      borderTopWidth: 0,
     },
     telemetryChip: {
       flexShrink: 1,
