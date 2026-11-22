@@ -15,13 +15,13 @@ mkdir -p "$OUT"; chmod 700 "$OUT"
 if [[ "$THING" == "warotrans-host" ]]; then POLICY="warotrans-demo-host"; else POLICY="warotrans-demo-robot"; fi
 
 KEY="$OUT/$THING.private.key"; CSR="$OUT/$THING.csr"; CERT="$OUT/$THING.cert.pem"
-MSYS_NO_PATHCONV=1 openssl req -new -newkey rsa:2048 -nodes -keyout "$KEY" -out "$CSR" -subj "/CN=$THING" 2>/dev/null
+MSYS_NO_PATHCONV=1 openssl req -new -newkey rsa:2048 -nodes -keyout "$(winpath "$KEY")" -out "$(winpath "$CSR")" -subj "/CN=$THING" 2>/dev/null
 chmod 600 "$KEY"
 ARN=$(aws iot create-certificate-from-csr --region "$REGION" --set-as-active \
   --certificate-signing-request "file://$(winpath "$CSR")" --certificate-pem-outfile "$(winpath "$CERT")" --query certificateArn --output text)
 aws iot attach-policy --region "$REGION" --policy-name "$POLICY" --target "$ARN"
 aws iot attach-thing-principal --region "$REGION" --thing-name "$THING" --principal "$ARN"
-curl -fsS https://www.amazontrust.com/repository/AmazonRootCA1.pem -o "$OUT/AmazonRootCA1.pem"
+curl -fsS https://www.amazontrust.com/repository/AmazonRootCA1.pem -o "$(winpath "$OUT/AmazonRootCA1.pem")"
 rm -f "$CSR"
 echo "certificate ${ARN##*/} attached to $THING ($POLICY)"
 

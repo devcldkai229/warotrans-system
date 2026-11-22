@@ -7,8 +7,8 @@
 #                                         go through deploy-demo.yml
 source "$(dirname "$0")/demo-lib.sh"
 REPO="$(cd "$TF_ROOT/../.." && pwd)"
-[[ -z "$(git -C "$REPO" status --porcelain -- backend)" ]] || { echo "backend/ has uncommitted changes"; exit 2; }
-SHA="$(git -C "$REPO" rev-parse --short=12 HEAD)"
+[[ -z "$(git -C "$(winpath "$REPO")" status --porcelain -- backend)" ]] || { echo "backend/ has uncommitted changes"; exit 2; }
+SHA="$(git -C "$(winpath "$REPO")" rev-parse --short=12 HEAD)"; [[ -n "$SHA" ]] || { echo "no git sha"; exit 2; }
 REGISTRY="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
 
