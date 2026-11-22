@@ -75,3 +75,6 @@ samples/**/*.token
 # tools/run-backend.ps1 output
 .logs/
 
+
+# Local design notes, never pushed (2026-11-22)
+/WaroTrans_AWS_Deployment_Architecture_Terraform.md
