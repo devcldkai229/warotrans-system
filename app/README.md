@@ -171,3 +171,16 @@ Kiểm tra thủ công mốc này:
 `npm run lint` hiện cũng là tsc, chưa có linter riêng. Báo kết quả đã chạy và phạm vi: web/typecheck/unit pass không chứng minh camera, robot thật hoặc mọi workflow E2E pass. Không chạy BE integration test/seed/demo vào DB dùng chung để kiểm tra mobile.
 
 Chỉ duy trì README và AGENTS; cập nhật ngắn phần thực sự thay đổi. Không thêm log phiên, snapshot, báo cáo audit hoặc bản sao conversation/artifact vào app trừ khi chủ dự án yêu cầu; audit Stock Vouchers được yêu cầu riêng cho bàn giao BE.
+
+## Running against the local backend or the AWS demo
+
+The app reads the backend address from `EXPO_PUBLIC_API_URL`.
+
+| Where | How | Backend |
+|---|---|---|
+| Local (unchanged) | `app/.env` = `EXPO_PUBLIC_API_URL=http://localhost:5090`, then `npx expo start`, open in Expo Go | the laptop Host; on a phone `localhost` is replaced by the Metro host's LAN address |
+| AWS demo, from Expo Go | put `EXPO_PUBLIC_API_URL=https://d3pchn7po42i3p.cloudfront.net` in `app/.env`, restart `npx expo start -c` | the demo (only while the lab is on) |
+| AWS demo, installable APK | `npx eas-cli login`, `npx eas-cli init` (once), `npx eas-cli build -p android --profile preview` | `eas.json` sets the demo URL; `app/.env` is not committed, so it never reaches the cloud build |
+
+The demo answers only while the lab is on (`infrastructure/terraform/scripts/lab.sh start`). With the lab off, every
+API call fails.
