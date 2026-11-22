@@ -36,12 +36,14 @@ export const ENDPOINT_COLOR: Record<string, string> = {
   WAYPOINT: '#121317',
   CHARGER: '#2e7d32',
   PARK: '#ef6c00',
+  QUEUE: '#6a1b9a',
 };
 
 export const ENDPOINT_NAME: Record<string, string> = {
   WAYPOINT: 'Waypoint',
   CHARGER: 'Charger',
   PARK: 'Park',
+  QUEUE: 'Queue point',
 };
 
 export const ROBOT_COLOR: Record<string, string> = {
@@ -60,8 +62,9 @@ export function zoneColorOf(type: string): string {
 }
 
 /** The endpoint's map type as the web draws it (older rows used PARKING). */
-export function endpointKind(type: string): 'WAYPOINT' | 'CHARGER' | 'PARK' {
+export function endpointKind(type: string): 'WAYPOINT' | 'CHARGER' | 'PARK' | 'QUEUE' {
   if (type === 'CHARGER') return 'CHARGER';
+  if (type === 'QUEUE') return 'QUEUE';
   if (type === 'PARK' || type === 'PARKING') return 'PARK';
   return 'WAYPOINT';
 }

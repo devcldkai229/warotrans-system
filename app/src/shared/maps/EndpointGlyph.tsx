@@ -1,10 +1,10 @@
 import React from 'react';
 import { View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Signpost, SquareParking, Zap } from 'lucide-react-native';
+import { ListOrdered, Signpost, SquareParking, Zap } from 'lucide-react-native';
 import { endpointColorOf, endpointKind } from './mapStyle';
 
-const ICONS = { WAYPOINT: Signpost, CHARGER: Zap, PARK: SquareParking } as const;
+const ICONS = { WAYPOINT: Signpost, CHARGER: Zap, PARK: SquareParking, QUEUE: ListOrdered } as const;
 
 /** The web console's endpoint icon (Lucide signpost / zap / square-parking) in its type colour. */
 export function EndpointIcon({ type, size = 16, isDark = false, color }: { type: string; size?: number; isDark?: boolean; color?: string }) {

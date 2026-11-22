@@ -6,6 +6,8 @@ export const vi_maps: Record<string, string> = {
   'Charging point': 'Điểm sạc',
   'Park': 'Điểm đỗ',
   'Parking / waiting point': 'Điểm đỗ / chờ',
+  'Queue point': 'Điểm xếp hàng',
+  'Queue point: robots wait their turn here': 'Điểm xếp hàng (Queue): robot đứng chờ tới lượt',
   'Keep-out': 'Cấm vào',
   'No-entry area (red diagonal stripes)': 'Khu vực cấm vào (đỏ sọc chéo)',
   'Speed zone': 'Vùng tốc độ',

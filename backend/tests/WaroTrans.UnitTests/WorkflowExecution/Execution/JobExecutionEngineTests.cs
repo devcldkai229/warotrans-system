@@ -2633,6 +2633,7 @@ public sealed class JobExecutionEngineTests
     [InlineData("EP-WAIT-CHARGE", "Wait", "CHARGER", false)]   // a charger never
     [InlineData("EP-SHELF-A-1", "Shelf A 1", "WAYPOINT", false)]
     [InlineData("EP-PARKING-A", "Parking A", "PARK", false)]     // parking: stand-aside, not a wait point
+    [InlineData("EP-LANE-STOP", "Lane stop", "QUEUE", true)]     // the QUEUE type is a wait point whatever its code
     public void One_rule_says_what_a_wait_point_is(string code, string name, string type, bool waitPoint)
     {
         var e = new EndpointPoseWithType(Guid.NewGuid(), code, name, Enum.Parse<WaroTrans.Navigation.Enums.EndpointType>(type), true, 0, 0, 0.1);

@@ -97,7 +97,7 @@ public sealed class TrafficGraphCompileService(
         }
 
         var recoveryStops = endpoints
-            .Where(e => e.IsEnabled && e.EndpointType == EndpointType.PARK)
+            .Where(e => e.IsEnabled && e.EndpointType is EndpointType.PARK or EndpointType.QUEUE)
             .Select(e => e.Code)
             .ToHashSet(StringComparer.Ordinal);
 
