@@ -716,13 +716,13 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-22T18:38:49.631348+00:00",
+    "exportedAt": "2026-11-22T20:55:06.268777+00:00",
     "mapVersion": {
         "id": "1b57f9d4-525e-43d4-9357-276636621406",
         "code": "MAP-ONE-V017",
-        "name": "MAP-ONE-V017 (V015 giữ nguyên)",
+        "name": "MAP-ONE-V017 (V015 giß╗» nguy├¬n)",
         "negate": false,
-        "status": "DRAFT",
+        "status": "PUBLISHED",
         "map_uri": "/map-assets/55c88958-d994-48d3-ae5d-11991476673f/5df5022d-649a-4c7f-8eb6-b49f580e3935/map.pgm",
         "frame_id": "map",
         "origin_x": -1.642,
@@ -733,7 +733,7 @@
         "version_no": 17,
         "content_hash": "23bea7db9cc5fca7b38f1e92272a578bef285b90dad9540345ef84c6d96f07a5",
         "map_yaml_uri": "/map-assets/55c88958-d994-48d3-ae5d-11991476673f/5df5022d-649a-4c7f-8eb6-b49f580e3935/map.yaml",
-        "published_at": null,
+        "published_at": "2026-11-22T20:54:59.511457+00:00",
         "warehouse_id": "55c88958-d994-48d3-ae5d-11991476673f",
         "free_threshold": 0.196,
         "preview_image_uri": "/map-assets/55c88958-d994-48d3-ae5d-11991476673f/5df5022d-649a-4c7f-8eb6-b49f580e3935/map-preview.png",

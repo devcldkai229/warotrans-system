@@ -291,6 +291,13 @@ public static class YieldSpots
         for (var k = 1; k <= samples; k++)
         {
             var t = (double)k / samples;
+            // The robot already stands at the start: a spot close to a wall (MAP-ONE Queue B, 3 cm from it) must not
+            // forbid every way out. Clearance counts from 0.25 m on.
+            if (t * length < 0.25)
+            {
+                continue;
+            }
+
             if (grid.ClearanceAt(ax + (bx - ax) * t, ay + (by - ay) * t) < clearance)
             {
                 return false;

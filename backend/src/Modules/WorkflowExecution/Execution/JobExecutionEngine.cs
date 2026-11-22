@@ -2112,16 +2112,19 @@ public sealed partial class JobExecutionEngine(
             }
 
             var winnerMove = loser.RobotId == robotId ? theirs.Value : mine.Value;
-            bool allowSpot;
+            // Each time the same pair locks again soon after a back-off, look for free floor farther away (1.2 → 2 → 3 m)
+            // instead of sending the robot across the floor to an endpoint whose way crosses the other robot.
+            double spotRadius;
             lock (DeadlockSince)
             {
-                allowSpot = !PairRelocks.TryGetValue(pair, out var relocks)
-                            || (now - relocks.Since).TotalSeconds >= DeadlockSwapWithinSeconds
-                            || relocks.Count < SpotBackOffsPerPair;
+                var relockCount = PairRelocks.TryGetValue(pair, out var relocks)
+                                  && (now - relocks.Since).TotalSeconds < DeadlockSwapWithinSeconds ? relocks.Count : 0;
+                spotRadius = relockCount switch { 0 => YieldSpotMaxMeters, 1 => 2.0, _ => 3.0 };
             }
 
+            var allowSpot = true;
             var backedOff = await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, loser.Target, winnerId, winnerMove.StepId,
-                winnerMove.Target, cancellationToken, allowSpot);
+                winnerMove.Target, cancellationToken, allowSpot, spotRadius);
             if (!backedOff)
             {
                 var altLoser = loser.RobotId == robotId ? theirs.Value : mine.Value;
@@ -2131,7 +2134,7 @@ public sealed partial class JobExecutionEngine(
                     && (!LastRetreat.TryGetValue(altLoser.RobotId, out var altLast) || (now - altLast).TotalSeconds >= DeadlockCooldownSeconds))
                 {
                     if (await RetreatAsync(altLoser.JobId, altLoser.StepId, altLoser.RobotId, altLoser.Target, altWinnerId, loser.StepId,
-                            altWinnerGoal, cancellationToken, allowSpot))
+                            altWinnerGoal, cancellationToken, allowSpot, spotRadius))
                     {
                         loser = altLoser;
                         winnerId = altWinnerId;
@@ -2240,7 +2243,7 @@ public sealed partial class JobExecutionEngine(
     /// </summary>
     private async Task<bool> RetreatAsync(
         Guid jobId, Guid stepId, Guid robotId, Guid? ownGoalId, Guid winnerId, Guid winnerStepId, Guid? winnerGoalId,
-        CancellationToken cancellationToken, bool allowSpot = true)
+        CancellationToken cancellationToken, bool allowSpot = true, double spotRadius = YieldSpotMaxMeters)
     {
         var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
         var winner = await fleet.GetRobotAsync(winnerId, cancellationToken);
@@ -2293,7 +2296,7 @@ public sealed partial class JobExecutionEngine(
             .ToList();
         // Best: step aside right here, out of the other robot's way (user, 2026-11-23: a robot at the end of the shelf B
         // lane drove all the way to a queue point to let the other one pass). Endpoints only when no spot close by is free.
-        var spot = allowSpot ? await YieldSpotAsync(robot, winner, winnerGoal, others, cancellationToken) : null;
+        var spot = allowSpot ? await YieldSpotAsync(robot, winner, winnerGoal, others, cancellationToken, spotRadius) : null;
         var target = spot is null ? Pick(standAside.Where(e => e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.QUEUE))
                                     ?? Pick(standAside) ?? Pick(lent) : null;
         EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool)

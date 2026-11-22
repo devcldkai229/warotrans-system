@@ -93,6 +93,15 @@ public sealed partial class JobExecutionEngine
     private async Task<(string Reason, Guid? Robot)?> GoalBusyByAsync(
         Job job, JobStep step, Guid robotId, EndpointPoseSnapshot goal, CancellationToken cancellationToken)
     {
+        // Already standing on its goal: nothing to queue for, its stop starts right here. Queued behind a robot that waits
+        // for this very spot, it held the spot and the other waited for it to leave, for ever (sim 2026-11-23, V017:
+        // R1 idle on EP-INBOUND got the next pickup there while R2 waited at Queue B to drop off at EP-INBOUND).
+        if (await fleet.GetRobotAsync(robotId, cancellationToken) is { } me
+            && Dist(me.PoseX, me.PoseY, goal.X, goal.Y) <= Math.Max(GoalOccupiedRadiusMeters, goal.PositionTolerance))
+        {
+            return null;
+        }
+
         var zone = GoalZone(goal.Code);
         DateTimeOffset? mySince = step.OutputValues.TryGetValue(AreaQueueZoneKey, out var mz) && mz.GetString() == zone
                                   && step.OutputValues.TryGetValue(AreaWaitSinceKey, out var ms)

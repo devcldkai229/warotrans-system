@@ -1136,6 +1136,7 @@ public sealed class TrafficState
         // waiting for cells) made the robot look like it still waited for the robot holding them: a wait-for cycle with
         // a robot standing still, DEADLOCK_RISK for the other one forever (MAP-ONE-V016 sim, 2026-11-23).
         RemoveFromAllQueues(robot.RobotId);
+        robot.BlockingOwner = null;
         if (!succeeded)
         {
             Quarantine(robot, $"NAVIGATE:{reason ?? "FAILED"}");
@@ -2658,7 +2659,9 @@ public sealed class TrafficState
 
         foreach (var r in _robots.Values)
         {
-            if (r.BlockingOwner is Guid b)
+            // A robot with no route (idle, holding a service stop, quarantined) waits for nobody: an idle robot's leftover BlockingOwner made a fake
+            // cycle (R2 idle, R1 waiting for its cells) and R1 backed off on the spot for ever (sim 2026-11-23, V017).
+            if (r.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined) && r.BlockingOwner is Guid b)
             {
                 AddEdge(r.RobotId, b);
             }
@@ -2683,7 +2686,7 @@ public sealed class TrafficState
         var edges = new Dictionary<Guid, HashSet<Guid>>();
         foreach (var r in _robots.Values)
         {
-            if (r.BlockingOwner is Guid b)
+            if (r.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined) && r.BlockingOwner is Guid b)
             {
                 if (!edges.TryGetValue(r.RobotId, out var set))
                 {

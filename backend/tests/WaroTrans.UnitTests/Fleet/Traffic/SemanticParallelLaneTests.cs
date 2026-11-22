@@ -145,6 +145,24 @@ public class SemanticParallelLaneTests
     }
 
     [Fact]
+    public void An_idle_robot_that_once_waited_is_not_part_of_a_wait_for_cycle()
+    {
+        // V017 sim, 2026-11-23: R2's cancelled NAVIGATE left BlockingOwner = R1; R1, waiting for R2's cells, was refused
+        // DEADLOCK_RISK (a cycle through an idle robot) and backed off on the spot for ever instead of plain waiting.
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, 0.0, 0.0, localizationOk: true, poseYaw: 0).Ok);
+        Assert.True(s.EnsureTracked(_r2, 1.5, 0.0, localizationOk: true, poseYaw: Math.PI).Ok);
+        var cmd = Guid.NewGuid();
+        Assert.False(s.AcquireSemanticPlan(Plan(policy, _r2, Line(1.5, 0.0, -1.0, 0.0)) with { CommandId = cmd }).Granted);
+        Assert.True(s.CompleteRoute(_r2, succeeded: true, "CANCELED", commandId: cmd, poseX: 1.5, poseY: 0.0).Ok);
+
+        var r1 = s.AcquireSemanticPlan(Plan(policy, _r1, Line(0.0, 0.0, 3.0, 0.0))); // straight through R2
+        Assert.False(r1.Granted);
+        Assert.DoesNotContain("DEADLOCK", r1.Reason ?? "");
+    }
+
+    [Fact]
     public void A_waiting_robot_does_not_block_cells_it_does_not_hold()
     {
         var policy = Policy(laneHalfWidth: 0);
