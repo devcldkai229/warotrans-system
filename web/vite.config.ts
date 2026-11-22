@@ -20,6 +20,12 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
+        // WaroTrans.AI (separate Python service, only with VITE_AI_ENABLED=true): /api/ai/v1/... → ai-api /v1/...
+        '/api/ai': {
+          target: env.VITE_AI_API_URL || 'http://localhost:8090',
+          changeOrigin: true,
+          rewrite: (p: string) => p.replace(/^\/api\/ai/, ''),
+        },
         // Evidence Recorder (separate process, docs/adr/0012): must come before /api.
         '/api/evidence': {
           target: env.VITE_EVIDENCE_API_URL || 'http://localhost:5095',
