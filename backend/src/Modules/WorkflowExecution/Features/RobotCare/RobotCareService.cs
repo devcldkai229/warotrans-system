@@ -588,7 +588,22 @@ public sealed class RobotCareService(
             return new RobotDestinationResult(RobotDestinationResult.NotNeeded, parked.Code, "already_parked");
         }
 
+        // The robot's own home (Traffic:RobotHomeEndpoints) is its parking place whatever its endpoint type: MAP-ONE-V013
+        // EP-PARKING-B is a WAYPOINT, so RBT-002 standing on it after a cancel was "not parked" and drove off to EP-WAIT
+        // on its own (2026-11-22). Standing there: nothing to do; elsewhere: home first, if it is free.
+        var homeCode = trafficOptions?.Value.RobotHomeEndpoints.TryGetValue(robot.Code, out var hc) == true ? hc : null;
+        var home = homeCode is null ? null : endpoints.FirstOrDefault(e => e.IsEnabled && e.Code == homeCode);
+        if (home is not null && Distance(robot, home) <= ParkedRadius(home))
+        {
+            return new RobotDestinationResult(RobotDestinationResult.NotNeeded, home.Code, "already_home");
+        }
+
         Guid? target;
+        if (home is not null && !(await TakenEndpointsAsync(robot, [home], cancellationToken)).Contains(home.Id))
+        {
+            target = home.Id;
+        }
+        else
         if (allowWaitPoint)
         {
             var candidates = endpoints.Where(e => e.IsEnabled && (e.EndpointType == EndpointType.PARK || IsRecoveryPoint(e))).ToList();

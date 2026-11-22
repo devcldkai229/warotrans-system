@@ -770,7 +770,11 @@ public sealed class TrafficState
         var radius = _semantic.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
         var set = new HashSet<string>(StringComparer.Ordinal);
         SemanticReservation.DiscCells(x, y, radius, _semantic.EffectiveCellSize, set);
-        foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, radius, z.Ring)))
+        // A robot standing still does not turn before its next grant (which takes the zone if the turn needs it), so the
+        // zone test uses its half length, not the any-heading circle: on MAP-ONE-V013 (2026-11-22) RBT-002 parked at
+        // EP-PARKING-B, 0.245 m below ZONE-SINGLE-CENTER, held the whole zone and RBT-001 waited for it forever.
+        var zoneRadius = Math.Max(_semantic.FootprintHalfLength, _semantic.FootprintHalfWidth);
+        foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, zoneRadius, z.Ring)))
         {
             set.Add($"zone:{z.Code}");
         }
@@ -1623,6 +1627,7 @@ public sealed class TrafficState
         if (robot.Phase != TrafficRobotPhase.Quarantined)
         {
             SeedIfHoldingNothing(robot, poseX, poseY, localizationOk);
+            FollowIdlePose(robot, poseX, poseY, localizationOk);
             return TrafficOpResult.Success();
         }
 
@@ -1683,6 +1688,47 @@ public sealed class TrafficState
 
         StateVersion++;
         Log($"seed-online:{robot.RobotId}:n={under.Length}");
+    }
+
+    /// <summary>
+    /// An idle robot (no grant, no command) holds what its body stands on NOW. Its seed can be taken from a pose that
+    /// is no longer true: on LOCALIZE the robot reports its state with the provisional AMCL pose (0, 0) a moment before
+    /// the pose jumps to the endpoint the operator placed it at, and nothing re-seeded it while it stood still. On
+    /// MAP-ONE-V013 (2026-11-22) RBT-001, parked at EP-PARKING-A, kept ZONE-SINGLE-CENTER and the cells around (0, 0),
+    /// so RBT-002 at EP-PARKING-B could never seed (SEED_CONFLICT, quarantined, invisible to traffic). On every fresh
+    /// heartbeat pose: what lies clear of the body is released, what the body covers and is free is taken.
+    /// </summary>
+    private void FollowIdlePose(RobotRuntime robot, double? poseX, double? poseY, bool localizationOk)
+    {
+        if (!_ready || _semantic is null || robot.Phase != TrafficRobotPhase.Idle || robot.Authority is not null
+            || robot.ActiveCommandId is not null || robot.OccupiedResourceIds.Count == 0
+            || !localizationOk || poseX is not double x || poseY is not double y)
+        {
+            return;
+        }
+
+        robot.X = x;
+        robot.Y = y;
+        var under = ResourcesUnder(x, y);
+        var keep = under.Concat(robot.ServiceHoldIds).ToHashSet(StringComparer.Ordinal);
+        var released = robot.OccupiedResourceIds
+            .Where(rid => !keep.Contains(rid) && IsPhysicallyClear(robot, rid, x, y))
+            .ToList();
+        foreach (var rid in released)
+        {
+            ReleaseResource(robot, rid);
+        }
+
+        var missing = under.Where(rid => !robot.OccupiedResourceIds.Contains(rid)).ToList();
+        var taken = missing.Count > 0 && TryOccupy(robot, missing, out _);
+        if (released.Count == 0 && !taken)
+        {
+            return;
+        }
+
+        StateVersion++;
+        Log($"follow-idle-pose:{robot.RobotId}:released={released.Count}:taken={(taken ? missing.Count : 0)}");
+        PromoteWaiters(released);
     }
 
     private bool VerifiedWhereItHolds(RobotRuntime robot, double? poseX, double? poseY, bool localizationOk)
@@ -2327,7 +2373,64 @@ public sealed class TrafficState
             }
         }
 
+        if (_semantic is not null && BodyInTheWay(resourceIds, robotId) is Guid body)
+        {
+            blocker = body;
+            reason = TrafficWaitingReason.Capacity;
+            return false;
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// The robot whose BODY stands on one of these cells, whether or not it holds them. A robot normally holds what it
+    /// stands on, but one that could not seed (SEED_CONFLICT / RECONCILE_CONFLICT quarantine, or a seed retried every
+    /// second) holds nothing, and was then invisible: on the real floor (MAP-ONE-V013, 2026-11-22) RBT-001 was granted
+    /// a path straight through RBT-002 parked and quarantined at EP-PARKING-B and drove to 5 cm of it. Cells under the
+    /// asking robot's own body are left out, so two robots that already stand too close can still move apart.
+    /// </summary>
+    private Guid? BodyInTheWay(ImmutableArray<string> resourceIds, Guid robotId)
+    {
+        if (_semantic is null || resourceIds.IsDefaultOrEmpty)
+        {
+            return null;
+        }
+
+        var radius = _semantic.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
+        HashSet<string>? own = null;
+        foreach (var other in _robots.Values)
+        {
+            if (other.RobotId == robotId || !other.LocalizationOk || other.X is not double ox || other.Y is not double oy)
+            {
+                continue;
+            }
+
+            var body = new HashSet<string>(StringComparer.Ordinal);
+            SemanticReservation.DiscCells(ox, oy, radius, _semantic.EffectiveCellSize, body);
+            body.ExceptWith(other.OccupiedResourceIds); // what it holds is already counted by capacity
+            if (body.Count == 0)
+            {
+                continue;
+            }
+
+            if (own is null)
+            {
+                own = new HashSet<string>(StringComparer.Ordinal);
+                if (_robots.TryGetValue(robotId, out var me) && me.X is double mx && me.Y is double my)
+                {
+                    SemanticReservation.DiscCells(mx, my, radius, _semantic.EffectiveCellSize, own);
+                }
+            }
+
+            body.ExceptWith(own);
+            if (resourceIds.Any(body.Contains))
+            {
+                return other.RobotId;
+            }
+        }
+
+        return null;
     }
 
     private bool ReserveExits(ImmutableArray<int> exits, Guid robotId, out Guid? blocker)
@@ -2426,6 +2529,16 @@ public sealed class TrafficState
 
     private bool IsPhysicallyClear(RobotRuntime robot, string resourceId, double x, double y)
     {
+        if (_semantic is not null && resourceId.StartsWith("zone:", StringComparison.Ordinal)
+            && _semantic.SingleOccupancyZones.FirstOrDefault(z => $"zone:{z.Code}" == resourceId) is { } zone)
+        {
+            // Same rule as the zone test of a standing robot / a plan (half length + margin, not the any-heading circle):
+            // RBT-002 seeded at the provisional pose (0, 0) during LOCALIZE never let go of ZONE-SINGLE-CENTER from
+            // EP-PARKING-B, 0.248 m below it, because the circle (0.287 m) still touched it (MAP-ONE-V013, 2026-11-22).
+            var r = Math.Max(_semantic.FootprintHalfLength, _semantic.FootprintHalfWidth) + Math.Max(0, _options.LocalizationMarginMeters);
+            return !SemanticReservation.DiscHitsZone(x, y, r, zone.Ring);
+        }
+
         if (_semantic is not null
             && (resourceId.StartsWith("cell:", StringComparison.Ordinal)
                 || resourceId.StartsWith("zone:", StringComparison.Ordinal)

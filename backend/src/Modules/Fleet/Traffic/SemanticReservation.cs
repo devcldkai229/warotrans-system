@@ -48,7 +48,10 @@ public sealed record SemanticTrafficPolicy(
     /// </summary>
     public double ZoneReserveRadiusMeters =>
         ZoneMarginMeters is { } m
-            ? Math.Min(ReserveRadiusMeters, FootprintRadiusMeters + Math.Max(0, m) + SampleStepMeters / 2.0)
+            // Half length, not the any-heading circle: a robot parked 0.245 m below MAP-ONE-V013 ZONE-SINGLE-CENTER
+            // (EP-PARKING-B) held that zone and the other robot waited for it forever (2026-11-22). The robot gate
+            // (semantic_traffic_client.footprint_resources) tests zones with the same half length + its stop margin.
+            ? Math.Min(ReserveRadiusMeters, Math.Max(FootprintHalfLength, FootprintHalfWidth) + Math.Max(0, m) + SampleStepMeters / 2.0)
             : ReserveRadiusMeters;
 }
 

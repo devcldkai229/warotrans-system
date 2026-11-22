@@ -115,12 +115,53 @@ public sealed partial class JobExecutionEngine(
             DispatchGate.Release();
         }
 
+        if (assigned && dispatchOverride?.RobotCare != true && AssignedRobot(job) is Guid robotOfJob)
+        {
+            await CancelParkJobsOfAsync(robotOfJob, job, cancellationToken);
+        }
+
         if (assigned)
         {
             await AdvanceAsync(job.Id, cancellationToken);
         }
 
         return job;
+    }
+
+    /// <summary>
+    /// A robot's own way home (RobotCare ROBOT_RETURN_TO_PARK, no cargo) gives way to work: it is cancelled when the robot
+    /// takes a Job. A park Job that had stopped (PAUSED, e.g. NAVIGATION_BLOCKED docking at EP-PARKING-A) kept the robot
+    /// assigned, so RBT-001 stood idle at parking as "robot_busy" while two trips of a request waited in the queue
+    /// (MAP-ONE-V013, 2026-11-22).
+    /// </summary>
+    private async Task CancelParkJobsOfAsync(Guid robotId, Job taking, CancellationToken cancellationToken)
+    {
+        foreach (var parkJobId in await ParkJobsOfAsync(robotId, taking.Id, cancellationToken))
+        {
+            try
+            {
+                await CancelJobAsync(parkJobId, $"robot taken by Job {taking.JobNo}", cancellationToken);
+                logger.LogInformation("Park Job {ParkJob} of robot {Robot} cancelled: the robot takes Job {JobNo}", parkJobId, robotId, taking.JobNo);
+            }
+            catch (AppException ex)
+            {
+                logger.LogWarning("Park Job {ParkJob} of robot {Robot} could not be cancelled: {Code}", parkJobId, robotId, ex.Code);
+            }
+        }
+    }
+
+    private async Task<List<Guid>> ParkJobsOfAsync(Guid? robotId, Guid exceptJobId, CancellationToken cancellationToken)
+    {
+        var parkWorkflowIds = db.Workflows.AsNoTracking()
+            .Where(w => w.Code == WaroTrans.WorkflowExecution.Features.RobotCare.RobotCareService.ParkWorkflow)
+            .Select(w => w.Id);
+        return await db.JobRobotAssignments.AsNoTracking()
+            .Where(a => a.EndedAt == null && a.JobId != exceptJobId && (robotId == null || a.RobotId == robotId)
+                        && db.Jobs.Any(j => j.Id == a.JobId && parkWorkflowIds.Contains(j.WorkflowId)
+                                            && !j.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD)))
+            .Select(a => a.JobId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
     }
 
     private async Task<(Job Job, bool Assigned)> AssignRobotAsync(
@@ -188,7 +229,7 @@ public sealed partial class JobExecutionEngine(
                 ?? throw new NotFoundException($"Robot '{best.RobotId}' was not found.", "robot_not_found");
         }
 
-        await EnsureRobotAtHomeForFirstJobAsync(robot, job, cancellationToken);
+        await EnsureRobotAtHomeForFirstJobAsync(robot, job, cancellationToken, dispatchOverride?.RobotCare == true);
 
         var now = DateTimeOffset.UtcNow;
         job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
@@ -3722,8 +3763,10 @@ public sealed partial class JobExecutionEngine(
 
     private async Task<HashSet<Guid>> RobotsBusyWithOtherJobsAsync(Guid jobId, CancellationToken cancellationToken)
     {
+        // A robot only on its way home (park Job, nothing on board) is free for work: CancelParkJobsOfAsync ends that Job.
+        var parkJobs = await ParkJobsOfAsync(null, jobId, cancellationToken);
         var busy = await db.JobRobotAssignments.AsNoTracking()
-            .Where(a => a.EndedAt == null && a.JobId != jobId)
+            .Where(a => a.EndedAt == null && a.JobId != jobId && !parkJobs.Contains(a.JobId))
             .Select(a => a.RobotId)
             .ToListAsync(cancellationToken);
         var fetching = await db.JobRecoveryCases.AsNoTracking()
@@ -3760,7 +3803,7 @@ public sealed partial class JobExecutionEngine(
         }
     }
 
-    private async Task EnsureRobotAtHomeForFirstJobAsync(RobotSnapshot robot, Job job, CancellationToken cancellationToken)
+    private async Task EnsureRobotAtHomeForFirstJobAsync(RobotSnapshot robot, Job job, CancellationToken cancellationToken, bool robotCare = false)
     {
         if (trafficOptions?.Value is not { Mode: TrafficCoordinatorMode.Semantic } options
             || segmentedTraffic is null
@@ -3779,6 +3822,14 @@ public sealed partial class JobExecutionEngine(
         var pose = await navigation.GetEndpointPoseByCodeAsync(job.MapVersionId, homeCode, cancellationToken)
             ?? throw new ConflictException(
                 $"Robot {robot.Code} has home endpoint '{homeCode}', which is not on the Job's map.", "robot_home_not_on_map");
+        // Sending the robot home IS how it gets back there (after a safety stop mid-floor and a Host restart, the only
+        // move it was allowed was the one refused here). It still has to be localized (checked above).
+        if (robotCare && job.ContextValues.TryGetValue("parkEndpointId", out var park)
+            && park.ValueKind == JsonValueKind.String && Guid.TryParse(park.GetString(), out var parkId) && parkId == pose.Id)
+        {
+            return;
+        }
+
         var distance = Math.Sqrt(Math.Pow(robot.PoseX - pose.X, 2) + Math.Pow(robot.PoseY - pose.Y, 2));
         if (distance > options.RobotHomeToleranceMeters)
         {
