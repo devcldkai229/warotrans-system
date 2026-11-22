@@ -137,6 +137,12 @@ export function HomeScreen() {
         fleet={onlineFleet}
         updateMode={fleetQuery.updateMode}
         jobContext={activeJob.id ? {
+          jobId: activeJob.id,
+          status: activeJob.status,
+          robotId:
+            onlineFleet.find(
+              r => r.code === activeJob.robot || r.id === activeJob.robot,
+            )?.id ?? null,
           pickupCode: activeJob.sourceEndpointCode,
           dropoffCode: activeJob.destinationEndpointCode,
           robotCode: activeJob.robot,

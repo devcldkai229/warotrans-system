@@ -3,15 +3,18 @@ import Svg, { Circle, ClipPath, Defs, G, Line, Path, Pattern, Polyline, Rect } f
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { LANE_ARROW_PATH, laneGlyphs, type DrawPoint } from '../laneGlyphs';
 import {
+  jobRouteColor,
   laneArrowColor,
   laneBandColor,
   laneBandOpacity,
   laneEdgeColor,
+  trailColor,
   zoneColorOf,
   zoneFillOpacity,
   zoneStrokeColor,
 } from '../mapStyle';
 import type { MapPlannedPath } from '../mapTraffic';
+import type { MapJobMovement } from '../mapTrails';
 import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
 
 interface Props {
@@ -25,6 +28,9 @@ interface Props {
   selectedEdgeId?: string | null;
   plannedPaths?: MapPlannedPath[];
   showPaths?: boolean;
+  jobMovement?: MapJobMovement | null;
+  trailSegments?: readonly MapPoint[][];
+  showJobRoute?: boolean;
 }
 
 const toPoints = (line: DrawPoint[]) => line.map(p => `${p.x},${p.y}`).join(' ');
@@ -50,6 +56,9 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
   selectedEdgeId = null,
   plannedPaths = [],
   showPaths = false,
+  jobMovement = null,
+  trailSegments = [],
+  showJobRoute = false,
 }: Props) {
   const clip = `infrastructure-${map.id}`;
   const hatch = `hatch-${map.id}`;
@@ -207,6 +216,114 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                   </G>
                 );
               })
+          : null}
+
+        {showJobRoute && jobMovement
+          ? (() => {
+              const a = point([jobMovement.from.x, jobMovement.from.y]);
+              const b = point([jobMovement.to.x, jobMovement.to.y]);
+              if (!a || !b) return null;
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist <= 26 * hair) return null;
+              const ux = dx / dist;
+              const uy = dy / dist;
+              const trim = 12 * hair;
+              const start = { x: a.x + ux * trim, y: a.y + uy * trim };
+              const end = { x: b.x - ux * trim, y: b.y - uy * trim };
+              const tipBack = { x: end.x - ux * (4.5 * hair), y: end.y - uy * (4.5 * hair) };
+              const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const stroke = jobRouteColor(isDark);
+
+              return (
+                <G key={`job-route-${jobMovement.pickupId}-${jobMovement.dropoffId}`}>
+                  <Line
+                    x1={start.x}
+                    y1={start.y}
+                    x2={tipBack.x}
+                    y2={tipBack.y}
+                    stroke={stroke}
+                    strokeOpacity={isDark ? 0.72 : 0.68}
+                    strokeWidth={1.6 * hair}
+                    strokeDasharray={`${5 * hair} ${4 * hair}`}
+                    strokeLinecap="round"
+                  />
+                  <Path
+                    d="M0 0 L-7 -3.4 L-7 3.4 Z"
+                    fill={stroke}
+                    fillOpacity={isDark ? 0.88 : 0.84}
+                    transform={`translate(${end.x} ${end.y}) rotate(${angle}) scale(${hair})`}
+                  />
+                </G>
+              );
+            })()
+          : null}
+
+        {showJobRoute && trailSegments.length > 0
+          ? (() => {
+              const projectedSegments = trailSegments
+                .map(seg => seg.map(worldPt => point([worldPt.x, worldPt.y])).filter((p): p is MapPoint => !!p))
+                .filter(seg => seg.length >= 2);
+              if (projectedSegments.length === 0) return null;
+
+              const color = trailColor(isDark);
+              const firstPoint = projectedSegments[0][0];
+
+              return (
+                <G key="job-trail">
+                  {projectedSegments.slice(1).map((seg, gapIdx) => {
+                    const prevSeg = projectedSegments[gapIdx];
+                    const lastPrev = prevSeg[prevSeg.length - 1];
+                    const firstNext = seg[0];
+                    return (
+                      <Line
+                        key={`trail-gap-${gapIdx}`}
+                        x1={lastPrev.x}
+                        y1={lastPrev.y}
+                        x2={firstNext.x}
+                        y2={firstNext.y}
+                        stroke={color}
+                        strokeOpacity={0.45}
+                        strokeWidth={1.4 * hair}
+                        strokeDasharray={`${3.5 * hair} ${3.5 * hair}`}
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+                  {projectedSegments.map((seg, segIdx) => (
+                    <G key={`trail-seg-${segIdx}`}>
+                      <Polyline
+                        points={toPoints(seg)}
+                        fill="none"
+                        stroke={color}
+                        strokeOpacity={0.22}
+                        strokeWidth={4.8 * hair}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <Polyline
+                        points={toPoints(seg)}
+                        fill="none"
+                        stroke={color}
+                        strokeOpacity={0.92}
+                        strokeWidth={2.2 * hair}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </G>
+                  ))}
+                  <Circle
+                    cx={firstPoint.x}
+                    cy={firstPoint.y}
+                    r={3.2 * hair}
+                    fill={isDark ? '#151922' : '#ffffff'}
+                    stroke={color}
+                    strokeWidth={1.4 * hair}
+                  />
+                </G>
+              );
+            })()
           : null}
 
         {showPaths && plannedPaths.length > 0

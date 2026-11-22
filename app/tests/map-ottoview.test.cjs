@@ -325,6 +325,17 @@ test('Vietnamese i18n translates new OTTO map legend and quick-inspect strings w
   assert.equal(t('Wait / Buffer'), 'Điểm chờ');
   assert.equal(t('Recessed Shelf Bay'), 'Kệ âm tường');
   assert.equal(t('Docking Bay'), 'Ô đỗ robot đúng tỉ lệ');
+  assert.equal(t('Job Route & Paths'), 'Lộ trình & đường đi');
+  assert.equal(
+    t('Job route, travelled trail & live Nav2 paths'),
+    'Tuyến giao nhận, vệt đã đi & lộ trình Nav2',
+  );
+  assert.equal(
+    t('Job route & travelled robot trail'),
+    'Tuyến giao nhận & vệt di chuyển của robot',
+  );
+  assert.equal(t('Job Route (Pickup to Destination)'), 'Tuyến nhiệm vụ (Nhận đến Giao)');
+  assert.equal(t('Travelled Trail'), 'Vệt đường robot đã đi');
   assert.equal(t('One-way lane'), 'Làn đường 1 chiều');
   assert.equal(t('Two-way lane'), 'Làn đường 2 chiều');
   assert.equal(t('Live Nav2 Path (Authorized)'), 'Đường đi Nav2 trực tiếp (Đã cấp phép)');
@@ -576,4 +587,56 @@ test('screenToWorld and baseToWorld produce accurate metric orientation-box read
     assert.ok(Math.abs(pt.x - probeWorld.x) < 1e-4);
     assert.ok(Math.abs(pt.y - probeWorld.y) < 1e-4);
   }
+});
+
+test('mapTrails filters points by map code, splits telemetry gaps, and builds real job routes', () => {
+  const load = createLoader();
+  const {
+    filterTrailPointsForMap,
+    buildTrailSegments,
+    buildJobMovement,
+    isJobTrailLive,
+  } = load('src/shared/maps/mapTrails.ts');
+
+  const points = [
+    { at: '2026-11-22T09:00:00Z', x: 0.0, y: 0.0, yaw: 0, mapVersionCode: 'MAP-ONE-V013' },
+    { at: '2026-11-22T09:00:02Z', x: 0.2, y: 0.0, yaw: 0, mapVersionCode: 'MAP-ONE-V013' },
+    { at: '2026-11-22T09:00:04Z', x: 9.0, y: 9.0, yaw: 0, mapVersionCode: 'MAP-OTHER-V001' },
+    { at: '2026-11-22T09:00:45Z', x: 1.5, y: 1.0, yaw: 0, mapVersionCode: null },
+    { at: '2026-11-22T09:00:47Z', x: 1.8, y: 1.0, yaw: 0, mapVersionCode: 'MAP-ONE-V013' },
+  ];
+
+  const onMap = filterTrailPointsForMap(points, 'MAP-ONE-V013');
+  assert.equal(onMap.length, 4);
+
+  const segments = buildTrailSegments(onMap);
+  assert.equal(segments.length, 2);
+  assert.equal(segments[0].length, 2);
+  assert.equal(segments[1].length, 2);
+
+  const map = {
+    ...BASE_MAP,
+    endpoints: [
+      { id: 'ep-1', mapVersionId: 'map-1', code: 'EP-INBOUND', name: 'Inbound', endpointType: 'WAYPOINT', x: 1.0, y: 2.0, yaw: 0, isEnabled: true },
+      { id: 'ep-2', mapVersionId: 'map-1', code: 'EP-SHELF-C-1', name: 'Shelf C 1', endpointType: 'WAYPOINT', x: 3.0, y: 0.5, yaw: 0, isEnabled: true },
+      { id: 'ep-off', mapVersionId: 'map-1', code: 'EP-DISABLED', name: 'Disabled', endpointType: 'WAYPOINT', x: 4.0, y: 1.0, yaw: 0, isEnabled: false },
+    ],
+  };
+
+  const movement = buildJobMovement(map, { pickupCode: 'EP-INBOUND', dropoffCode: 'Shelf C 1' });
+  assert.ok(movement);
+  assert.equal(movement.pickupId, 'ep-1');
+  assert.equal(movement.dropoffId, 'ep-2');
+  assert.deepEqual({ x: movement.from.x, y: movement.from.y }, { x: 1.0, y: 2.0 });
+  assert.deepEqual({ x: movement.to.x, y: movement.to.y }, { x: 3.0, y: 0.5 });
+
+  assert.equal(buildJobMovement(map, { pickupCode: 'EP-INBOUND', dropoffCode: 'EP-INBOUND' }), null);
+  assert.equal(buildJobMovement(map, { pickupCode: 'EP-INBOUND', dropoffCode: 'EP-DISABLED' }), null);
+  assert.equal(buildJobMovement(map, undefined), null);
+
+  assert.equal(isJobTrailLive('RUNNING'), true);
+  assert.equal(isJobTrailLive('PAUSED'), true);
+  assert.equal(isJobTrailLive('CREATED'), false);
+  assert.equal(isJobTrailLive('COMPLETED'), false);
+  assert.equal(isJobTrailLive('CANCELLED'), false);
 });

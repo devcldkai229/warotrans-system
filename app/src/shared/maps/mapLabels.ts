@@ -4,6 +4,9 @@ import { endpointKind, endpointVisualKind } from './mapStyle';
 import { worldToBase, type MapFrame, type MapPoint } from './mapTransform';
 
 export interface MapJobContext {
+  jobId?: string | null;
+  status?: string | null;
+  robotId?: string | null;
   pickupCode?: string | null;
   dropoffCode?: string | null;
   robotCode?: string | null;

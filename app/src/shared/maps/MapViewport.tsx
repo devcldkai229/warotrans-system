@@ -47,6 +47,7 @@ import { worldToMapPercent } from '../utils/mapCoordinates';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
 import { useMapCamera } from './hooks/useMapCamera';
 import { useMapEnvironment } from './hooks/useMapEnvironment';
+import { useMapJobTrail } from './hooks/useMapJobTrail';
 import { useMapPreviewSource } from './hooks/useMapPreviewSource';
 import { useMapTraffic } from './hooks/useMapTraffic';
 import { BaseMapLayer } from './layers/BaseMapLayer';
@@ -81,6 +82,7 @@ import {
   ROBOT_COLOR,
   ZONE_DESCRIPTION,
 } from './mapStyle';
+import { buildJobMovement } from './mapTrails';
 import {
   mapRobotState,
   mapUpdateLabel,
@@ -167,18 +169,17 @@ function getLayerItems(
       bg: colors.infoBg,
       tint: colors.infoText,
     },
-  ];
-
-  if (canReadTraffic) {
-    items.push({
+    {
       key: 'paths',
-      label: 'Live Nav2 Paths',
-      desc: 'Real-time robot traffic routes',
+      label: 'Job Route & Paths',
+      desc: canReadTraffic
+        ? 'Job route, travelled trail & live Nav2 paths'
+        : 'Job route & travelled robot trail',
       icon: Route,
       bg: isDark ? 'rgba(0, 210, 255, 0.16)' : '#e0f2fe',
       tint: isDark ? '#00d2ff' : '#0284c7',
-    });
-  }
+    },
+  ];
 
   items.push(
     {
@@ -545,6 +546,18 @@ function MapCanvas({
     robots,
     mapId: map.id,
   });
+  const canReadRobot = !onPickEndpoint && sessionCan(session, PERMISSIONS.robotRead);
+  const { trailSegments } = useMapJobTrail({
+    enabled: canReadRobot && layers.paths && active,
+    jobContext,
+    robots,
+    mapId: map.id,
+    mapCode: map.code,
+  });
+  const jobMovement = useMemo(
+    () => (!onPickEndpoint ? buildJobMovement(map, jobContext) : null),
+    [onPickEndpoint, map, jobContext],
+  );
 
   const model = useMemo(() => findMapModel(map), [map]);
   const raster = !model || layers.scan;
@@ -913,6 +926,9 @@ function MapCanvas({
                 selectedEdgeId={inspected?.kind === 'lane' ? inspected.edge.id : null}
                 plannedPaths={plannedPaths}
                 showPaths={canReadTraffic && layers.paths}
+                jobMovement={jobMovement}
+                trailSegments={trailSegments}
+                showJobRoute={!onPickEndpoint && layers.paths}
               />
               {layers.stations ? (
                 <StationArchitectureLayer

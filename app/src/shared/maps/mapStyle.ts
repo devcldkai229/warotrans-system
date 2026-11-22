@@ -63,6 +63,14 @@ export function laneBandOpacity(isDark: boolean): number {
   return isDark ? 0.28 : 0.13;
 }
 
+export function trailColor(isDark: boolean): string {
+  return isDark ? '#2dc7b4' : '#0d9488';
+}
+
+export function jobRouteColor(isDark: boolean): string {
+  return isDark ? '#e2e8f0' : '#1e293b';
+}
+
 export function zoneFillOpacity(type: string, isDark: boolean): number {
   switch (type) {
     case 'KEEP_OUT':

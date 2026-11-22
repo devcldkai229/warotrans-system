@@ -18,6 +18,8 @@ import {
   laneBandColor,
   laneBandOpacity,
   laneEdgeColor,
+  jobRouteColor,
+  trailColor,
   visualKindColor,
   zoneFillOpacity,
   zoneStrokeColor,
@@ -146,7 +148,7 @@ function MiniLaneSwatch({
   kind,
   isDark,
 }: {
-  kind: 'one-way' | 'two-way' | 'nav2-granted' | 'nav2-waiting';
+  kind: 'one-way' | 'two-way' | 'job-route' | 'trail' | 'nav2-granted' | 'nav2-waiting';
   isDark: boolean;
 }) {
   const arrow = laneArrowColor(isDark);
@@ -154,6 +156,62 @@ function MiniLaneSwatch({
   const edgeColor = laneEdgeColor(isDark);
   const bandOp = Math.min(0.32, laneBandOpacity(isDark) + 0.08);
   const cyan = PLAN_COLORS[0];
+
+  if (kind === 'job-route') {
+    const stroke = jobRouteColor(isDark);
+    return (
+      <Svg width={36} height={18} viewBox="0 0 36 18">
+        <Line
+          x1={3}
+          y1={9}
+          x2={27}
+          y2={9}
+          stroke={stroke}
+          strokeOpacity={0.76}
+          strokeWidth={1.7}
+          strokeDasharray="4 3"
+          strokeLinecap="round"
+        />
+        <Path d="M33 9 L26.5 5.6 L26.5 12.4 Z" fill={stroke} fillOpacity={0.88} />
+      </Svg>
+    );
+  }
+
+  if (kind === 'trail') {
+    const color = trailColor(isDark);
+    return (
+      <Svg width={36} height={18} viewBox="0 0 36 18">
+        <Line
+          x1={7}
+          y1={9}
+          x2={31}
+          y2={9}
+          stroke={color}
+          strokeOpacity={0.22}
+          strokeWidth={5.2}
+          strokeLinecap="round"
+        />
+        <Line
+          x1={7}
+          y1={9}
+          x2={31}
+          y2={9}
+          stroke={color}
+          strokeOpacity={0.92}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+        />
+        <Circle
+          cx={6}
+          cy={9}
+          r={3.2}
+          fill={isDark ? '#151922' : '#ffffff'}
+          stroke={color}
+          strokeWidth={1.5}
+        />
+      </Svg>
+    );
+  }
 
   if (kind === 'nav2-granted' || kind === 'nav2-waiting') {
     const granted = kind === 'nav2-granted';
@@ -427,6 +485,20 @@ export function MapLegendContent({
             <MiniLaneSwatch kind="two-way" isDark={isDark} />
             <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
               Two-way lane
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.listRow}>
+            <MiniLaneSwatch kind="job-route" isDark={isDark} />
+            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+              Job Route (Pickup to Destination)
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.listRow}>
+            <MiniLaneSwatch kind="trail" isDark={isDark} />
+            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+              Travelled Trail
             </Text>
           </View>
           {showLivePaths ? (
