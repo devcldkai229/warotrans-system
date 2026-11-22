@@ -187,7 +187,7 @@ const WebParticleWave = memo(function WebParticleWave({
         return;
       }
       if (startMs === null) startMs = nowMs;
-      const tSec = (nowMs - startMs) / 1000;
+      const tSec = ((nowMs - startMs) / 1000) * 0.58;
       drawFrame(tSec);
       rafId = window.requestAnimationFrame(tick);
     };
@@ -285,16 +285,16 @@ const NativeWaveRows = memo(function NativeWaveRows({
       val.setValue(0);
       return Animated.loop(
         Animated.sequence([
-          Animated.delay(idx * 260),
+          Animated.delay(idx * 400),
           Animated.timing(val, {
             toValue: 1,
-            duration: 1900,
+            duration: 3000,
             easing: WAVE_EASE,
             useNativeDriver: true,
           }),
           Animated.timing(val, {
             toValue: 0,
-            duration: 1900,
+            duration: 3000,
             easing: WAVE_EASE,
             useNativeDriver: true,
           }),
@@ -419,13 +419,13 @@ export const LoginBackdrop = memo(function LoginBackdrop({
       Animated.sequence([
         Animated.timing(mistPhase, {
           toValue: 1,
-          duration: 4750,
+          duration: 6500,
           easing: WAVE_EASE,
           useNativeDriver: true,
         }),
         Animated.timing(mistPhase, {
           toValue: 0,
-          duration: 4750,
+          duration: 6500,
           easing: WAVE_EASE,
           useNativeDriver: true,
         }),
