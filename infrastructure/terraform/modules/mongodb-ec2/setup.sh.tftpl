@@ -49,6 +49,9 @@ net:
   tls:
     mode: requireTLS
     certificateKeyFile: /etc/mongo-tls/mongo.pem
+    # MongoDB 8 refuses TLS without a chain of trust; clients present no certificate (password authentication).
+    CAFile: /etc/mongo-tls/mongo.crt
+    allowConnectionsWithoutCertificates: true
 security:
   authorization: enabled
 processManagement:

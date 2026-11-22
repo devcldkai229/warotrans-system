@@ -7,8 +7,8 @@ REGION="${AWS_REGION:-ap-southeast-1}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 STATE_BUCKET="${STATE_BUCKET:-warotrans-tfstate-$ACCOUNT_ID}"
 PY="$(command -v python3 || command -v python)"
-# Git Bash rewrites arguments that look like POSIX paths for Windows programs: keep SSM / log names as they are.
-export MSYS2_ARG_CONV_EXCL="/warotrans-demo;/aws/"
+# Git Bash rewrites arguments that look like POSIX paths for Windows programs: keep SSM names and container paths as they are.
+export MSYS2_ARG_CONV_EXCL="/warotrans-demo;/aws/;/tmp/"
 
 declare -A TF_INITIALISED=()
 tf_out() { # tf_out <stack> <output> -> raw value (strings) or JSON; the stack is initialised once per script run

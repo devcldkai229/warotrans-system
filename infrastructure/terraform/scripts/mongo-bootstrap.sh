@@ -27,6 +27,11 @@ for pw in \"\$A\" \"\$OLD\"; do
     AUTH=\"-u admin -p \$pw --authenticationDatabase admin\"; break
   fi
 done
+if [ -z \"\$AUTH\" ]; then
+  # Localhost exception: no users yet; it allows exactly one thing, creating the first user.
+  A=\"\$A\" \$M --eval 'db.getSiblingDB(\"admin\").createUser({user: \"admin\", pwd: process.env.A, roles: [{role: \"root\", db: \"admin\"}]})' >/dev/null
+  AUTH=\"-u admin -p \$A --authenticationDatabase admin\"
+fi
 A=\"\$A\" P=\"\$P\" \$M \$AUTH --eval '
 const admin = db.getSiblingDB(\"admin\");
 const set = (u, p, roles) => admin.getUser(u) ? admin.updateUser(u, {pwd: p, roles}) : admin.createUser({user: u, pwd: p, roles});
