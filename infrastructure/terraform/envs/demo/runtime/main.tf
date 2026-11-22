@@ -230,6 +230,7 @@ module "migrate" {
     ConnectionStrings__MongoDB    = format(local.ref["connection-strings"], "mongo")
     Mongo__ConnectionString       = format(local.ref["connection-strings"], "mongo")
     Authentication__Jwt__Key      = format(local.ref["app"], "jwt_key")
+    EvidenceBridge__ServiceToken  = format(local.ref["app"], "evidence_service_token") # validated at start
   }
   execution_role_arn = local.p.iam.execution_role_arn
   task_role_arn      = local.p.iam.task_role_arns.system

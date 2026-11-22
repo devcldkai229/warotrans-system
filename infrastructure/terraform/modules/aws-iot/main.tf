@@ -90,6 +90,8 @@ resource "aws_iot_policy" "host" {
         Resource = [
           "${local.arn}:client/${var.host_client_id}",
           "${local.arn}:client/${var.host_client_id}-cmd-pub",
+          # an operator's probe with the Host certificate, without taking the Host's own sessions over
+          "${local.arn}:client/${var.host_client_id}-diag",
         ]
       },
       {

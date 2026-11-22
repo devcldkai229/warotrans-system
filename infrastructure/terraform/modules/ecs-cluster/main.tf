@@ -79,7 +79,7 @@ resource "aws_launch_template" "pool" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = { Name = "${var.name}-${each.key}", Pool = each.key }
+    tags          = { Name = "${var.name}-${each.key}", Pool = each.key, Project = "WaroTrans", Environment = "demo" }
   }
 }
 

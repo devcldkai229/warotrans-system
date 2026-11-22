@@ -5,6 +5,8 @@
 #   scripts/lab.sh status     what is running / billed per hour right now
 #   scripts/lab.sh migrate    one-off migration task (Host --migrate), waits for its exit code
 #   scripts/lab.sh redeploy   restart the three services (new secrets, new task definition)
+#   scripts/lab.sh deploy     the release in SSM (scripts/publish-images.sh --release): new task definitions, services
+#                             moved onto them (the laptop twin of deploy-demo.yml, without migrations)
 #   scripts/lab.sh evidence-settings   copy envs/dev's evidence_settings output to SSM /warotrans-demo/evidence-settings
 # The runtime stack reads the release images and the Evidence settings from SSM (no local files).
 source "$(dirname "$0")/demo-lib.sh"
@@ -92,6 +94,17 @@ migrate() {
   [[ "$code" == "0" ]]
 }
 
+deploy() {
+  init "$RUNTIME"
+  terraform -chdir="$RUNTIME" apply -input=false -auto-approve -var "state_bucket=$STATE_BUCKET" >/dev/null
+  for s in "${SERVICES[@]}"; do
+    # The service ignores task definition changes in Terraform: move it onto the newest revision explicitly.
+    aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$s" --task-definition "$s"       --desired-count 1 --query 'service.taskDefinition' --output text
+  done
+  aws ecs wait services-stable --region "$REGION" --cluster "$CLUSTER" --services "${SERVICES[@]}"
+  status
+}
+
 evidence_settings() {
   local v
   v="$(terraform -chdir="$DEV_ENV_DIR" output -json evidence_settings)"
@@ -114,6 +127,7 @@ case "${1:-status}" in
   status) init "$PERSISTENT"; status ;;
   migrate) migrate ;;
   redeploy) redeploy ;;
+  deploy) deploy ;;
   evidence-settings) evidence_settings ;;
-  *) echo "usage: $0 start | stop --yes | status | migrate | redeploy | evidence-settings"; exit 2 ;;
+  *) echo "usage: $0 start | stop --yes | status | migrate | redeploy | deploy | evidence-settings"; exit 2 ;;
 esac

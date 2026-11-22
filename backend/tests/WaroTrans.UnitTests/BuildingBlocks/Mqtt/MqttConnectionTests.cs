@@ -89,6 +89,18 @@ public class MqttConnectionTests
         Assert.False(MqttConnection.ValidateAgainst(ca, null, SslPolicyErrors.RemoteCertificateNotAvailable));
     }
 
+    [Fact]
+    public void Uplink_subscriptions_fit_aws_iot_core_s_eight_filters_per_subscribe_and_keep_their_qos()
+    {
+        var batches = MqttSubscriberHostedService.SubscriptionBatches("warotrans/v1");
+
+        Assert.All(batches, b => Assert.InRange(b.Count, 1, MqttSubscriberHostedService.MaxFiltersPerSubscribe));
+        var all = batches.SelectMany(b => b).ToDictionary(x => x.Filter, x => x.Qos);
+        Assert.Equal(9, all.Count);
+        Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce, all["warotrans/v1/robots/+/command_result"]);
+        Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce, all["warotrans/v1/robots/+/heartbeat"]);
+    }
+
     private static (string CertPem, string KeyPem, X509Certificate2 Certificate) SelfSigned(string subject)
     {
         using var key = RSA.Create(2048);
