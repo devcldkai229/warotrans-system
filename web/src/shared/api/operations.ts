@@ -42,11 +42,17 @@ export interface Issue {
 export interface IssueListResponse {
   total: number
   items: Issue[]
+  /** Issues per type under every other filter, for the type tabs (every type present, 0 when none). */
+  countsByType?: Partial<Record<IssueType, number>>
 }
 
 export interface IssueQuery {
   status?: IssueStatus | ''
+  issueType?: IssueType | ''
   severity?: IssueSeverity | ''
+  /** Reported in `[reportedFrom, reportedTo)`. */
+  reportedFrom?: Date
+  reportedTo?: Date
   mine?: boolean
   /** Only the issues about this robot. */
   robotId?: string
@@ -57,7 +63,10 @@ export interface IssueQuery {
 export function listIssues(params: IssueQuery = {}) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
+  if (params.issueType) query.set('issueType', params.issueType)
   if (params.severity) query.set('severity', params.severity)
+  if (params.reportedFrom) query.set('reportedFrom', params.reportedFrom.toISOString())
+  if (params.reportedTo) query.set('reportedTo', params.reportedTo.toISOString())
   if (params.mine) query.set('mine', 'true')
   if (params.robotId) query.set('robotId', params.robotId)
   query.set('take', String(params.take ?? 50))

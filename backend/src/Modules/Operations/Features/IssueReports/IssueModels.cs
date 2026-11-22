@@ -1,4 +1,5 @@
 using FluentValidation;
+using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Operations.Documents;
 using WaroTrans.Operations.Enums;
 
@@ -88,7 +89,27 @@ public sealed record IssueDto(
         i.Hazard);
 }
 
-public sealed record ListIssuesResponse(long Total, IReadOnlyList<IssueDto> Items);
+/// <param name="CountsByType">Issues per type under every other filter (status, severity, reported range), for the type tabs.
+/// Every type is present, with 0 when it has none.</param>
+public sealed record ListIssuesResponse(long Total, IReadOnlyList<IssueDto> Items, IReadOnlyDictionary<string, long>? CountsByType = null);
+
+/// <summary>Rules of the issue list filters that do not need the database.</summary>
+public static class IssueListFilters
+{
+    /// <summary>The reported range is [from, to): <paramref name="to"/> itself is not included.</summary>
+    public static void EnsureReportedRange(DateTimeOffset? from, DateTimeOffset? to)
+    {
+        if (from is { } start && to is { } end && end <= start)
+            throw new DomainValidationException("The end of the reported range must be after its start.", "issue_reported_range_invalid");
+    }
+
+    /// <summary>One entry per <see cref="IssueType"/>, in enum order, 0 for a type without issues.</summary>
+    public static IReadOnlyDictionary<string, long> CountsByType(IEnumerable<KeyValuePair<IssueType, long>> counts)
+    {
+        var found = counts.GroupBy(c => c.Key).ToDictionary(g => g.Key, g => g.Sum(c => c.Value));
+        return Enum.GetValues<IssueType>().ToDictionary(type => type.ToString(), type => found.GetValueOrDefault(type));
+    }
+}
 
 /// <summary>Allowed status changes. RESOLVED can be reopened; CLOSED is final.</summary>
 public static class IssueLifecycle

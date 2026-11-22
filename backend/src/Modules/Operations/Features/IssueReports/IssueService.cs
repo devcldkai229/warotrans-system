@@ -20,7 +20,9 @@ public sealed record ListIssuesQuery(
     Guid? RobotId,
     bool Mine,
     int Skip,
-    int Take);
+    int Take,
+    DateTimeOffset? ReportedFrom = null,
+    DateTimeOffset? ReportedTo = null);
 
 /// <summary>
 /// IssueReport lifecycle (OPS-01). Who sees what:
@@ -221,17 +223,28 @@ public sealed partial class IssueService(
 
     public async Task<ListIssuesResponse> ListAsync(ListIssuesQuery query, CancellationToken cancellationToken)
     {
+        IssueListFilters.EnsureReportedRange(query.ReportedFrom, query.ReportedTo);
         var f = Builders<IssueReport>.Filter;
         var filters = new List<FilterDefinition<IssueReport>> { await VisibleFilterAsync(cancellationToken) };
 
         if (TryParse<IssueStatus>(query.Status) is { } status) filters.Add(f.Eq(i => i.Status, status));
-        if (TryParse<IssueType>(query.IssueType) is { } type) filters.Add(f.Eq(i => i.IssueType, type));
         if (TryParse<IssueSeverity>(query.Severity) is { } severity) filters.Add(f.Eq(i => i.Severity, severity));
         if (query.AssigneeId is { } assignee) filters.Add(f.Eq(i => i.AssigneeId, assignee));
         if (query.JobId is { } jobId) filters.Add(f.Eq(i => i.JobId, jobId));
         if (query.RobotId is { } robotId) filters.Add(f.Eq(i => i.RobotId, robotId));
         if (query.Mine && currentUser.AccountId is { } me) filters.Add(f.Or(f.Eq(i => i.ReportedBy, me), f.Eq(i => i.AssigneeId, me)));
+        if (query.ReportedFrom is { } from) filters.Add(f.Gte(i => i.ReportedAt, from));
+        if (query.ReportedTo is { } to) filters.Add(f.Lt(i => i.ReportedAt, to));
 
+        // The type tabs count under every filter but the type itself.
+        var allTypes = f.And(filters);
+        var perType = await mongo.IssueReports.Aggregate()
+            .Match(allTypes)
+            .Group(i => i.IssueType, g => new { Type = g.Key, Count = g.LongCount() })
+            .ToListAsync(cancellationToken);
+        var countsByType = IssueListFilters.CountsByType(perType.Select(c => KeyValuePair.Create(c.Type, c.Count)));
+
+        if (TryParse<IssueType>(query.IssueType) is { } type) filters.Add(f.Eq(i => i.IssueType, type));
         var filter = f.And(filters);
         var total = await mongo.IssueReports.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
         var items = await mongo.IssueReports.Find(filter)
@@ -240,7 +253,7 @@ public sealed partial class IssueService(
             .Limit(Math.Clamp(query.Take, 1, MaxTake))
             .Project<IssueReport>(WithoutPhotoBytes)
             .ToListAsync(cancellationToken);
-        return new ListIssuesResponse(total, items.Select(Project).ToList());
+        return new ListIssuesResponse(total, items.Select(Project).ToList(), countsByType);
     }
 
     public async Task<IssueDto> GetAsync(Guid id, CancellationToken cancellationToken) =>

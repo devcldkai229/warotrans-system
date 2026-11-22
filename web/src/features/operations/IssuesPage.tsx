@@ -13,11 +13,23 @@ import {
   type Issue,
   type IssueSeverity,
   type IssueStatus,
+  type IssueType,
 } from '@/shared/api/operations'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { cx } from '@/shared/lib/cx'
-import { formatIsoDateTime } from '@/shared/lib/format'
+import { rangeWindow, presetRange } from '@/shared/lib/dateRange'
+import { appToday, formatIsoDateTime } from '@/shared/lib/format'
 import { pageCountOf } from '@/shared/lib/pagination'
+import { DateRangePicker } from '@/shared/ui/DateRangePicker'
+import {
+  ISSUE_SEVERITIES,
+  ISSUE_STATUSES,
+  ISSUE_TYPES,
+  clearIssueFilters,
+  hasIssueFilters,
+  readIssueFilters,
+  writeReportedRange,
+} from './issueFilters'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { Pagination } from '@/shared/ui/Pagination'
@@ -37,7 +49,15 @@ const STATUS_TONE: Record<IssueStatus, Tone> = {
 }
 
 const SEVERITY_TONE: Record<IssueSeverity, Tone> = { LOW: 'grey', MEDIUM: 'blue', HIGH: 'amber', CRITICAL: 'red' }
-const STATUSES: IssueStatus[] = ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
+const TYPE_LABEL: Record<IssueType, string> = {
+  CONTAINER: t('Container'),
+  ROBOT: t('Robot'),
+  JOB: t('Job'),
+  TRANSPORT: t('Transport'),
+  STORAGE: t('Storage'),
+  OTHER: t('Other'),
+}
+const SEVERITY_LABEL: Record<IssueSeverity, string> = { LOW: t('Low'), MEDIUM: t('Medium'), HIGH: t('High'), CRITICAL: t('Critical') }
 const PAGE_SIZE = 50
 
 function describe(error: unknown): string {
@@ -54,7 +74,9 @@ export function IssuesPage() {
   const { issueId } = useParams()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const status = (STATUSES as string[]).includes(params.get('status') ?? '') ? (params.get('status') as IssueStatus) : ''
+  const today = appToday()
+  const filters = readIssueFilters(params, today)
+  const { type, severity, status, reported } = filters
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1)
 
   // A new filter starts again from page 1.
@@ -77,14 +99,29 @@ export function IssuesPage() {
   const open = (id?: string) => navigate({ pathname: paths.issues(id), search: params.toString() })
 
   const list = useQuery({
-    queryKey: ['issues', status, page],
-    queryFn: () => listIssues({ status, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    queryKey: ['issues', type, severity, status, reported?.range.from ?? '', reported?.range.to ?? '', page],
+    // The window is built when the request is sent, so a range that reaches today counts up to "now" on every refresh.
+    queryFn: () => {
+      const window = reported ? rangeWindow(reported.range) : null
+      return listIssues({
+        issueType: type,
+        severity,
+        status,
+        reportedFrom: window?.from,
+        reportedTo: window?.to,
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+      })
+    },
     // Keep the old page on screen while the next one loads.
     placeholderData: keepPreviousData,
     refetchInterval: 30_000,
   })
   const items = list.data?.items ?? []
   const total = list.data?.total ?? 0
+  const counts = list.data?.countsByType
+  const allCount = counts ? ISSUE_TYPES.reduce((sum, key) => sum + (counts[key] ?? 0), 0) : null
+  const chooseRange = (next: URLSearchParams) => setParams(next, { replace: true })
   const pageCount = pageCountOf(total, PAGE_SIZE)
   const firstShown = (page - 1) * PAGE_SIZE + 1
 
@@ -111,6 +148,63 @@ export function IssuesPage() {
       >
         <section className="min-w-0">
           <SectionHead title={t('Issues')}>
+            <DateRangePicker
+              preset={reported?.preset ?? null}
+              range={reported?.range ?? presetRange('7d', today)}
+              today={today}
+              onChange={(choice) => chooseRange(writeReportedRange(params, choice))}
+              anyTime={{
+                label: t('Reported: any time'),
+                selected: reported === null,
+                onSelect: () => chooseRange(writeReportedRange(params, null)),
+              }}
+            />
+          </SectionHead>
+
+          {/* Type tabs: each count is under the other filters, so a tab says what it would show. */}
+          <div className="-mx-1 mb-4 overflow-x-auto">
+            <div className="flex min-w-max items-center gap-1 border-b border-outline-variant px-1" role="tablist" aria-label={t('Issue type')}>
+              {([['', t('All'), allCount], ...ISSUE_TYPES.map((key) => [key, TYPE_LABEL[key], counts?.[key] ?? null])] as [
+                IssueType | '',
+                string,
+                number | null,
+              ][]).map(([key, label, count]) => (
+                <button
+                  key={key || 'all'}
+                  type="button"
+                  role="tab"
+                  aria-selected={type === key}
+                  onClick={() => setParam('type', key)}
+                  className={cx(
+                    '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-200',
+                    type === key ? 'border-primary font-semibold text-ink' : 'border-transparent text-ink-2 hover:text-ink',
+                  )}
+                >
+                  {label}
+                  {count !== null ? (
+                    <span className={cx('rounded-full px-1.5 text-[11px] tabular-nums', count > 0 ? 'bg-container-high' : 'text-muted')}>
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <select
+              className={controlClass('pill')}
+              aria-label={t('Filter by severity')}
+              value={severity}
+              onChange={(event) => setParam('severity', event.target.value)}
+            >
+              <option value="">{t('All severities')}</option>
+              {ISSUE_SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {SEVERITY_LABEL[s]}
+                </option>
+              ))}
+            </select>
             <select
               className={controlClass('pill')}
               aria-label={t('Filter by status')}
@@ -118,13 +212,18 @@ export function IssuesPage() {
               onChange={(event) => setParam('status', event.target.value)}
             >
               <option value="">{t('All statuses')}</option>
-              {STATUSES.map((s) => (
+              {ISSUE_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </select>
-          </SectionHead>
+            {hasIssueFilters(filters) ? (
+              <Button size="sm" variant="ghost" onClick={() => chooseRange(clearIssueFilters(params))}>
+                {t('Clear filters')}
+              </Button>
+            ) : null}
+          </div>
           <div className={cx('overflow-x-auto transition-opacity duration-200', list.isPlaceholderData && 'opacity-60')}>
             <Table className="min-w-[760px]">
               <thead>
@@ -149,9 +248,9 @@ export function IssuesPage() {
                         {issue.code}
                       </button>
                     </Td>
-                    <Td>{issue.issueType}</Td>
+                    <Td>{TYPE_LABEL[issue.issueType] ?? issue.issueType}</Td>
                     <Td>
-                      <StatusBadge tone={SEVERITY_TONE[issue.severity]}>{issue.severity}</StatusBadge>
+                      <StatusBadge tone={SEVERITY_TONE[issue.severity]}>{SEVERITY_LABEL[issue.severity] ?? issue.severity}</StatusBadge>
                     </Td>
                     <Td className="max-w-[360px] truncate">{issue.description}</Td>
                     <Td tone="faint" className="tabular-nums">
@@ -164,7 +263,9 @@ export function IssuesPage() {
                     </Td>
                   </Tr>
                 ))}
-                {list.data && items.length === 0 ? <EmptyRow colSpan={6}>{t('No issues.')}</EmptyRow> : null}
+                {list.data && items.length === 0 ? (
+                  <EmptyRow colSpan={6}>{hasIssueFilters(filters) || type ? t('No issues match these filters.') : t('No issues.')}</EmptyRow>
+                ) : null}
                 {list.isLoading ? <EmptyRow colSpan={6}>{t('Loading issues…')}</EmptyRow> : null}
                 {list.isError ? <EmptyRow colSpan={6}>{t('Could not load issues.')}</EmptyRow> : null}
               </tbody>
