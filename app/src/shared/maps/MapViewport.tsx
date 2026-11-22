@@ -66,6 +66,7 @@ import { hitTestInfrastructure, type MapInspectTarget } from './mapHitTest';
 import {
   endpointJobRole,
   endpointPriority,
+  selectKeyAreaWatermarks,
   selectVisibleEndpointLabels,
   zoneShortBadge,
   type MapJobContext,
@@ -293,16 +294,16 @@ export function MapViewport({
       fullBleed
         ? compact
           ? {
-              top: contentInsets.top + 42,
-              right: 20,
-              bottom: contentInsets.bottom + 36,
-              left: 20,
+              top: contentInsets.top + 46,
+              right: 32,
+              bottom: contentInsets.bottom + 40,
+              left: 32,
             }
           : {
-              top: contentInsets.top + 54,
-              right: 22,
-              bottom: contentInsets.bottom + 48,
-              left: 22,
+              top: contentInsets.top + 56,
+              right: 34,
+              bottom: contentInsets.bottom + 52,
+              left: 34,
             }
         : undefined,
     [fullBleed, compact, contentInsets.top, contentInsets.bottom],
@@ -542,6 +543,7 @@ function MapCanvas({
             jobContext,
             labelsDetailed,
             labelObstacles,
+            labelsDetailed || Boolean(onPickEndpoint) ? 3 : 1,
           )
         : [],
     [
@@ -553,6 +555,27 @@ function MapCanvas({
       jobContext,
       labelsDetailed,
       labelObstacles,
+      onPickEndpoint,
+    ],
+  );
+
+  const areaWatermarks = useMemo(
+    () =>
+      layers.labels && layers.stations && !labelsDetailed && !onPickEndpoint
+        ? selectKeyAreaWatermarks(
+            visibleEndpoints,
+            labelObstacles,
+            new Set(visibleEndpointLabels.map(l => l.endpoint.id)),
+          )
+        : [],
+    [
+      layers.labels,
+      layers.stations,
+      labelsDetailed,
+      onPickEndpoint,
+      visibleEndpoints,
+      labelObstacles,
+      visibleEndpointLabels,
     ],
   );
 
@@ -590,7 +613,7 @@ function MapCanvas({
 
   useEffect(() => {
     setLabelsDetailed(value =>
-      value ? camera.settledZoom >= 1.5 : camera.settledZoom >= 1.65,
+      value ? camera.settledZoom >= 2.0 : camera.settledZoom >= 2.2,
     );
   }, [camera.settledZoom]);
 
@@ -939,6 +962,35 @@ function MapCanvas({
                 </MapAnchor>
               );
             })}
+
+            {areaWatermarks.map(area => (
+              <MapAnchor
+                key={`watermark-${area.id}`}
+                point={{ x: area.x, y: area.y }}
+                camera={camera}
+                width={108}
+                height={62}
+                passThrough
+              >
+                <View
+                  style={
+                    area.placement === 'above'
+                      ? styles.areaWatermarkAbove
+                      : styles.areaWatermarkBelow
+                  }
+                >
+                  <Text
+                    variant="caption"
+                    fontWeight="600"
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.15}
+                    style={styles.areaWatermarkText}
+                  >
+                    {area.label}
+                  </Text>
+                </View>
+              </MapAnchor>
+            ))}
 
             {!onPickEndpoint ? (
               <RobotLayer
@@ -1901,6 +1953,31 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       fontSize: 9.5,
       lineHeight: 12.5,
       color: colors.textPrimary,
+      textAlign: 'center',
+    },
+    areaWatermarkBelow: {
+      position: 'absolute',
+      top: 42,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+    },
+    areaWatermarkAbove: {
+      position: 'absolute',
+      bottom: 42,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+    },
+    areaWatermarkText: {
+      fontSize: 10,
+      lineHeight: 13,
+      fontWeight: '600',
+      letterSpacing: 0.35,
+      color: isDark ? 'rgba(226, 232, 240, 0.78)' : 'rgba(30, 41, 59, 0.74)',
+      textShadowColor: isDark ? 'rgba(5, 7, 10, 0.90)' : 'rgba(255, 255, 255, 0.92)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
       textAlign: 'center',
     },
 

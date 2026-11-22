@@ -371,29 +371,33 @@ test('endpointVisualKind classifies all 8 OTTO functional station types includin
   assert.equal(endpointVisualKind('WAYPOINT', 'EP-WAIT', 'Wait'), 'WAIT');
   assert.equal(endpointVisualKind('WAYPOINT', 'WP-09', 'Aisle Point'), 'WAYPOINT');
 
-  assert.equal(visualKindColor('CHARGER', 'CHARGER', false), '#059669');
-  assert.equal(visualKindColor('SHELF', 'WAYPOINT', true), '#38bdf8');
-  assert.equal(visualKindColor('PARK', 'WAYPOINT', false), '#334155');
+  assert.equal(visualKindColor('CHARGER', 'CHARGER', false), '#15803d');
+  assert.equal(visualKindColor('CHARGER', 'CHARGER', true), '#4ade80');
+  assert.equal(visualKindColor('SHELF', 'WAYPOINT', true), '#d8dee9');
+  assert.equal(visualKindColor('SHELF', 'WAYPOINT', false), '#1f2937');
+  assert.equal(visualKindColor('PARK', 'WAYPOINT', false), '#1f2937');
 });
 
-test('laneGlyphs renders dense OTTO arrows along compact MAP-ONE-V013 corridors', () => {
+test('laneGlyphs renders calm OTTO directional arrows along compact MAP-ONE-V013 corridors', () => {
   const load = createLoader();
   const { laneGlyphs, LANE_ARROW_PATH } = load('src/shared/maps/laneGlyphs.ts');
 
   assert.ok(LANE_ARROW_PATH.includes('0.16'));
 
-  // Simulate MAP-ONE-V013 scale (~80 px/m) for shortest (0.70 m) and typical (1.18 m) lanes of 0.65 m width
-  const widthPx = 0.65 * 80;
-  const shortLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 0.70 * 80 }], widthPx, 'ONE_WAY');
-  const midLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 1.18 * 80 }], widthPx, 'ONE_WAY');
-  const twoWayLane = laneGlyphs([{ x: 0, y: 0 }, { x: 1.18 * 80, y: 0 }], widthPx, 'BIDIRECTIONAL');
+  // Simulate MAP-ONE-V013 scale (~75 px/m) for stub (0.70 m), medium (1.18 m), and long (1.78 m) lanes
+  const widthPx = 0.65 * 75;
+  const shortLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 0.70 * 75 }], widthPx, 'ONE_WAY');
+  const midLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 1.18 * 75 }], widthPx, 'ONE_WAY');
+  const longLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 1.78 * 75 }], widthPx, 'ONE_WAY');
+  const twoWayLane = laneGlyphs([{ x: 0, y: 0 }, { x: 1.18 * 75, y: 0 }], widthPx, 'BIDIRECTIONAL');
 
-  assert.ok(shortLane.chevrons.length >= 2, `Expected >=2 chevrons on 0.70m lane, got ${shortLane.chevrons.length}`);
-  assert.ok(midLane.chevrons.length >= 3, `Expected >=3 chevrons on 1.18m lane, got ${midLane.chevrons.length}`);
-  assert.ok(twoWayLane.chevrons.length >= 4);
+  assert.equal(shortLane.chevrons.length, 1);
+  assert.equal(midLane.chevrons.length, 2);
+  assert.equal(longLane.chevrons.length, 3);
+  assert.equal(twoWayLane.chevrons.length, 4);
 });
 
-test('robotFootprintPx preserves real meter scale and computeStationArchitecture places all 4 recessed shelf bays on MAP-ONE-V013', () => {
+test('robotFootprintPx preserves real meter scale and computeStationArchitecture places 0.35m x 0.70m recessed shelf bays on MAP-ONE-V013', () => {
   const models = require('../src/shared/maps/rosMapModels.json');
   const load = createLoader({ './rosMapModels.json': models });
   const { createMapFrame, worldToBase } = load('src/shared/maps/mapTransform.ts');
@@ -427,7 +431,7 @@ test('robotFootprintPx preserves real meter scale and computeStationArchitecture
     })),
   };
 
-  const compactFrame = createMapFrame(map, 390, 680, { top: 54, right: 22, bottom: 48, left: 22 });
+  const compactFrame = createMapFrame(map, 390, 680, { top: 56, right: 34, bottom: 52, left: 34 });
   assert.ok(compactFrame);
   const compactFootprint = robotFootprintPx(map, compactFrame);
   assert.ok(Math.abs(compactFootprint.length / compactFootprint.width - 0.32 / 0.26) < 1e-6);
@@ -455,15 +459,58 @@ test('robotFootprintPx preserves real meter scale and computeStationArchitecture
   assert.equal(wallByName['Shelf A 1'], 'top');
   assert.equal(wallByName['Shelf B 01 02'], 'top');
   assert.equal(wallByName['Shelf C 1'], 'bottom');
+
+  for (const bay of arch.shelfBays) {
+    const isHoriz = bay.wall === 'top' || bay.wall === 'bottom';
+    const lengthPx = isHoriz ? bay.width : bay.height;
+    const depthPx = isHoriz ? bay.height : bay.width;
+    assert.ok(
+      Math.abs(lengthPx / depthPx - 0.70 / 0.35) < 1e-3,
+      `Expected 2:1 ratio (0.70m x 0.35m) for ${bay.name}, got ${lengthPx.toFixed(2)}/${depthPx.toFixed(2)}`,
+    );
+  }
 });
 
-test('dark-mode OTTO map style helpers provide high-contrast colors without altering fixed palette tokens', () => {
+test('selectVisibleEndpointLabels with maxPriority=1 hides routine labels while preserving job/selected and key area watermarks', () => {
+  const load = createLoader();
+  const { selectVisibleEndpointLabels, selectKeyAreaWatermarks } = load('src/shared/maps/mapLabels.ts');
+
+  const items = [
+    { x: 60, y: 80, endpoint: { id: 'ep-shelf', mapVersionId: 'map-1', code: 'EP-SHELF-A-1', name: 'Shelf A 1', endpointType: 'WAYPOINT', x: 1, y: 1, yaw: 0, isEnabled: true } },
+    { x: 160, y: 80, endpoint: { id: 'ep-park', mapVersionId: 'map-1', code: 'EP-PARKING-A', name: 'Parking A', endpointType: 'PARK', x: 2, y: 1, yaw: 0, isEnabled: true } },
+    { x: 260, y: 80, endpoint: { id: 'ep-in', mapVersionId: 'map-1', code: 'EP-INBOUND', name: 'Inbound', endpointType: 'WAYPOINT', x: 3, y: 1, yaw: 0, isEnabled: true } },
+    { x: 260, y: 220, endpoint: { id: 'ep-out', mapVersionId: 'map-1', code: 'EP-OUTBOUND', name: 'Outbound', endpointType: 'WAYPOINT', x: 3, y: 3, yaw: 0, isEnabled: true } },
+  ];
+
+  const labels = selectVisibleEndpointLabels(
+    items,
+    1,
+    'ep-park',
+    { pickupCode: 'EP-SHELF-A-1' },
+    false,
+    [],
+    1,
+  );
+  assert.deepEqual(
+    [...labels.map(l => l.endpoint.id)].sort(),
+    ['ep-park', 'ep-shelf'],
+  );
+
+  const watermarks = selectKeyAreaWatermarks(items, [], new Set(labels.map(l => l.endpoint.id)));
+  assert.deepEqual(
+    [...watermarks.map(w => w.label)].sort(),
+    ['Inbound', 'Outbound'],
+  );
+});
+
+test('dark-mode OTTO map style helpers provide calm desaturated steel lanes and zones without altering fixed palette tokens', () => {
   const load = createLoader();
   const {
     LANE_BLUE,
     ZONE_COLOR,
     laneBandColor,
     laneEdgeColor,
+    laneArrowColor,
     laneBandOpacity,
     zoneStrokeColor,
   } = load('src/shared/maps/mapStyle.ts');
@@ -471,17 +518,19 @@ test('dark-mode OTTO map style helpers provide high-contrast colors without alte
   assert.equal(LANE_BLUE, '#3279f9');
   assert.equal(ZONE_COLOR.JUNCTION, '#5c6bc0');
 
-  assert.equal(laneBandColor(false), LANE_BLUE);
-  assert.equal(laneBandColor(true), '#1a74e2');
-  assert.equal(laneEdgeColor(false), LANE_BLUE);
-  assert.equal(laneEdgeColor(true), '#38bdf8');
-  assert.equal(laneBandOpacity(false), 0.13);
-  assert.equal(laneBandOpacity(true), 0.28);
+  assert.equal(laneBandColor(false), '#4b6f96');
+  assert.equal(laneBandColor(true), '#255885');
+  assert.equal(laneEdgeColor(false), '#5b7fa6');
+  assert.equal(laneEdgeColor(true), '#527da3');
+  assert.equal(laneArrowColor(false), '#3b5878');
+  assert.equal(laneArrowColor(true), '#cbd5e1');
+  assert.equal(laneBandOpacity(false), 0.12);
+  assert.equal(laneBandOpacity(true), 0.30);
 
   assert.equal(zoneStrokeColor('KEEP_OUT', false), ZONE_COLOR.KEEP_OUT);
-  assert.equal(zoneStrokeColor('KEEP_OUT', true), '#f87171');
-  assert.equal(zoneStrokeColor('SPEED', true), '#fbbf24');
-  assert.equal(zoneStrokeColor('NO_STOP', true), '#38bdf8');
-  assert.equal(zoneStrokeColor('SINGLE_OCCUPANCY', true), '#c084fc');
-  assert.equal(zoneStrokeColor('JUNCTION', true), '#818cf8');
+  assert.equal(zoneStrokeColor('KEEP_OUT', true), '#e06c75');
+  assert.equal(zoneStrokeColor('SPEED', true), '#d4b14b');
+  assert.equal(zoneStrokeColor('NO_STOP', true), '#6ba3be');
+  assert.equal(zoneStrokeColor('SINGLE_OCCUPANCY', true), '#a78bfa');
+  assert.equal(zoneStrokeColor('JUNCTION', true), '#8b95b5');
 });

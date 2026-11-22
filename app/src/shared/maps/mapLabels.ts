@@ -1,6 +1,6 @@
 import type { EndpointDto, MapVersionDetailDto, ZoneDto } from '../api/navigationApi';
 import { polygonBounds, polygonCentroid } from './mapHitTest';
-import { endpointKind } from './mapStyle';
+import { endpointKind, endpointVisualKind } from './mapStyle';
 import { worldToBase, type MapFrame, type MapPoint } from './mapTransform';
 
 export interface MapJobContext {
@@ -92,6 +92,7 @@ export function selectVisibleEndpointLabels(
   jobContext?: MapJobContext,
   detailed = false,
   obstacles: readonly MapPoint[] = [],
+  maxPriority = 3,
 ): LabeledEndpoint[] {
   const safeZoom = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
   const gapX = (detailed ? 48 : 66) / safeZoom;
@@ -112,6 +113,7 @@ export function selectVisibleEndpointLabels(
         displayText: compactEndpointLabel(item.endpoint, showFull),
       };
     })
+    .filter(item => item.priority <= maxPriority)
     .sort((a, b) => a.priority - b.priority || a.endpoint.code.localeCompare(b.endpoint.code));
 
   const accepted: LabeledEndpoint[] = [];
@@ -159,6 +161,68 @@ export function selectVisibleEndpointLabels(
   }
 
   return accepted;
+}
+
+export interface KeyAreaWatermark {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+  placement: LabelPlacement;
+}
+
+/**
+ * Selects bare macro flow watermarks (`Inbound` / `Outbound`) for overview zoom without adding
+ * pill clutter over operational stations.
+ */
+export function selectKeyAreaWatermarks(
+  items: readonly { x: number; y: number; endpoint: EndpointDto }[],
+  obstacles: readonly MapPoint[] = [],
+  excludeIds: ReadonlySet<string> = new Set(),
+): KeyAreaWatermark[] {
+  const seenLabels = new Set<string>();
+  const out: KeyAreaWatermark[] = [];
+
+  for (const item of items) {
+    if (excludeIds.has(item.endpoint.id)) continue;
+    const kind = endpointVisualKind(
+      item.endpoint.endpointType,
+      item.endpoint.code,
+      item.endpoint.name,
+    );
+    if (kind !== 'INBOUND' && kind !== 'OUTBOUND') continue;
+
+    const label = kind === 'INBOUND' ? 'Inbound' : 'Outbound';
+    if (seenLabels.has(label)) continue;
+
+    const selfObstacles = obstacles.filter(
+      obs => Math.hypot(obs.x - item.x, obs.y - item.y) > 0.5,
+    );
+    const isBlocked = (pt: MapPoint) =>
+      selfObstacles.some(obs => Math.abs(pt.x - obs.x) < 26 && Math.abs(pt.y - obs.y) < 16);
+
+    const belowPt = { x: item.x, y: item.y + 18 };
+    const abovePt = { x: item.x, y: item.y - 18 };
+
+    let placement: LabelPlacement | null = null;
+    if (!isBlocked(belowPt)) {
+      placement = 'below';
+    } else if (!isBlocked(abovePt)) {
+      placement = 'above';
+    }
+    if (!placement) continue;
+
+    seenLabels.add(label);
+    out.push({
+      id: item.endpoint.id,
+      x: item.x,
+      y: item.y,
+      label,
+      placement,
+    });
+  }
+
+  return out;
 }
 
 export function zoneShortBadge(zone: ZoneDto): string {

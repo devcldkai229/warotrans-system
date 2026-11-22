@@ -117,7 +117,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                       fill={color}
                       fillOpacity={fillOpacity}
                       stroke={strokeColor}
-                      strokeOpacity={isSelected ? 0.96 : isDark ? 0.82 : 0.62}
+                      strokeOpacity={isSelected ? 0.94 : isDark ? 0.72 : 0.60}
                       strokeWidth={(isSelected ? 2 : isDark ? 1.25 : 1.1) * hair}
                       strokeDasharray={isKeepOut || isSelected ? undefined : `${4 * hair} ${3 * hair}`}
                       strokeLinejoin="round"
@@ -173,7 +173,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(side)}
                         fill="none"
                         stroke={edgeColor}
-                        strokeOpacity={isDark ? 0.52 : 0.34}
+                        strokeOpacity={isDark ? 0.42 : 0.30}
                         strokeWidth={0.85 * hair}
                       />
                     ))}
@@ -182,7 +182,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(glyphs.divider)}
                         fill="none"
                         stroke={edgeColor}
-                        strokeOpacity={isDark ? 0.62 : 0.48}
+                        strokeOpacity={isDark ? 0.50 : 0.42}
                         strokeWidth={0.85 * hair}
                         strokeDasharray={`${4 * hair} ${3.5 * hair}`}
                       />
@@ -191,7 +191,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(stage)}
                         fill="none"
                         stroke={edgeColor}
-                        strokeOpacity={isDark ? 0.42 : 0.24}
+                        strokeOpacity={isDark ? 0.16 : 0.14}
                         strokeWidth={0.8 * hair}
                       />
                     )}
@@ -200,7 +200,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         key={index}
                         d={LANE_ARROW_PATH}
                         fill={arrowColor}
-                        fillOpacity={isDark ? 0.92 : 0.78}
+                        fillOpacity={isDark ? 0.58 : 0.54}
                         transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${arrowScale})`}
                       />
                     ))}

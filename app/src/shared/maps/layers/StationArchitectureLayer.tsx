@@ -39,8 +39,9 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
   if (dockBays.length === 0 && shelfBays.length === 0) return null;
 
   const strokeUnit = 1 / Math.sqrt(Math.max(1, zoom));
-  const rackColor = visualKindColor('SHELF', 'WAYPOINT', isDark);
-  const rackFill = isDark ? 'rgba(56, 189, 248, 0.14)' : 'rgba(2, 132, 199, 0.08)';
+  const rackColor = isDark ? '#a1aab8' : '#475569';
+  const rackFill = isDark ? 'rgba(255, 255, 255, 0.065)' : 'rgba(30, 41, 59, 0.055)';
+  const openingColor = isDark ? '#e2e8f0' : '#1e293b';
 
   return (
     <Svg
@@ -71,14 +72,14 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
               height={bay.length}
               rx={2 * strokeUnit}
               fill={color}
-              fillOpacity={isDark ? 0.06 : 0.04}
+              fillOpacity={isDark ? 0.045 : 0.03}
             />
             <Path
               d={bracketsPath}
               fill="none"
               stroke={color}
-              strokeOpacity={isDark ? 0.56 : 0.45}
-              strokeWidth={1.15 * strokeUnit}
+              strokeOpacity={isDark ? 0.46 : 0.38}
+              strokeWidth={1.1 * strokeUnit}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -88,8 +89,8 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
               x2={hw - arm * 0.65}
               y2={-hl}
               stroke={color}
-              strokeOpacity={isDark ? 0.72 : 0.58}
-              strokeWidth={1.35 * strokeUnit}
+              strokeOpacity={isDark ? 0.64 : 0.52}
+              strokeWidth={1.3 * strokeUnit}
               strokeLinecap="round"
             />
           </G>
@@ -133,7 +134,7 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
                 x2={bay.connector.x2}
                 y2={bay.connector.y2}
                 stroke={rackColor}
-                strokeOpacity={isDark ? 0.5 : 0.4}
+                strokeOpacity={isDark ? 0.46 : 0.36}
                 strokeWidth={strokeUnit}
                 strokeDasharray={`${2.4 * strokeUnit} ${2 * strokeUnit}`}
               />
@@ -146,7 +147,7 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
               rx={2 * strokeUnit}
               fill={rackFill}
               stroke={rackColor}
-              strokeOpacity={isDark ? 0.8 : 0.65}
+              strokeOpacity={isDark ? 0.72 : 0.62}
               strokeWidth={1.15 * strokeUnit}
             />
             <Line
@@ -155,7 +156,7 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
               x2={shelfBar.x2}
               y2={shelfBar.y2}
               stroke={rackColor}
-              strokeOpacity={isDark ? 0.36 : 0.28}
+              strokeOpacity={isDark ? 0.34 : 0.28}
               strokeWidth={0.85 * strokeUnit}
             />
             {dividers.map((div, idx) => (
@@ -166,7 +167,7 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
                 x2={div.x2}
                 y2={div.y2}
                 stroke={rackColor}
-                strokeOpacity={isDark ? 0.58 : 0.45}
+                strokeOpacity={isDark ? 0.52 : 0.44}
                 strokeWidth={0.9 * strokeUnit}
               />
             ))}
@@ -175,8 +176,8 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
               y1={bay.opening.y1}
               x2={bay.opening.x2}
               y2={bay.opening.y2}
-              stroke={rackColor}
-              strokeOpacity={isDark ? 0.9 : 0.78}
+              stroke={openingColor}
+              strokeOpacity={isDark ? 0.86 : 0.72}
               strokeWidth={1.4 * strokeUnit}
               strokeLinecap="round"
             />

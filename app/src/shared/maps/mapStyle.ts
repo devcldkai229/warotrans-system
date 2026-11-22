@@ -48,34 +48,34 @@ export const JOB_HIGHLIGHT_COLOR = {
 } as const;
 
 export function laneBandColor(isDark: boolean): string {
-  return isDark ? '#1a74e2' : LANE_BLUE;
+  return isDark ? '#255885' : '#4b6f96';
 }
 
 export function laneEdgeColor(isDark: boolean): string {
-  return isDark ? '#38bdf8' : LANE_BLUE;
+  return isDark ? '#527da3' : '#5b7fa6';
 }
 
 export function laneArrowColor(isDark: boolean): string {
-  return isDark ? '#e0f2fe' : '#1d4ed8';
+  return isDark ? '#cbd5e1' : '#3b5878';
 }
 
 export function laneBandOpacity(isDark: boolean): number {
-  return isDark ? 0.28 : 0.13;
+  return isDark ? 0.30 : 0.12;
 }
 
 export function zoneFillOpacity(type: string, isDark: boolean): number {
   switch (type) {
     case 'KEEP_OUT':
-      return isDark ? 0.22 : 0.16;
+      return isDark ? 0.20 : 0.16;
     case 'SINGLE_OCCUPANCY':
-      return isDark ? 0.22 : 0.14;
+      return isDark ? 0.19 : 0.14;
     case 'JUNCTION':
-      return isDark ? 0.18 : 0.11;
+      return isDark ? 0.15 : 0.11;
     case 'SPEED':
     case 'NO_STOP':
-      return isDark ? 0.21 : 0.12;
+      return isDark ? 0.18 : 0.12;
     default:
-      return isDark ? 0.2 : 0.12;
+      return isDark ? 0.17 : 0.12;
   }
 }
 
@@ -83,15 +83,15 @@ export function zoneStrokeColor(type: string, isDark: boolean): string {
   if (!isDark) return zoneColorOf(type);
   switch (type) {
     case 'KEEP_OUT':
-      return '#f87171';
+      return '#e06c75';
     case 'SPEED':
-      return '#fbbf24';
+      return '#d4b14b';
     case 'NO_STOP':
-      return '#38bdf8';
+      return '#6ba3be';
     case 'SINGLE_OCCUPANCY':
-      return '#c084fc';
+      return '#a78bfa';
     case 'JUNCTION':
-      return '#818cf8';
+      return '#8b95b5';
     default:
       return zoneColorOf(type);
   }
@@ -143,6 +143,8 @@ export const ROBOT_LENGTH_METERS = 0.32;
 export const ROBOT_WIDTH_METERS = 0.26;
 export const DOCK_BAY_LENGTH_METERS = 0.40;
 export const DOCK_BAY_WIDTH_METERS = 0.34;
+export const SHELF_BAY_DEPTH_METERS = 0.35;
+export const SHELF_BAY_LENGTH_METERS = 0.70;
 
 export type EndpointVisualKind =
   | 'WAYPOINT'
@@ -172,7 +174,7 @@ export function endpointVisualKind(
   return 'WAYPOINT';
 }
 
-/** Restrained neutral OTTO palette (silver/slate + technical cyan, emerald reserved for Charger). */
+/** Achromatic OTTO architectural neutrals (graphite/silver across stations, emerald reserved for Charger). */
 export function visualKindColor(
   visualKind: EndpointVisualKind,
   type: string,
@@ -180,14 +182,13 @@ export function visualKindColor(
 ): string {
   switch (visualKind) {
     case 'CHARGER':
-      return isDark ? '#34d399' : '#059669';
+      return isDark ? '#4ade80' : '#15803d';
     case 'SHELF':
     case 'INBOUND':
     case 'OUTBOUND':
-      return isDark ? '#38bdf8' : '#0284c7';
     case 'PARK':
     case 'INSPECTION':
-      return isDark ? '#cbd5e1' : '#334155';
+      return isDark ? '#d8dee9' : '#1f2937';
     case 'WAIT':
       return isDark ? '#94a3b8' : '#64748b';
     case 'WAYPOINT':

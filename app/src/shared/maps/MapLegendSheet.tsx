@@ -207,9 +207,9 @@ function MiniLaneSwatch({
       <Line x1={1} y1={18} x2={35} y2={18} stroke={edgeColor} strokeOpacity={isDark ? 0.56 : 0.45} strokeWidth={0.9} />
       {kind === 'one-way' ? (
         <>
-          <Line x1={3} y1={10} x2={33} y2={10} stroke={edgeColor} strokeOpacity={isDark ? 0.45 : 0.3} strokeWidth={0.9} />
-          <Path d="M5 9.4 L11.5 9.4 L11.5 7.4 L15.5 10 L11.5 12.6 L11.5 10.6 L5 10.6 Z" fill={arrow} />
-          <Path d="M20.5 9.4 L27 9.4 L27 7.4 L31 10 L27 12.6 L27 10.6 L20.5 10.6 Z" fill={arrow} />
+          <Line x1={3} y1={10} x2={33} y2={10} stroke={edgeColor} strokeOpacity={isDark ? 0.22 : 0.18} strokeWidth={0.9} />
+          <Path d="M5 9.4 L11.5 9.4 L11.5 7.4 L15.5 10 L11.5 12.6 L11.5 10.6 L5 10.6 Z" fill={arrow} fillOpacity={0.72} />
+          <Path d="M20.5 9.4 L27 9.4 L27 7.4 L31 10 L27 12.6 L27 10.6 L20.5 10.6 Z" fill={arrow} fillOpacity={0.72} />
         </>
       ) : (
         <>
@@ -219,12 +219,12 @@ function MiniLaneSwatch({
             x2={35}
             y2={10}
             stroke={edgeColor}
-            strokeOpacity={isDark ? 0.62 : 0.58}
+            strokeOpacity={isDark ? 0.56 : 0.48}
             strokeWidth={0.9}
             strokeDasharray="3 2.5"
           />
-          <Path d="M12 5 L18 5 L18 3.2 L23 6 L18 8.8 L18 7 L12 7 Z" fill={arrow} />
-          <Path d="M24 13 L18 13 L18 11.2 L13 14 L18 16.8 L18 15 L24 15 Z" fill={arrow} />
+          <Path d="M12 5 L18 5 L18 3.2 L23 6 L18 8.8 L18 7 L12 7 Z" fill={arrow} fillOpacity={0.72} />
+          <Path d="M24 13 L18 13 L18 11.2 L13 14 L18 16.8 L18 15 L24 15 Z" fill={arrow} fillOpacity={0.72} />
         </>
       )}
     </Svg>
@@ -238,7 +238,8 @@ function MiniArchitectureSwatch({
   kind: 'recessed-shelf' | 'dock-bay';
   isDark: boolean;
 }) {
-  const cyan = visualKindColor('SHELF', 'WAYPOINT', isDark);
+  const rackStroke = isDark ? '#a1aab8' : '#475569';
+  const rackOpening = isDark ? '#e2e8f0' : '#1e293b';
   const slate = visualKindColor('PARK', 'WAYPOINT', isDark);
 
   if (kind === 'recessed-shelf') {
@@ -250,20 +251,20 @@ function MiniArchitectureSwatch({
           width={18}
           height={9}
           rx={1.5}
-          fill={isDark ? 'rgba(56, 189, 248, 0.16)' : 'rgba(2, 132, 199, 0.1)'}
-          stroke={cyan}
+          fill={isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(30, 41, 59, 0.06)'}
+          stroke={rackStroke}
           strokeWidth={1.15}
         />
-        <Line x1={10} y1={5} x2={10} y2={12} stroke={cyan} strokeOpacity={0.6} strokeWidth={0.85} />
-        <Line x1={16} y1={5} x2={16} y2={12} stroke={cyan} strokeOpacity={0.6} strokeWidth={0.85} />
-        <Line x1={3} y1={13} x2={23} y2={13} stroke={cyan} strokeWidth={1.4} strokeLinecap="round" />
+        <Line x1={10} y1={5} x2={10} y2={12} stroke={rackStroke} strokeOpacity={0.55} strokeWidth={0.85} />
+        <Line x1={16} y1={5} x2={16} y2={12} stroke={rackStroke} strokeOpacity={0.55} strokeWidth={0.85} />
+        <Line x1={3} y1={13} x2={23} y2={13} stroke={rackOpening} strokeWidth={1.4} strokeLinecap="round" />
         <Line
           x1={13}
           y1={13}
           x2={13}
           y2={21}
-          stroke={cyan}
-          strokeOpacity={0.55}
+          stroke={rackStroke}
+          strokeOpacity={0.5}
           strokeWidth={1}
           strokeDasharray="2 2"
         />
@@ -277,11 +278,12 @@ function MiniArchitectureSwatch({
         d="M5 10 V5 H10 M16 5 H21 V10 M5 16 V21 H10 M16 21 H21 V16"
         fill="none"
         stroke={slate}
-        strokeWidth={1.35}
+        strokeOpacity={0.58}
+        strokeWidth={1.3}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <Line x1={9} y1={5} x2={17} y2={5} stroke={cyan} strokeWidth={1.6} strokeLinecap="round" />
+      <Line x1={9} y1={5} x2={17} y2={5} stroke={rackOpening} strokeOpacity={0.78} strokeWidth={1.5} strokeLinecap="round" />
     </Svg>
   );
 }

@@ -91,10 +91,10 @@ export interface LaneGlyphs {
   sides: [DrawPoint[], DrawPoint[]]
 }
 
-export const ONE_WAY_SIZE = 0.42
-export const ONE_WAY_SPACING = 0.66
-export const TWO_WAY_SIZE = 0.32
-export const TWO_WAY_SPACING = 0.65
+export const ONE_WAY_SIZE = 0.40
+export const ONE_WAY_SPACING = 0.92
+export const TWO_WAY_SIZE = 0.30
+export const TWO_WAY_SPACING = 0.88
 
 export function laneGlyphs(points: DrawPoint[], width: number, direction: 'ONE_WAY' | 'BIDIRECTIONAL'): LaneGlyphs {
   const half = width / 2

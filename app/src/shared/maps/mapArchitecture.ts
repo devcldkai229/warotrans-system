@@ -6,6 +6,8 @@ import {
   DOCK_BAY_WIDTH_METERS,
   ROBOT_LENGTH_METERS,
   ROBOT_WIDTH_METERS,
+  SHELF_BAY_DEPTH_METERS,
+  SHELF_BAY_LENGTH_METERS,
   endpointVisualKind,
   type EndpointVisualKind,
 } from './mapStyle';
@@ -170,8 +172,11 @@ export function computeStationArchitecture(
     if (!bestWall) continue;
 
     const isHoriz = bestWall.wall === 'top' || bestWall.wall === 'bottom';
-    const span = Math.min(0.52 * pxPerMetre, (isHoriz ? frame.mapWidth : frame.mapHeight) * 0.24);
-    const desiredDepth = clamp(0.20 * pxPerMetre, 9, 18);
+    const span = Math.min(
+      SHELF_BAY_LENGTH_METERS * pxPerMetre,
+      (isHoriz ? frame.mapWidth : frame.mapHeight) - 8,
+    );
+    const desiredDepth = SHELF_BAY_DEPTH_METERS * pxPerMetre;
     const depth = Math.min(desiredDepth, bestWall.availDepth);
     if (depth < 6 || span < 10) continue;
 
