@@ -1,0 +1,36 @@
+# Manual: switch the AWS demo lab ON (design §10 START). Same steps as infrastructure/terraform/scripts/lab.sh start:
+# RDS + MongoDB started, runtime stack applied (NAT, ECR endpoints, ALB, ECS with the recorded release), CloudFront
+# pointed at the new ALB, services stable, /health through CloudFront. Environment "demo" (required reviewers).
+# Repository variable: AWS_ACCOUNT_ID.
+
+name: Lab start
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: lab
+  cancel-in-progress: false
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    environment: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.5"
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/warotrans-demo-github-lab
+          aws-region: ap-southeast-1
+          role-duration-seconds: 3600
+      - run: bash infrastructure/terraform/scripts/lab.sh start
+        env:
+          STATE_BUCKET: warotrans-tfstate-${{ vars.AWS_ACCOUNT_ID }}

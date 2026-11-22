@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. No secret belongs in this file.
+environment                = "dev"
+region                     = "ap-southeast-1"
+bucket_name                = "warotrans-ob-storage"
+public_map_assets          = true
+raw_retention_days         = 90
+playback_retention_days    = 30
+cloudfront_public_key_file = "cloudfront_public_key.pem"
+cloudfront_key_version     = "v1"
+signing_key_parameter_name = "/warotrans/evidence/dev/cloudfront-private-key"
+ui_origins                 = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# alert_email              = "ops@example.com"
+# playback_custom_domain   = "media.example.com"   # enables signed cookies (Playback:GrantMode=Cookie)
+# playback_acm_certificate_arn = "arn:aws:acm:us-east-1:...:certificate/..."

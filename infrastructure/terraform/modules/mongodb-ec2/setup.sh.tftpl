@@ -1,0 +1,94 @@
+#!/bin/bash
+# First boot: install a unit that sets MongoDB up once the Internet (the lab's NAT) is reachable, retrying every minute.
+set -euo pipefail
+mkdir -p /opt/warotrans
+cat > /opt/warotrans/mongo-setup.sh <<'SETUP'
+#!/bin/bash
+set -euo pipefail
+[ -f /opt/warotrans/.setup-done ] && exit 0
+DEV=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id}
+[ -e "$DEV" ] || { echo "data volume not attached yet"; exit 1; }
+# Format only a blank volume (never an existing database).
+if ! blkid "$DEV" >/dev/null 2>&1; then mkfs.xfs -L mongodata "$DEV"; fi
+mkdir -p /var/lib/mongo
+grep -q 'LABEL=mongodata' /etc/fstab || echo 'LABEL=mongodata /var/lib/mongo xfs defaults,nofail,noatime 0 2' >> /etc/fstab
+mountpoint -q /var/lib/mongo || mount /var/lib/mongo
+
+cat > /etc/yum.repos.d/mongodb-org-8.0.repo <<'REPO'
+[mongodb-org-8.0]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/amazon/2023/mongodb-org/8.0/aarch64/
+gpgcheck=1
+enabled=1
+gpgkey=https://pgp.mongodb.com/server-8.0.asc
+REPO
+# postgresql17: the scripts run RDS administration and restores from this host (it is inside the VPC).
+dnf install -y mongodb-org openssl cronie postgresql17
+
+# TLS inside the VPC: a self-signed certificate for this host (clients connect with tlsInsecure: encryption, the
+# security group and authentication protect the access).
+mkdir -p /etc/mongo-tls
+if [ ! -f /etc/mongo-tls/mongo.pem ]; then
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$(hostname -f)" \
+    -keyout /etc/mongo-tls/mongo.key -out /etc/mongo-tls/mongo.crt
+  cat /etc/mongo-tls/mongo.key /etc/mongo-tls/mongo.crt > /etc/mongo-tls/mongo.pem
+fi
+chown -R mongod:mongod /etc/mongo-tls /var/lib/mongo
+chmod 600 /etc/mongo-tls/*
+
+cat > /etc/mongod.conf <<'CONF'
+storage:
+  dbPath: /var/lib/mongo
+systemLog:
+  destination: file
+  path: /var/log/mongodb/mongod.log
+  logAppend: true
+net:
+  port: 27017
+  bindIp: 0.0.0.0
+  tls:
+    mode: requireTLS
+    certificateKeyFile: /etc/mongo-tls/mongo.pem
+security:
+  authorization: enabled
+processManagement:
+  timeZoneInfo: /usr/share/zoneinfo
+CONF
+systemctl enable --now mongod
+
+# Daily logical backup to S3 (01:30 Asia/Ho_Chi_Minh), once scripts/mongo-bootstrap.sh has made the admin user.
+cat > /opt/warotrans/mongo-backup.sh <<'BACKUP'
+#!/bin/bash
+set -euo pipefail
+PW=$(aws secretsmanager get-secret-value --region ${region} --secret-id '${secret_arn}' --query SecretString --output text \
+  | python3 -c 'import json,sys;print(json.load(sys.stdin)["admin_password"])')
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+mongodump --host localhost --tls --tlsInsecure -u admin -p "$PW" --authenticationDatabase admin --archive --gzip \
+  | aws s3 cp - "s3://${backup_bucket}/${backup_prefix}$STAMP.archive.gz" --region ${region}
+BACKUP
+chmod 700 /opt/warotrans/mongo-backup.sh
+echo '30 18 * * * root /opt/warotrans/mongo-backup.sh >> /var/log/mongo-backup.log 2>&1' > /etc/cron.d/mongo-backup
+systemctl enable --now crond
+touch /opt/warotrans/.setup-done
+SETUP
+chmod 700 /opt/warotrans/mongo-setup.sh
+
+cat > /etc/systemd/system/warotrans-mongo-setup.service <<'UNIT'
+[Unit]
+Description=WaroTrans MongoDB setup (retries until the Internet is reachable)
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/warotrans/mongo-setup.sh
+UNIT
+cat > /etc/systemd/system/warotrans-mongo-setup.timer <<'UNIT'
+[Unit]
+Description=Retry the WaroTrans MongoDB setup every minute until it has run once
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=60
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now warotrans-mongo-setup.timer

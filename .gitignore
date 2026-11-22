@@ -68,7 +68,7 @@ samples/**/*.token
 
 # Local MCP config (personal)
 .mcp.json
-/infrastructure/terraform/**
+# infrastructure/terraform: only state, plans, tfvars and keys are ignored (infrastructure/terraform/.gitignore)
 
 
 
