@@ -188,6 +188,6 @@ export const BaseMapLayer = memo(function BaseMapLayer({
 
 const styles = StyleSheet.create({
   darkRasterFilter: {
-    filter: 'invert(0.80) contrast(1.14) brightness(0.58)',
+    filter: 'invert(0.76) contrast(1.08) brightness(0.80)',
   },
 });
