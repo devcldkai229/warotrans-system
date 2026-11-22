@@ -194,9 +194,7 @@ export function TransportScreen() {
               accessibilityLabel="New transport request"
             >
               <View style={styles.heroBtnTopRow}>
-                <View style={styles.primaryIconWell}>
-                  <Plus size={18} color="#ffffff" strokeWidth={2.6} />
-                </View>
+                <Plus size={20} color="#ffffff" strokeWidth={2.4} />
                 <ArrowRight size={16} color="rgba(255, 255, 255, 0.45)" />
               </View>
 
@@ -223,9 +221,7 @@ export function TransportScreen() {
               disabled={!canReadVouchers(session)}
             >
               <View style={styles.heroBtnTopRow}>
-                <View style={styles.secondaryIconWell}>
-                  <FileText size={18} color={colors.textPrimary} strokeWidth={2.2} />
-                </View>
+                <FileText size={20} color={colors.textPrimary} strokeWidth={2.1} />
                 <ArrowRight size={16} color={colors.textMuted} />
               </View>
 
@@ -410,24 +406,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  primaryIconWell: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryIconWell: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   heroBtnContent: {
     gap: 2,

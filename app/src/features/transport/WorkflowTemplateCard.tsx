@@ -72,13 +72,11 @@ export function WorkflowTemplateCard({
         <View style={[styles.iconBox, isSafety && styles.iconBoxSafety]}>
           {renderIcon()}
         </View>
-        <View style={[styles.arrowCircle, isSafety && styles.arrowCircleSafety]}>
-          <ArrowUpRight
-            size={15}
-            color={isSafety ? colors.danger : colors.textMuted}
-            strokeWidth={2.2}
-          />
-        </View>
+        <ArrowUpRight
+          size={16}
+          color={isSafety ? colors.danger : colors.textMuted}
+          strokeWidth={2.2}
+        />
       </View>
 
       <Text variant="bodyMedium" numberOfLines={2} style={styles.name}>
@@ -129,17 +127,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexShrink: 0,
   },
   iconBoxSafety: {
-    backgroundColor: colors.dangerBg,
-  },
-  arrowCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowCircleSafety: {
     backgroundColor: colors.dangerBg,
   },
   name: {
