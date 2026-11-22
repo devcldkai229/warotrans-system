@@ -55,7 +55,7 @@ export function HomeScreen() {
   const { session } = useAuth();
   const { navigate, dockHeight } = useNavigation();
   const styles = useThemedStyles(createStyles);
-  const [peekSheetHeight, setPeekSheetHeight] = useState(0);
+  const [peekSheetHeight, setPeekSheetHeight] = useState(86);
   const fleetQuery = useMapFleet(session?.id || '');
   // robot.localize: tell a robot where it stands after power-on; the snapshot refresh shows LOCALIZED when it converged.
   const onLocalizeRobot = sessionCan(session, PERMISSIONS.robotLocalize)
@@ -163,7 +163,11 @@ export function HomeScreen() {
 
       {/* 2. Floating Next Handover Task Card (Peek Sheet) */}
       <View
-        onLayout={event => setPeekSheetHeight(event.nativeEvent.layout.height)}
+        onLayout={event => {
+          if (!isSheetExpanded || !activeJob.id) {
+            setPeekSheetHeight(event.nativeEvent.layout.height);
+          }
+        }}
         style={[
           styles.peekSheetContainer,
           { bottom: dockHeight + 10 },
