@@ -28,6 +28,13 @@ using WaroTrans.WorkflowExecution;
 using WaroTrans.WorkflowExecution.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
+var migrateOnly = args.Contains(DatabaseMigrationExtensions.MigrateSwitch, StringComparer.Ordinal);
+
+if (!migrateOnly)
+{
+    // Before any module binds Traffic options: a cloud Host gets its semantic bundle from S3.
+    await SemanticBundleSource.FetchIntoConfigurationAsync(builder.Configuration);
+}
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -120,6 +127,14 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+if (migrateOnly)
+{
+    // The one-off migration task of a deployment: no web server, no hosted services, exit code says the outcome.
+    await app.Services.MigrateDatabasesAsync(seedDevelopmentAccounts: false);
+    return;
+}
+
+app.UseCloudFrontScheme();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())

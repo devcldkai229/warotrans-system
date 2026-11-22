@@ -257,16 +257,8 @@ public sealed class MqttRobotCommandPublisher
         var mqtt = _options.Value;
         var connectTimeout = TimeSpan.FromSeconds(Math.Max(1, mqtt.ConnectTimeoutSeconds));
         var client = _factory.CreateMqttClient();
-        var builder = new MqttClientOptionsBuilder()
-            .WithTcpServer(mqtt.Host, mqtt.Port)
-            .WithClientId($"{mqtt.ClientId}-cmd-pub-{Environment.ProcessId}")
-            .WithTimeout(connectTimeout)
-            .WithCleanSession();
-
-        if (!string.IsNullOrWhiteSpace(mqtt.Username))
-        {
-            builder.WithCredentials(mqtt.Username, mqtt.Password);
-        }
+        var builder = MqttConnection.Configure(new MqttClientOptionsBuilder(), mqtt, MqttConnection.PublisherRole)
+            .WithTimeout(connectTimeout);
 
         // Bounded: a broker that does not answer (e.g. "localhost" → ::1 while it listens on IPv4 only) fails the
         // publish after connectTimeout instead of holding every queued command for ~21 s.

@@ -69,6 +69,14 @@ public sealed class TrafficOptions
     /// <summary>Directory with Stage-2/3 adapter artifacts (lanes/zones/manifest). Empty = unset.</summary>
     public string SemanticMapDirectory { get; set; } = "";
 
+    /// <summary>
+    /// <c>s3://bucket/prefix/</c> of a semantic bundle (a cloud Host has no robot repo on disk). Set: the Host copies
+    /// the bundle to a local folder at start and uses it as <see cref="SemanticMapDirectory"/>; a failed copy stops
+    /// the start. Region: <see cref="SemanticMapS3Region"/>, else the AWS default.
+    /// </summary>
+    public string SemanticMapS3Uri { get; set; } = "";
+    public string SemanticMapS3Region { get; set; } = "";
+
     /// <summary>Look-ahead horizon (m) for swept cell reservation.</summary>
     public double SemanticHorizonMeters { get; set; } = 4.0;
 

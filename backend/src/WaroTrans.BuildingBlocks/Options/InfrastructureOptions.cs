@@ -30,6 +30,32 @@ public sealed class MqttOptions
     public string? Username { get; set; }
     public string? Password { get; set; }
     public string ClientId { get; set; } = "warotrans-host";
+
+    /// <summary>
+    /// Adds the process id to the client ids (<c>{ClientId}-{pid}</c>, <c>{ClientId}-cmd-pub-{pid}</c>) so a Host killed
+    /// uncleanly on a laptop is not taken over by its own restart. False for AWS IoT Core: its policy allows fixed
+    /// client ids only (<c>{ClientId}</c> and <c>{ClientId}-cmd-pub</c>), and in a container the pid is always 1 anyway.
+    /// </summary>
+    public bool ClientIdIncludesProcessId { get; set; } = true;
+
+    /// <summary>MQTT over TLS (AWS IoT Core: port 8883, an X.509 client certificate).</summary>
+    public bool UseTls { get; set; }
+
+    /// <summary>PEM of the client certificate (AWS IoT Core thing certificate); or <see cref="ClientCertificateFile"/>.</summary>
+    public string? ClientCertificatePem { get; set; }
+    public string? ClientCertificateFile { get; set; }
+
+    /// <summary>PEM of the client certificate's private key; or <see cref="ClientPrivateKeyFile"/>. Never logged.</summary>
+    public string? ClientPrivateKeyPem { get; set; }
+    public string? ClientPrivateKeyFile { get; set; }
+
+    /// <summary>
+    /// PEM of the CA that signed the broker's certificate, when it is not in the system trust store (a local test
+    /// broker). Empty: the system store (it holds Amazon Root CA 1 for AWS IoT Core).
+    /// </summary>
+    public string? CaCertificatePem { get; set; }
+    public string? CaCertificateFile { get; set; }
+
     public string TopicPrefix { get; set; } = "warotrans/v1";
     public int HeartbeatTimeoutSeconds { get; set; } = 5;
     /// <summary>Max wait for command_ack after publish (counted from RobotCommand.PublishedAt).</summary>

@@ -38,15 +38,7 @@ public sealed class MqttSubscriberHostedService(
                     await OnMessageAsync(e, stoppingToken).ConfigureAwait(false);
                 };
 
-                var builder = new MqttClientOptionsBuilder()
-                    .WithTcpServer(mqtt.Host, mqtt.Port)
-                    .WithClientId($"{mqtt.ClientId}-{Environment.ProcessId}")
-                    .WithCleanSession();
-
-                if (!string.IsNullOrWhiteSpace(mqtt.Username))
-                {
-                    builder.WithCredentials(mqtt.Username, mqtt.Password);
-                }
+                var builder = MqttConnection.Configure(new MqttClientOptionsBuilder(), mqtt, MqttConnection.SubscriberRole);
 
                 await client.ConnectAsync(builder.Build(), stoppingToken).ConfigureAwait(false);
 
