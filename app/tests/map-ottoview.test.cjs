@@ -320,6 +320,11 @@ test('Vietnamese i18n translates new OTTO map legend and quick-inspect strings w
   assert.equal(t('1 AMR'), 'Tối đa 1 xe');
   assert.equal(t('Inbound Gate'), 'Cổng nhập kho');
   assert.equal(t('Outbound Gate'), 'Cổng xuất kho');
+  assert.equal(t('Shelf / Rack'), 'Kệ hàng');
+  assert.equal(t('Inspection'), 'Kiểm tra');
+  assert.equal(t('Wait / Buffer'), 'Điểm chờ');
+  assert.equal(t('Recessed Shelf Bay'), 'Kệ âm tường');
+  assert.equal(t('Docking Bay'), 'Ô đỗ robot đúng tỉ lệ');
   assert.equal(t('One-way lane'), 'Làn đường 1 chiều');
   assert.equal(t('Two-way lane'), 'Làn đường 2 chiều');
   assert.equal(t('Live Nav2 Path (Authorized)'), 'Đường đi Nav2 trực tiếp (Đã cấp phép)');
@@ -338,7 +343,7 @@ test('Vietnamese i18n translates new OTTO map legend and quick-inspect strings w
   assert.equal(translateText('2 m · 1.0×'), '2 m · 1.0×');
 });
 
-test('endpointVisualKind classifies waypoint, inbound, outbound, charger, and park nodes', () => {
+test('endpointVisualKind classifies all 8 OTTO functional station types including Parking B waypoints', () => {
   const load = createLoader({
     react: { memo: fn => fn },
     'react-native': { View: 'View' },
@@ -348,16 +353,108 @@ test('endpointVisualKind classifies waypoint, inbound, outbound, charger, and pa
       ArrowUpFromLine: 'ArrowUpFromLine',
       CircleDot: 'CircleDot',
       CircleParking: 'CircleParking',
+      Clock: 'Clock',
+      Rows3: 'Rows3',
+      ScanSearch: 'ScanSearch',
       Zap: 'Zap',
     },
   });
-  const { endpointVisualKind } = load('src/shared/maps/EndpointGlyph.tsx');
+  const { endpointVisualKind, visualKindColor } = load('src/shared/maps/EndpointGlyph.tsx');
 
-  assert.equal(endpointVisualKind('WAYPOINT', 'WAIT-01', 'Wait Point'), 'WAYPOINT');
+  assert.equal(endpointVisualKind('WAYPOINT', 'EP-SHELF-A-1', 'Shelf A 1'), 'SHELF');
   assert.equal(endpointVisualKind('WAYPOINT', 'INBOUND-01', 'Receiving'), 'INBOUND');
   assert.equal(endpointVisualKind('WAYPOINT', 'EP-02', 'Outbound Gate'), 'OUTBOUND');
   assert.equal(endpointVisualKind('CHARGER', 'CHG-01', 'Charger'), 'CHARGER');
   assert.equal(endpointVisualKind('PARKING', 'PK-01', 'Parking A'), 'PARK');
+  assert.equal(endpointVisualKind('WAYPOINT', 'EP-PARKING-B', 'Parking B'), 'PARK');
+  assert.equal(endpointVisualKind('WAYPOINT', 'EP-INSPECTION', 'Inspection'), 'INSPECTION');
+  assert.equal(endpointVisualKind('WAYPOINT', 'EP-WAIT', 'Wait'), 'WAIT');
+  assert.equal(endpointVisualKind('WAYPOINT', 'WP-09', 'Aisle Point'), 'WAYPOINT');
+
+  assert.equal(visualKindColor('CHARGER', 'CHARGER', false), '#059669');
+  assert.equal(visualKindColor('SHELF', 'WAYPOINT', true), '#38bdf8');
+  assert.equal(visualKindColor('PARK', 'WAYPOINT', false), '#334155');
+});
+
+test('laneGlyphs renders dense OTTO arrows along compact MAP-ONE-V013 corridors', () => {
+  const load = createLoader();
+  const { laneGlyphs, LANE_ARROW_PATH } = load('src/shared/maps/laneGlyphs.ts');
+
+  assert.ok(LANE_ARROW_PATH.includes('0.16'));
+
+  // Simulate MAP-ONE-V013 scale (~80 px/m) for shortest (0.70 m) and typical (1.18 m) lanes of 0.65 m width
+  const widthPx = 0.65 * 80;
+  const shortLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 0.70 * 80 }], widthPx, 'ONE_WAY');
+  const midLane = laneGlyphs([{ x: 0, y: 0 }, { x: 0, y: 1.18 * 80 }], widthPx, 'ONE_WAY');
+  const twoWayLane = laneGlyphs([{ x: 0, y: 0 }, { x: 1.18 * 80, y: 0 }], widthPx, 'BIDIRECTIONAL');
+
+  assert.ok(shortLane.chevrons.length >= 2, `Expected >=2 chevrons on 0.70m lane, got ${shortLane.chevrons.length}`);
+  assert.ok(midLane.chevrons.length >= 3, `Expected >=3 chevrons on 1.18m lane, got ${midLane.chevrons.length}`);
+  assert.ok(twoWayLane.chevrons.length >= 4);
+});
+
+test('robotFootprintPx preserves real meter scale and computeStationArchitecture places all 4 recessed shelf bays on MAP-ONE-V013', () => {
+  const models = require('../src/shared/maps/rosMapModels.json');
+  const load = createLoader({ './rosMapModels.json': models });
+  const { createMapFrame, worldToBase } = load('src/shared/maps/mapTransform.ts');
+  const { robotFootprintPx, computeStationArchitecture } = load('src/shared/maps/mapArchitecture.ts');
+  const snapshot = require('../../samples/maps/MAP-ONE-V013/snapshot.json');
+
+  const mv = snapshot.mapVersion;
+  const map = {
+    ...BASE_MAP,
+    id: mv.id,
+    code: mv.code,
+    versionNo: mv.version_no,
+    name: mv.name,
+    imageWidthPixels: mv.image_width_pixels,
+    imageHeightPixels: mv.image_height_pixels,
+    resolution: mv.resolution,
+    originX: mv.origin_x,
+    originY: mv.origin_y,
+    originYaw: mv.origin_yaw,
+    frameId: mv.frame_id,
+    endpoints: snapshot.endpoints.map(e => ({
+      id: e.id,
+      mapVersionId: e.map_version_id,
+      code: e.code,
+      name: e.name,
+      endpointType: e.endpoint_type,
+      x: e.x,
+      y: e.y,
+      yaw: e.yaw,
+      isEnabled: e.is_enabled,
+    })),
+  };
+
+  const compactFrame = createMapFrame(map, 390, 680, { top: 54, right: 22, bottom: 48, left: 22 });
+  assert.ok(compactFrame);
+  const compactFootprint = robotFootprintPx(map, compactFrame);
+  assert.ok(Math.abs(compactFootprint.length / compactFootprint.width - 0.32 / 0.26) < 1e-6);
+  assert.ok(compactFootprint.length > 20);
+
+  // Large 50m warehouse enforces >= 16px readable robot length while preserving ratio
+  const largeMap = { ...BASE_MAP, imageWidthPixels: 1000, imageHeightPixels: 1000, resolution: 0.05 };
+  const largeFrame = createMapFrame(largeMap, 360, 360);
+  const largeFootprint = robotFootprintPx(largeMap, largeFrame);
+  assert.equal(largeFootprint.length, 16);
+  assert.ok(Math.abs(largeFootprint.length / largeFootprint.width - 0.32 / 0.26) < 1e-6);
+
+  const items = map.endpoints.flatMap(ep => {
+    const p = worldToBase(ep, map, compactFrame);
+    return p ? [{ ...p, endpoint: ep }] : [];
+  });
+  const arch = computeStationArchitecture(map, compactFrame, items);
+
+  // Functional bays: 4 shelves + 2 parking + charger + inbound + outbound + inspection = 10 (Wait stays bracket-free)
+  assert.equal(arch.dockBays.length, 10);
+  assert.equal(arch.shelfBays.length, 4);
+
+  const wallByName = Object.fromEntries(arch.shelfBays.map(b => [b.name, b.wall]));
+  assert.equal(wallByName['Shelf A 2'], 'left');
+  assert.equal(wallByName['Shelf A 1'], 'top');
+  assert.equal(wallByName['Shelf B 01 02'], 'top');
+  assert.equal(wallByName['Shelf C 1'], 'bottom');
 });
 
 test('dark-mode OTTO map style helpers provide high-contrast colors without altering fixed palette tokens', () => {

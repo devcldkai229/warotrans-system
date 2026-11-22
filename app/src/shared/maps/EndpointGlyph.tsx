@@ -6,52 +6,31 @@ import {
   ArrowUpFromLine,
   CircleDot,
   CircleParking,
+  Clock,
+  Rows3,
+  ScanSearch,
   Zap,
 } from 'lucide-react-native';
 import type { EndpointJobRole } from './mapLabels';
-import { JOB_HIGHLIGHT_COLOR, endpointColorOf, endpointKind } from './mapStyle';
+import {
+  JOB_HIGHLIGHT_COLOR,
+  endpointVisualKind,
+  visualKindColor,
+  type EndpointVisualKind,
+} from './mapStyle';
 
-export type EndpointVisualKind = 'WAYPOINT' | 'CHARGER' | 'PARK' | 'INBOUND' | 'OUTBOUND';
+export { type EndpointVisualKind, endpointVisualKind, visualKindColor } from './mapStyle';
 
 const ICONS = {
   WAYPOINT: CircleDot,
-  CHARGER: Zap,
-  PARK: CircleParking,
+  SHELF: Rows3,
   INBOUND: ArrowDownToLine,
   OUTBOUND: ArrowUpFromLine,
+  CHARGER: Zap,
+  PARK: CircleParking,
+  INSPECTION: ScanSearch,
+  WAIT: Clock,
 } as const;
-
-export function endpointVisualKind(
-  type: string,
-  code?: string,
-  name?: string,
-): EndpointVisualKind {
-  const kind = endpointKind(type);
-  if (kind === 'CHARGER') return 'CHARGER';
-  if (kind === 'PARK') return 'PARK';
-  const hint = `${code ?? ''} ${name ?? ''}`;
-  if (/inbound/i.test(hint)) return 'INBOUND';
-  if (/outbound/i.test(hint)) return 'OUTBOUND';
-  return 'WAYPOINT';
-}
-
-export function visualKindColor(
-  visualKind: EndpointVisualKind,
-  type: string,
-  isDark: boolean,
-): string {
-  switch (visualKind) {
-    case 'CHARGER':
-    case 'INBOUND':
-      return isDark ? '#34d399' : '#059669';
-    case 'PARK':
-    case 'OUTBOUND':
-      return isDark ? '#fbbf24' : '#d97706';
-    case 'WAYPOINT':
-    default:
-      return endpointColorOf(type, isDark);
-  }
-}
 
 /** Precision map endpoint icon using consistent thin-stroke Lucide icons. */
 export function EndpointIcon({
@@ -75,15 +54,16 @@ export function EndpointIcon({
     <Icon
       size={size}
       color={color ?? visualKindColor(visualKind, type, isDark)}
-      strokeWidth={1.9}
+      strokeWidth={1.85}
     />
   );
 }
 
 /**
  * Refined micro-node station marker sized for compact warehouse maps:
- * - Standard waypoints render as clean 14px precision concentric nodes.
- * - Landmarks (Charger, Park, Inbound, Outbound) render as soft-tinted 18px squircles.
+ * - Generic waypoints render as clean 14px precision concentric nodes.
+ * - Functional stations (Shelf, Inbound, Outbound, Charger, Park, Inspection, Wait)
+ *   render as high-contrast 18px neutral OTTO architectural tiles.
  * - Active Job Pickup/Dropoff endpoints stand out with a crisp 26px accent ring.
  * Parent MapControl maintains the >= 44pt interactive touch target.
  */
@@ -184,10 +164,10 @@ export const EndpointTile = memo(function EndpointTile({
           style={{
             width: 18,
             height: 18,
-            borderRadius: 6,
-            borderWidth: isDark ? 1.4 : 1.3,
+            borderRadius: 5.5,
+            borderWidth: 1.35,
             borderColor: accentColor,
-            backgroundColor: selected ? accentColor : isDark ? '#131822' : `${baseColor}18`,
+            backgroundColor: selected ? accentColor : isDark ? '#121720' : '#ffffff',
             alignItems: 'center',
             justifyContent: 'center',
           }}

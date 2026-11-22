@@ -73,10 +73,10 @@ export function chevronsAlong(points: DrawPoint[], spacing: number, offset = 0, 
 }
 
 /**
- * Road-marking arrow in a unit box (length 1, pointing right, centred), filled: a shaft and a wide head, like the
- * arrows painted on a road. Drawn with `scale(size)`; `size` is the arrow length.
+ * Slim arrow in a unit box (length 1, pointing right, centred), filled: a thin shaft and a short head, like a "→"
+ * glyph. Many slim arrows along a corridor communicate flow cleanly like OTTO Motors without crowding robots.
  */
-export const LANE_ARROW_PATH = 'M-0.5 -0.08 L0.06 -0.08 L0.06 -0.26 L0.5 0 L0.06 0.26 L0.06 0.08 L-0.5 0.08 Z'
+export const LANE_ARROW_PATH = 'M-0.5 -0.06 L0.16 -0.06 L0.16 -0.24 L0.5 0 L0.16 0.24 L0.16 0.06 L-0.5 0.06 Z'
 /** @deprecated the open chevron; lanes draw LANE_ARROW_PATH now. */
 export const CHEVRON_PATH = LANE_ARROW_PATH
 
@@ -91,20 +91,30 @@ export interface LaneGlyphs {
   sides: [DrawPoint[], DrawPoint[]]
 }
 
+export const ONE_WAY_SIZE = 0.42
+export const ONE_WAY_SPACING = 0.66
+export const TWO_WAY_SIZE = 0.32
+export const TWO_WAY_SPACING = 0.65
+
 export function laneGlyphs(points: DrawPoint[], width: number, direction: 'ONE_WAY' | 'BIDIRECTIONAL'): LaneGlyphs {
   const half = width / 2
   const sides: [DrawPoint[], DrawPoint[]] = [offsetPolyline(points, -half), offsetPolyline(points, half)]
   if (direction === 'ONE_WAY') {
-    return { chevrons: chevronsAlong(points, width * 2.2), chevronSize: width * 0.9, divider: null, sides }
+    return {
+      chevrons: chevronsAlong(points, width * ONE_WAY_SPACING),
+      chevronSize: width * ONE_WAY_SIZE,
+      divider: null,
+      sides,
+    }
   }
-  // Two-way: one arrow per half lane, the head (0.52 of the length) fits inside the half.
-  const spacing = width * 1.9
+  // Two-way: one arrow row per half lane, scaled to stay cleanly inside each half.
+  const spacing = width * TWO_WAY_SPACING
   return {
     chevrons: [
       ...chevronsAlong(points, spacing, width / 4), // right half: drawing direction
       ...chevronsAlong(points, spacing, -width / 4, true), // left half: back
     ],
-    chevronSize: width * 0.75,
+    chevronSize: width * TWO_WAY_SIZE,
     divider: points,
     sides,
   }

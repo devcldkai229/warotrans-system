@@ -141,7 +141,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                   width,
                   edge.direction === 'ONE_WAY' ? 'ONE_WAY' : 'BIDIRECTIONAL',
                 );
-                const arrowScale = Math.min(glyphs.chevronSize, 15 * hair);
+                const arrowScale = glyphs.chevronSize;
                 const isSelected = selectedEdgeId === edge.id;
                 const activeBandOpacity = isSelected ? Math.min(0.38, bandOpacity + 0.14) : bandOpacity;
 

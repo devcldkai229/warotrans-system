@@ -137,3 +137,61 @@ export function endpointColorOf(type: string, isDark = false): string {
   // Black waypoints would vanish on the dark floor: they turn light there, like the web's ink token.
   return kind === 'WAYPOINT' && isDark ? '#e6e8ec' : ENDPOINT_COLOR[kind];
 }
+
+/** Nav2 robot footprint dimensions (metres, aligned with backend TrafficFootprintOptions). */
+export const ROBOT_LENGTH_METERS = 0.32;
+export const ROBOT_WIDTH_METERS = 0.26;
+export const DOCK_BAY_LENGTH_METERS = 0.40;
+export const DOCK_BAY_WIDTH_METERS = 0.34;
+
+export type EndpointVisualKind =
+  | 'WAYPOINT'
+  | 'SHELF'
+  | 'INBOUND'
+  | 'OUTBOUND'
+  | 'CHARGER'
+  | 'PARK'
+  | 'INSPECTION'
+  | 'WAIT';
+
+/** Classify endpoint operational role from DB type, code, and display name. */
+export function endpointVisualKind(
+  type: string,
+  code?: string,
+  name?: string,
+): EndpointVisualKind {
+  const kind = endpointKind(type);
+  const hint = `${code ?? ''} ${name ?? ''}`;
+  if (kind === 'CHARGER' || /charg/i.test(hint)) return 'CHARGER';
+  if (kind === 'PARK' || /park/i.test(hint)) return 'PARK';
+  if (/inbound|receiv/i.test(hint)) return 'INBOUND';
+  if (/outbound|ship|dispatch|dock/i.test(hint)) return 'OUTBOUND';
+  if (/shelf|rack|bay|bin/i.test(hint)) return 'SHELF';
+  if (/inspect|qc|quality|check/i.test(hint)) return 'INSPECTION';
+  if (/wait|queue|buffer|stag/i.test(hint)) return 'WAIT';
+  return 'WAYPOINT';
+}
+
+/** Restrained neutral OTTO palette (silver/slate + technical cyan, emerald reserved for Charger). */
+export function visualKindColor(
+  visualKind: EndpointVisualKind,
+  type: string,
+  isDark: boolean,
+): string {
+  switch (visualKind) {
+    case 'CHARGER':
+      return isDark ? '#34d399' : '#059669';
+    case 'SHELF':
+    case 'INBOUND':
+    case 'OUTBOUND':
+      return isDark ? '#38bdf8' : '#0284c7';
+    case 'PARK':
+    case 'INSPECTION':
+      return isDark ? '#cbd5e1' : '#334155';
+    case 'WAIT':
+      return isDark ? '#94a3b8' : '#64748b';
+    case 'WAYPOINT':
+    default:
+      return endpointColorOf(type, isDark);
+  }
+}

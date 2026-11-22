@@ -52,6 +52,7 @@ import { BaseMapLayer } from './layers/BaseMapLayer';
 import { GridLabels } from './layers/GridLabels';
 import { InfrastructureLayer } from './layers/InfrastructureLayer';
 import { RobotLayer } from './layers/RobotLayer';
+import { StationArchitectureLayer } from './layers/StationArchitectureLayer';
 import { MapAnchor } from './MapAnchor';
 import {
   MapCameraCluster,
@@ -60,6 +61,7 @@ import {
   MapTopStatusPill,
 } from './MapHud';
 import { MapLegendContent } from './MapLegendSheet';
+import { robotFootprintPx } from './mapArchitecture';
 import { hitTestInfrastructure, type MapInspectTarget } from './mapHitTest';
 import {
   endpointJobRole,
@@ -292,15 +294,15 @@ export function MapViewport({
         ? compact
           ? {
               top: contentInsets.top + 42,
-              right: 12,
+              right: 20,
               bottom: contentInsets.bottom + 36,
-              left: 12,
+              left: 20,
             }
           : {
               top: contentInsets.top + 54,
               right: 22,
               bottom: contentInsets.bottom + 48,
-              left: 14,
+              left: 22,
             }
         : undefined,
     [fullBleed, compact, contentInsets.top, contentInsets.bottom],
@@ -522,12 +524,13 @@ function MapCanvas({
   );
 
   const labelObstacles = useMemo(() => {
-    const tagOffsetY = 18 / Math.max(1, camera.settledZoom);
+    const footprint = robotFootprintPx(map, frame);
+    const tagOffsetY = footprint.length * 0.56 + 14 / Math.max(1, camera.settledZoom);
     return [
       ...robotPoints.flatMap(p => [p, { x: p.x, y: p.y + tagOffsetY }]),
       ...visibleEndpoints.map(e => ({ x: e.x, y: e.y })),
     ];
-  }, [robotPoints, visibleEndpoints, camera.settledZoom]);
+  }, [map, frame, robotPoints, visibleEndpoints, camera.settledZoom]);
 
   const visibleEndpointLabels = useMemo(
     () =>
@@ -808,6 +811,16 @@ function MapCanvas({
                 plannedPaths={plannedPaths}
                 showPaths={canReadTraffic && layers.paths}
               />
+              {layers.stations ? (
+                <StationArchitectureLayer
+                  map={map}
+                  frame={frame}
+                  endpoints={endpoints}
+                  zoom={camera.settledZoom}
+                  isDark={isDark}
+                  showWallShelves={!model || layers.scan}
+                />
+              ) : null}
             </Animated.View>
 
             {layers.grid ? <GridLabels map={map} frame={frame} camera={camera} /> : null}

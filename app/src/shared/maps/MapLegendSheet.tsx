@@ -18,6 +18,7 @@ import {
   laneBandColor,
   laneBandOpacity,
   laneEdgeColor,
+  visualKindColor,
   zoneFillOpacity,
   zoneStrokeColor,
 } from './mapStyle';
@@ -32,11 +33,14 @@ const ROBOT_LEGEND_ITEMS = [
 ] as const;
 
 const STATION_LEGEND_ITEMS = [
-  { key: 'WAYPOINT', type: 'WAYPOINT', label: 'Waypoint', code: undefined },
+  { key: 'SHELF', type: 'WAYPOINT', label: 'Shelf / Rack', code: 'SHELF-01' },
   { key: 'INBOUND', type: 'WAYPOINT', label: 'Inbound Gate', code: 'INBOUND' },
   { key: 'OUTBOUND', type: 'WAYPOINT', label: 'Outbound Gate', code: 'OUTBOUND' },
-  { key: 'CHARGER', type: 'CHARGER', label: 'Charger', code: undefined },
-  { key: 'PARK', type: 'PARK', label: 'Park', code: undefined },
+  { key: 'CHARGER', type: 'CHARGER', label: 'Charger', code: 'CHG-01' },
+  { key: 'PARK', type: 'PARK', label: 'Park', code: 'PARK-01' },
+  { key: 'INSPECTION', type: 'WAYPOINT', label: 'Inspection', code: 'INSPECT-01' },
+  { key: 'WAIT', type: 'WAYPOINT', label: 'Wait / Buffer', code: 'WAIT-01' },
+  { key: 'WAYPOINT', type: 'WAYPOINT', label: 'Waypoint', code: undefined },
 ] as const;
 
 const CORE_ZONE_TYPES = [
@@ -204,7 +208,8 @@ function MiniLaneSwatch({
       {kind === 'one-way' ? (
         <>
           <Line x1={3} y1={10} x2={33} y2={10} stroke={edgeColor} strokeOpacity={isDark ? 0.45 : 0.3} strokeWidth={0.9} />
-          <Path d="M13 8.8 L19 8.8 L19 6 L25 10 L19 14 L19 11.2 L13 11.2 Z" fill={arrow} />
+          <Path d="M5 9.4 L11.5 9.4 L11.5 7.4 L15.5 10 L11.5 12.6 L11.5 10.6 L5 10.6 Z" fill={arrow} />
+          <Path d="M20.5 9.4 L27 9.4 L27 7.4 L31 10 L27 12.6 L27 10.6 L20.5 10.6 Z" fill={arrow} />
         </>
       ) : (
         <>
@@ -222,6 +227,61 @@ function MiniLaneSwatch({
           <Path d="M24 13 L18 13 L18 11.2 L13 14 L18 16.8 L18 15 L24 15 Z" fill={arrow} />
         </>
       )}
+    </Svg>
+  );
+}
+
+function MiniArchitectureSwatch({
+  kind,
+  isDark,
+}: {
+  kind: 'recessed-shelf' | 'dock-bay';
+  isDark: boolean;
+}) {
+  const cyan = visualKindColor('SHELF', 'WAYPOINT', isDark);
+  const slate = visualKindColor('PARK', 'WAYPOINT', isDark);
+
+  if (kind === 'recessed-shelf') {
+    return (
+      <Svg width={26} height={26} viewBox="0 0 26 26">
+        <Rect
+          x={4}
+          y={4}
+          width={18}
+          height={9}
+          rx={1.5}
+          fill={isDark ? 'rgba(56, 189, 248, 0.16)' : 'rgba(2, 132, 199, 0.1)'}
+          stroke={cyan}
+          strokeWidth={1.15}
+        />
+        <Line x1={10} y1={5} x2={10} y2={12} stroke={cyan} strokeOpacity={0.6} strokeWidth={0.85} />
+        <Line x1={16} y1={5} x2={16} y2={12} stroke={cyan} strokeOpacity={0.6} strokeWidth={0.85} />
+        <Line x1={3} y1={13} x2={23} y2={13} stroke={cyan} strokeWidth={1.4} strokeLinecap="round" />
+        <Line
+          x1={13}
+          y1={13}
+          x2={13}
+          y2={21}
+          stroke={cyan}
+          strokeOpacity={0.55}
+          strokeWidth={1}
+          strokeDasharray="2 2"
+        />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={26} height={26} viewBox="0 0 26 26">
+      <Path
+        d="M5 10 V5 H10 M16 5 H21 V10 M5 16 V21 H10 M16 21 H21 V16"
+        fill="none"
+        stroke={slate}
+        strokeWidth={1.35}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line x1={9} y1={5} x2={17} y2={5} stroke={cyan} strokeWidth={1.6} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -327,6 +387,22 @@ export function MapLegendContent({
             </View>
             <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
               Destination
+            </Text>
+          </View>
+          <View style={styles.gridItem}>
+            <View style={styles.miniTileBox}>
+              <MiniArchitectureSwatch kind="recessed-shelf" isDark={isDark} />
+            </View>
+            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+              Recessed Shelf Bay
+            </Text>
+          </View>
+          <View style={styles.gridItem}>
+            <View style={styles.miniTileBox}>
+              <MiniArchitectureSwatch kind="dock-bay" isDark={isDark} />
+            </View>
+            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+              Docking Bay
             </Text>
           </View>
         </View>
