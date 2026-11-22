@@ -57,8 +57,18 @@ public sealed partial class JobExecutionEngine
     /// </summary>
     public const double PathClearanceMeters = 0.8;
 
-    /// <summary>A robot waiting for its goal this far from the other robot's way (path, or body) may stay where it is.</summary>
-    public const double OffWayMeters = 0.5;
+    /// <summary>
+    /// A robot waiting for its goal this far from the other robot's way (path, or body) may stay where it is. On a
+    /// straight lane the path reserves a 0.25 m half-width band, a standing robot its footprint disc + margin (~0.29 m),
+    /// both rounded out to 0.10 m cells: from ~0.65 m on they share no cell.
+    /// </summary>
+    public const double OffWayMeters = 0.65;
+
+    /// <summary>
+    /// A QUEUE endpoint is placed by the map author next to the goal it serves: it only has to keep this far from the
+    /// goal (not <see cref="GoalPullOutRadiusMeters"/>) and <see cref="OffWayMeters"/> from the other robot's path.
+    /// </summary>
+    public const double QueueGoalClearanceMeters = 0.6;
 
     private static string GoalZone(string endpointCode) => GoalQueuePrefix + endpointCode;
 
@@ -203,9 +213,18 @@ public sealed partial class JobExecutionEngine
                 || (Dist(x, y, other.PoseX, other.PoseY) >= WaitClearanceMeters
                     && SegmentDistance(x, y, other.PoseX, other.PoseY, goal.X, goal.Y) >= WaitClearanceMeters
                     && otherPath.All(p => Dist(x, y, p.X, p.Y) >= PathClearanceMeters)));
+        // A queue point: the author put it beside the goal, off the lanes. Clear of the other robot's actual way is enough.
+        bool QueueClear(double x, double y) =>
+            Dist(x, y, goal.X, goal.Y) >= QueueGoalClearanceMeters
+            && (other is null
+                || (Dist(x, y, other.PoseX, other.PoseY) >= WaitClearanceMeters
+                    && (otherPath.Count > 0
+                        ? otherPath.All(p => Dist(x, y, p.X, p.Y) >= OffWayMeters)
+                        : SegmentDistance(x, y, other.PoseX, other.PoseY, goal.X, goal.Y) >= OffWayMeters)));
+        bool PlaceClear(EndpointPoseWithType e) => e.EndpointType == EndpointType.QUEUE ? QueueClear(e.X, e.Y) : Clear(e.X, e.Y);
 
         var standingAt = endpoints.FirstOrDefault(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= GoalOccupiedRadiusMeters);
-        if (standingAt is not null && WaitPoints.IsStandAside(standingAt, codes) && Clear(robot.PoseX, robot.PoseY))
+        if (standingAt is not null && WaitPoints.IsStandAside(standingAt, codes) && PlaceClear(standingAt))
         {
             return null;
         }
@@ -263,8 +282,10 @@ public sealed partial class JobExecutionEngine
         var place = endpoints
             .Where(e => WaitPoints.IsStandAside(e, codes) && e.Id != goal.Id && !targets.Contains(e.Id)
                         && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance))
-                        && Clear(e.X, e.Y))
-            .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y) + Dist(e.X, e.Y, goal.X, goal.Y))
+                        && PlaceClear(e))
+            // A queue point first (the place the map author made for waiting), then the least detour.
+            .OrderBy(e => e.EndpointType == EndpointType.QUEUE ? 0 : 1)
+            .ThenBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y) + Dist(e.X, e.Y, goal.X, goal.Y))
             .FirstOrDefault();
         if (place is null && FromWay(robot.PoseX, robot.PoseY) < OffWayMeters)
         {
@@ -274,6 +295,8 @@ public sealed partial class JobExecutionEngine
             place = endpoints
                 .Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && e.Id != goal.Id && !targets.Contains(e.Id)
                             && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) > 0.3
+                            // close by only: a far one turned waiting into a trip across the floor
+                            && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) <= LentEndpointMaxMeters
                             && Dist(e.X, e.Y, goal.X, goal.Y) >= GoalPullOutRadiusMeters
                             && FromWay(e.X, e.Y) >= OffWayMeters
                             && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance)))

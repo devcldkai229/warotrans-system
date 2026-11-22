@@ -234,8 +234,10 @@ public class SemanticPrefixGrantTests
     public void Opposite_lanes_are_granted_side_by_side()
     {
         var s = LaneState();
-        var north = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(1.19, 0.1, 1.19, 4.1)));
-        var south = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(0.52, 4.1, 0.52, 0.1)));
+        // Goals beyond the 4 m horizon: a goal keeps the full disc (docking spins), and a goal right beside the other
+        // robot's start would rightly conflict.
+        var north = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(1.19, 0.1, 1.19, 6.1)));
+        var south = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(0.52, 4.1, 0.52, -1.9)));
         Assert.True(north.Granted);
         Assert.True(south.Granted);
         Assert.Empty(north.Authority!.ResourceIds.Intersect(south.Authority!.ResourceIds));

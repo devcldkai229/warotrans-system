@@ -251,6 +251,15 @@ public static class SemanticReservation
     }
 
     private const double StraightWindowMeters = 0.25;
+
+    /// <summary>
+    /// Within this distance of the plan's goal (when the horizon reaches it) every sample takes the full disc: the robot
+    /// docks there (run-in, align) and turns on the spot even when the path looks straight. Lane rectangles there made
+    /// the robot gate refuse those spins (OUTSIDE_RESERVATION). Not at the start: the robot re-proposes its plan all
+    /// the way along a lane, and a disc at every start would cover the opposite lane again. A start that has to turn
+    /// already gets the disc (start yaw against the path heading).
+    /// </summary>
+    public const double EndDiscMeters = 0.45;
     private static readonly double StraightMaxTurnRad = 15.0 * Math.PI / 180.0;
 
     private static double AngleBetween(double a, double b) => Math.Abs(Math.Atan2(Math.Sin(a - b), Math.Cos(a - b)));
@@ -268,6 +277,12 @@ public static class SemanticReservation
     {
         var n = samples.Count;
         if (n < 2)
+        {
+            return null;
+        }
+
+        var (sx, sy) = samples[i];
+        if (reachedEnd && Math.Sqrt(Math.Pow(sx - poses[^1].X, 2) + Math.Pow(sy - poses[^1].Y, 2)) <= EndDiscMeters)
         {
             return null;
         }

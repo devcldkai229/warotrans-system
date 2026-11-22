@@ -495,7 +495,10 @@ public sealed class TrafficState
         var ownSeq = own?.EnqueueSeq ?? long.MaxValue;
         foreach (var rid in resources)
         {
-            if (!_queues.TryGetValue(rid, out var q))
+            // Only single-occupancy zones keep their queue order. A waiter is queued on every cell of its whole horizon;
+            // ordering on cells made a robot standing still at a wait point the "blocker" of cells nobody held, and those
+            // made-up wait-for edges ended in DEADLOCK_RISK and needless retreats (MAP-ONE-V013, 2026-11-22).
+            if (!rid.StartsWith("zone:", StringComparison.Ordinal) || !_queues.TryGetValue(rid, out var q))
             {
                 continue;
             }
@@ -1700,7 +1703,9 @@ public sealed class TrafficState
     /// </summary>
     private void FollowIdlePose(RobotRuntime robot, double? poseX, double? poseY, bool localizationOk)
     {
-        if (!_ready || _semantic is null || robot.Phase != TrafficRobotPhase.Idle || robot.Authority is not null
+        // Also while it holds a service resource (stopped at a pick/drop stop inside a Job): it stands still there.
+        if (!_ready || _semantic is null || robot.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService)
+            || robot.Authority is not null
             || robot.ActiveCommandId is not null || robot.OccupiedResourceIds.Count == 0
             || !localizationOk || poseX is not double x || poseY is not double y)
         {

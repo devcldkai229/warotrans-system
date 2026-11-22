@@ -1874,6 +1874,16 @@ public sealed partial class JobExecutionEngine(
     /// <summary>A pair that locks again within this time swaps who backs off (the first retreat did not free them).</summary>
     public const double DeadlockSwapWithinSeconds = 120;
 
+    /// <summary>
+    /// A robot this close to the target of its MOVE never backs off in a deadlock: it is docking at (or waiting to be
+    /// confirmed at) its stop, and sending it away left the drop-off half done and cost two long trips (MAP-ONE-V013,
+    /// 2026-11-22: RBT-001 at EP-SHELF-C-1 was sent to EP-SHELF-B-2 and back for the other robot).
+    /// </summary>
+    public const double AtOwnGoalMeters = 0.6;
+
+    /// <summary>A free endpoint that is not a parking place / wait point is only borrowed to back off when this close.</summary>
+    public const double LentEndpointMaxMeters = 1.5;
+
     /// <summary>Who decides "who goes into an area" is one critical section, so two robots never both see it free.</summary>
     private static readonly SemaphoreSlim AreaGate = new(1, 1);
 
@@ -2055,14 +2065,20 @@ public sealed partial class JobExecutionEngine(
                 continue;
             }
 
-            var loser = mine.Value.Cargo != theirs.Value.Cargo
-                ? (mine.Value.Cargo ? theirs.Value : mine.Value)
-                : (mine.Value.StartedAt >= theirs.Value.StartedAt ? mine.Value : theirs.Value);
+            var mineAtGoal = await AtOwnGoalAsync(mine.Value, cancellationToken);
+            var theirsAtGoal = await AtOwnGoalAsync(theirs.Value, cancellationToken);
+            var loser = mineAtGoal != theirsAtGoal
+                ? (mineAtGoal ? theirs.Value : mine.Value)
+                : mine.Value.Cargo != theirs.Value.Cargo
+                    ? (mine.Value.Cargo ? theirs.Value : mine.Value)
+                    : (mine.Value.StartedAt >= theirs.Value.StartedAt ? mine.Value : theirs.Value);
             var pair = robotId.CompareTo(partnerId) < 0 ? (robotId, partnerId) : (partnerId, robotId);
             lock (DeadlockSince)
             {
-                // Locked again soon after one of them backed off: that retreat did not free them, so the other backs off.
-                if (LastLoserOfPair.TryGetValue(pair, out var previous) && previous.Loser == loser.RobotId
+                // Locked again soon after one of them backed off: that retreat did not free them, so the other backs off
+                // (never a robot that stands at its own stop).
+                if (mineAtGoal == theirsAtGoal
+                    && LastLoserOfPair.TryGetValue(pair, out var previous) && previous.Loser == loser.RobotId
                     && (now - previous.At).TotalSeconds < DeadlockSwapWithinSeconds)
                 {
                     loser = loser.RobotId == robotId ? theirs.Value : mine.Value;
@@ -2086,7 +2102,8 @@ public sealed partial class JobExecutionEngine(
                 var altLoser = loser.RobotId == robotId ? theirs.Value : mine.Value;
                 var altWinnerId = altLoser.RobotId == robotId ? partnerId : robotId;
                 var altWinnerGoal = loser.Target;
-                if (!LastRetreat.TryGetValue(altLoser.RobotId, out var altLast) || (now - altLast).TotalSeconds >= DeadlockCooldownSeconds)
+                if (!(altLoser.RobotId == robotId ? mineAtGoal : theirsAtGoal)
+                    && (!LastRetreat.TryGetValue(altLoser.RobotId, out var altLast) || (now - altLast).TotalSeconds >= DeadlockCooldownSeconds))
                 {
                     if (await RetreatAsync(altLoser.JobId, altLoser.StepId, altLoser.RobotId, altLoser.Target, altWinnerId, loser.StepId,
                             altWinnerGoal, cancellationToken))
@@ -2149,6 +2166,19 @@ public sealed partial class JobExecutionEngine(
     }
 
     private readonly record struct OpenMove(Guid RobotId, Guid JobId, Guid StepId, DateTimeOffset StartedAt, bool Cargo, Guid? Target, bool Retreating = false);
+
+    /// <summary>The robot stands within <see cref="AtOwnGoalMeters"/> of the target of its open MOVE.</summary>
+    private async Task<bool> AtOwnGoalAsync(OpenMove move, CancellationToken cancellationToken)
+    {
+        if (move.Retreating || move.Target is not { } target
+            || await fleet.GetRobotAsync(move.RobotId, cancellationToken) is not { } robot
+            || await navigation.GetEndpointPoseAsync(target, cancellationToken) is not { } goal)
+        {
+            return false;
+        }
+
+        return Math.Sqrt(Math.Pow(robot.PoseX - goal.X, 2) + Math.Pow(robot.PoseY - goal.Y, 2)) <= AtOwnGoalMeters;
+    }
 
     /// <summary>The robot's MOVE that has a NAVIGATE out, if any.</summary>
     private async Task<OpenMove?> OpenMoveAsync(Guid robotId, CancellationToken cancellationToken)
@@ -2227,9 +2257,11 @@ public sealed partial class JobExecutionEngine(
         // headed to (a charger never).
         var headedTo = await LiveMoveTargetsAsync(cancellationToken);
         var standAside = endpoints.Where(e => Services.WaitPoints.IsStandAside(e, waitPointCodes)).ToList();
+        // Borrowed endpoints only close by: a far one (another shelf row) turns giving way into a long round trip.
         var lent = endpoints
             .Where(e => e.IsEnabled && e.EndpointType != WaroTrans.Navigation.Enums.EndpointType.CHARGER
-                        && !standAside.Contains(e) && !headedTo.Contains(e.Id))
+                        && !standAside.Contains(e) && !headedTo.Contains(e.Id)
+                        && Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= LentEndpointMaxMeters)
             .ToList();
         var target = Pick(standAside) ?? Pick(lent);
         EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool)
