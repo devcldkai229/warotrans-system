@@ -126,7 +126,6 @@ type LayerKey = 'stations' | 'labels' | 'zones' | 'lanes' | 'paths' | 'grid' | '
 interface LayerItemConfig {
   key: LayerKey;
   label: string;
-  desc: string;
   icon: React.ComponentType<{ size: number; color: string }>;
   bg: string;
   tint: string;
@@ -135,13 +134,11 @@ interface LayerItemConfig {
 function getLayerItems(
   colors: ThemeColors,
   isDark: boolean,
-  canReadTraffic: boolean,
 ): LayerItemConfig[] {
   const items: LayerItemConfig[] = [
     {
       key: 'stations',
       label: 'Stations & Docks',
-      desc: 'Pick, drop & charging points',
       icon: MapPin,
       bg: colors.primaryLight,
       tint: colors.primaryText,
@@ -149,7 +146,6 @@ function getLayerItems(
     {
       key: 'labels',
       label: 'Labels & Identifiers',
-      desc: 'Station & zone code tags',
       icon: Tag,
       bg: colors.surfaceMuted,
       tint: colors.textSecondary,
@@ -157,7 +153,6 @@ function getLayerItems(
     {
       key: 'zones',
       label: 'Operational Zones',
-      desc: 'Speed, keep-out & single-AMR areas',
       icon: Layers,
       bg: isDark ? 'rgba(139, 92, 246, 0.22)' : '#ede9fe',
       tint: isDark ? '#c4b5fd' : '#7c3aed',
@@ -165,7 +160,6 @@ function getLayerItems(
     {
       key: 'lanes',
       label: 'Lane Directions',
-      desc: 'Movement corridor paths',
       icon: Navigation,
       bg: colors.infoBg,
       tint: colors.infoText,
@@ -173,9 +167,6 @@ function getLayerItems(
     {
       key: 'paths',
       label: 'Job Route & Paths',
-      desc: canReadTraffic
-        ? 'Job route, travelled trail & live Nav2 paths'
-        : 'Job route & travelled robot trail',
       icon: Route,
       bg: isDark ? 'rgba(0, 210, 255, 0.16)' : '#e0f2fe',
       tint: isDark ? '#00d2ff' : '#0284c7',
@@ -186,7 +177,6 @@ function getLayerItems(
     {
       key: 'grid',
       label: '1m Metric Grid',
-      desc: 'Floor measurement overlay',
       icon: Grid3X3,
       bg: colors.surfaceMuted,
       tint: colors.textSecondary,
@@ -194,7 +184,6 @@ function getLayerItems(
     {
       key: 'scan',
       label: 'SLAM Occupancy Scan',
-      desc: 'Raw laser sensor footprint',
       icon: Scan,
       bg: colors.warningBg,
       tint: colors.warningText,
@@ -396,8 +385,8 @@ function MapCanvas({
   const { session } = useAuth();
   const canReadTraffic = !onPickEndpoint && sessionCan(session, PERMISSIONS.trafficRead);
   const layerItems = useMemo(
-    () => getLayerItems(colors, isDark, canReadTraffic),
-    [colors, isDark, canReadTraffic],
+    () => getLayerItems(colors, isDark),
+    [colors, isDark],
   );
   const { now, active, reducedMotion } = useMapEnvironment();
   const [following, setFollowing] = useState(false);
@@ -1339,15 +1328,15 @@ function MapCanvas({
                   ? endpoint?.name || 'Station Details'
                   : robot?.code || 'Robot Telemetry'}
               </Text>
-              <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                {sheet === 'layers' || sheet === 'legend'
-                  ? `${map.code} · V${map.versionNo} · ${map.resolution} m/px`
-                  : sheet === 'endpoint'
-                  ? `${endpoint?.code} · ${endpoint?.endpointType}`
-                  : robot?.isOnline
-                  ? `${t(robotStatusLabel(robot.status))} · ${t('Online')}`
-                  : 'Offline'}
-              </Text>
+              {sheet === 'endpoint' || sheet === 'robot' ? (
+                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                  {sheet === 'endpoint'
+                    ? `${endpoint?.code} · ${endpoint?.endpointType}`
+                    : robot?.isOnline
+                    ? `${t(robotStatusLabel(robot.status))} · ${t('Online')}`
+                    : 'Offline'}
+                </Text>
+              ) : null}
             </View>
             <Pressable
               onPress={close}
@@ -1417,9 +1406,6 @@ function MapCanvas({
                             <View style={styles.layerInfo}>
                               <Text variant="bodyMedium" fontWeight="600">
                                 {item.label}
-                              </Text>
-                              <Text variant="caption" color="textSecondary">
-                                {item.desc}
                               </Text>
                             </View>
                             <AppleSwitch
@@ -2251,9 +2237,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     layerRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      minHeight: 52,
+      minHeight: 46,
       paddingHorizontal: 14,
-      paddingVertical: 9,
+      paddingVertical: 8,
       gap: 12,
     },
     rowPressed: {

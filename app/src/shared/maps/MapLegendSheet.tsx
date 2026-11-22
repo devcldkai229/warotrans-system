@@ -12,7 +12,6 @@ import {
   PLAN_COLORS,
   ROBOT_COLOR,
   ZONE_COLOR,
-  ZONE_DESCRIPTION,
   ZONE_LABEL,
   laneArrowColor,
   laneBandColor,
@@ -376,9 +375,6 @@ export function MapLegendContent({
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
           ROBOTS (AMR)
         </Text>
-        <Text variant="caption" color="textSecondary">
-          Colored front bar and arrow point in the robot's heading direction.
-        </Text>
         <View style={styles.grid}>
           {ROBOT_LEGEND_ITEMS.map(item => (
             <View key={item.key} style={styles.gridItem}>
@@ -395,9 +391,6 @@ export function MapLegendContent({
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
           STATIONS & DOCKS
-        </Text>
-        <Text variant="caption" color="textSecondary">
-          Wedge indicates robot arrival direction.
         </Text>
         <View style={styles.grid}>
           {STATION_LEGEND_ITEMS.map(item => (
@@ -534,22 +527,17 @@ export function MapLegendContent({
               <View key={type}>
                 <View style={styles.zoneRow}>
                   <MiniZoneSwatch type={type} isDark={isDark} />
-                  <View style={styles.zoneTextCol}>
-                    <View style={styles.zoneHeaderRow}>
-                      <Text variant="caption" fontWeight="700" color="textPrimary">
-                        {ZONE_LABEL[type] ?? type}
-                      </Text>
-                      {onMap ? (
-                        <View style={styles.onMapBadge}>
-                          <Text variant="caption" color="primaryText" style={styles.onMapBadgeText}>
-                            On Map
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text variant="caption" color="textSecondary">
-                      {ZONE_DESCRIPTION[type]}
+                  <View style={styles.zoneHeaderRow}>
+                    <Text variant="caption" fontWeight="700" color="textPrimary">
+                      {ZONE_LABEL[type] ?? type}
                     </Text>
+                    {onMap ? (
+                      <View style={styles.onMapBadge}>
+                        <Text variant="caption" color="primaryText" style={styles.onMapBadgeText}>
+                          On Map
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
                 {idx < orderedZoneTypes.length - 1 ? <View style={styles.divider} /> : null}
@@ -624,11 +612,8 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    zoneTextCol: {
-      flex: 1,
-      gap: 2,
-    },
     zoneHeaderRow: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
