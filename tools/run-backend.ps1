@@ -112,6 +112,17 @@ foreach ($s in $services) {
 
 if (-not $NoInfra) {
   Write-Host "== Infrastructure (postgres, mongodb, mosquitto)"
+  # Another project's container on the same host port (glitch-postgres also publishes 5433, both are
+  # unless-stopped: whichever starts first at boot wins and compose then fails with "port is already allocated").
+  foreach ($pair in @(@{ Port = 5433; Own = "warotrans-postgres" }, @{ Port = 27018; Own = "warotrans-mongodb" },
+                      @{ Port = 1883; Own = "warotrans-mosquitto" })) {
+    $holders = @(docker ps --filter "publish=$($pair.Port)" --format "{{.Names}}" 2>$null |
+      Where-Object { $_ -and $_ -ne $pair.Own })
+    if ($holders.Count -gt 0) {
+      throw ("Port {0} is taken by container '{1}' (another project). Free it with:  docker stop {1}" -f `
+        $pair.Port, $holders[0])
+    }
+  }
   docker compose -f (Join-Path $repo "infrastructure\docker-compose.yml") up -d postgres mongodb mosquitto
   if ($LASTEXITCODE -ne 0) { throw "docker compose failed (is Docker Desktop running?)" }
   foreach ($c in @("warotrans-postgres", "warotrans-mongodb")) {
@@ -122,6 +133,12 @@ if (-not $NoInfra) {
       Start-Sleep -Seconds 2
     }
     if (-not $ok) { throw "$c is not healthy after 2 minutes" }
+    # 2026-11-20: after a "port is already allocated" start, Docker restarted the container healthy but with NO host
+    # port (Ports "5432/tcp"): the Host then cannot connect. Only re-creating the container restores the binding.
+    if (-not (docker port $c 2>$null)) {
+      throw ("$c is running without its host port. Re-create it (the data volume is kept):  " +
+        "docker compose -f infrastructure\docker-compose.yml up -d --force-recreate $($c -replace '^warotrans-','')")
+    }
     Write-Host "  $c healthy"
   }
 }
