@@ -134,11 +134,12 @@ public sealed class TrafficShadowObserver(
         double? poseX = null,
         double? poseY = null,
         bool localized = false,
-        DateTimeOffset? lastTelemetryAt = null)
+        DateTimeOffset? lastTelemetryAt = null,
+        double? poseYaw = null)
     {
         var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, trafficOptions.Value.PoseMaxAgeSec));
         var fresh = localized && lastTelemetryAt is { } at && DateTimeOffset.UtcNow - at <= maxAge;
-        return segmented.MarkOnlineAsync(robotId, ct, fresh ? poseX : null, fresh ? poseY : null, fresh);
+        return segmented.MarkOnlineAsync(robotId, ct, fresh ? poseX : null, fresh ? poseY : null, fresh, fresh ? poseYaw : null);
     }
 
     /// <summary>

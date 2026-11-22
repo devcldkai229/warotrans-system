@@ -123,8 +123,8 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         }, ct);
 
     public Task<TrafficOpResult> EnsureTrackedAsync(
-        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
-        EnqueueAsync(s => s.EnsureTracked(robotId, poseX, poseY, localizationOk), ct);
+        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default, double? poseYaw = null) =>
+        EnqueueAsync(s => s.EnsureTracked(robotId, poseX, poseY, localizationOk, poseYaw), ct);
 
     public Task<TrafficOpResult> ReportStoppedAwaitingAsync(
         Guid robotId, long seq, long epoch, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
@@ -324,8 +324,9 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         EnqueueAsync(s => s.MarkOffline(robotId), ct);
 
     public Task<TrafficOpResult> MarkOnlineAsync(
-        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false) =>
-        EnqueueAsync(s => s.MarkOnline(robotId, poseX, poseY, localizationOk), ct);
+        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false,
+        double? poseYaw = null) =>
+        EnqueueAsync(s => s.MarkOnline(robotId, poseX, poseY, localizationOk, poseYaw), ct);
 
     public Task<long> TakeOverAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default) =>
         EnqueueAsync(s =>

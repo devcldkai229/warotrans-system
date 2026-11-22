@@ -25,7 +25,7 @@ public interface ISegmentedTrafficCoordinator
     /// quarantine; an untracked robot is seeded with the resources under its pose.
     /// </summary>
     Task<TrafficOpResult> EnsureTrackedAsync(
-        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default);
+        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default, double? poseYaw = null);
 
     /// <summary>Accepted STOPPED_AWAITING_AUTHORITY at the authority's goal safe stop arms the next EXTEND.</summary>
     Task<TrafficOpResult> ReportStoppedAwaitingAsync(
@@ -102,7 +102,8 @@ public interface ISegmentedTrafficCoordinator
 
     /// <summary>Clear OFFLINE quarantine after a verified fresh heartbeat (not traffic_plan).</summary>
     Task<TrafficOpResult> MarkOnlineAsync(
-        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false);
+        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false,
+        double? poseYaw = null);
 
     /// <summary>
     /// Lease takeover: a new epoch strictly above every earlier one, occupancy rebuilt from the seeds. Whatever this

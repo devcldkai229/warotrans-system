@@ -87,6 +87,64 @@ public class SemanticParallelLaneTests
     }
 
     [Fact]
+    public void A_robot_parked_with_a_known_heading_does_not_block_the_turn_out_of_the_next_bay()
+    {
+        // MAP-ONE-V015: EP-PARKING-A (-0.561, -1.620) and EP-PARKING-B (0.157, -1.623), both facing +y, 0.72 m apart.
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, -0.561, -1.620, localizationOk: true, poseYaw: Math.PI / 2).Ok);
+        Assert.True(s.EnsureTracked(_r2, 0.157, -1.623, localizationOk: true, poseYaw: Math.PI / 2).Ok);
+        // R2 turns on the spot towards the centre and drives off: the start keeps the full circle.
+        Assert.True(s.AcquireSemanticPlan(Plan(policy, _r2, Line(0.157, -1.623, 0.9, -0.95))).Granted);
+    }
+
+    [Fact]
+    public void Without_a_heading_a_parked_robot_keeps_the_any_heading_circle()
+    {
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, -0.561, -1.620, localizationOk: true).Ok);
+        Assert.True(s.EnsureTracked(_r2, 0.157, -1.623, localizationOk: true).Ok);
+        Assert.False(s.AcquireSemanticPlan(Plan(policy, _r2, Line(0.157, -1.623, 0.9, -0.95))).Granted);
+    }
+
+    [Fact]
+    public void Standing_cells_follow_the_body_rectangle_at_its_heading()
+    {
+        var policy = Policy(laneHalfWidth: 0.25);
+        var upright = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.StandingCells(policy, 0.05, 0.05, Math.PI / 2, 0.05, upright);
+        // Body 0.36 long (y) x 0.31 wide (x) + 0.05 each side: x in [-0.155, 0.255], y in [-0.18, 0.28].
+        Assert.Contains(SemanticReservation.CellId(-2, 0), upright);
+        Assert.DoesNotContain(SemanticReservation.CellId(-3, 0), upright);
+        Assert.Contains(SemanticReservation.CellId(0, 2), upright);
+        Assert.DoesNotContain(SemanticReservation.CellId(0, 3), upright);
+        var circle = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.StandingCells(policy, 0.05, 0.05, null, 0.05, circle);
+        Assert.True(upright.IsProperSubsetOf(circle));
+    }
+
+    [Fact]
+    public void A_cancelled_route_leaves_no_wait_behind()
+    {
+        // MAP-ONE-V016 sim, 2026-11-23: R2's NAVIGATE (waiting for R1's cells) was cancelled; its queue entries stayed,
+        // so R1, asking for R2's cells, was refused DEADLOCK_RISK forever although R2 stood still.
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, 0.0, 0.0, localizationOk: true, poseYaw: 0).Ok);
+        Assert.True(s.EnsureTracked(_r2, 1.5, 0.0, localizationOk: true, poseYaw: Math.PI).Ok);
+        var cmd = Guid.NewGuid();
+        var r2Plan = Plan(policy, _r2, Line(1.5, 0.0, -1.0, 0.0)) with { CommandId = cmd };
+        Assert.False(s.AcquireSemanticPlan(r2Plan).Granted); // waits for R1's cells
+
+        Assert.True(s.CompleteRoute(_r2, succeeded: true, "CANCELED", commandId: cmd, poseX: 1.5, poseY: 0.0).Ok);
+
+        var r1Plan = Plan(policy, _r1, Line(0.0, 0.0, 0.0, 1.5));
+        var granted = s.AcquireSemanticPlan(r1Plan);
+        Assert.True(granted.Granted, granted.Reason);
+    }
+
+    [Fact]
     public void A_waiting_robot_does_not_block_cells_it_does_not_hold()
     {
         var policy = Policy(laneHalfWidth: 0);

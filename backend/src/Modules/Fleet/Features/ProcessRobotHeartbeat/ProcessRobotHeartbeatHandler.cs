@@ -77,7 +77,8 @@ public sealed class ProcessRobotHeartbeatHandler(
                 robot.PoseX,
                 robot.PoseY,
                 robot.LocalizationStatus == Enums.LocalizationStatus.LOCALIZED,
-                robot.LastTelemetryAt).ConfigureAwait(false);
+                robot.LastTelemetryAt,
+                robot.PoseYaw).ConfigureAwait(false);
         }
 
         if (becameOnline)

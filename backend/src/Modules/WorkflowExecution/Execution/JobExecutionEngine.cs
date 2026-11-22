@@ -1837,6 +1837,12 @@ public sealed partial class JobExecutionEngine(
     /// <summary>Endpoint a MOVE backs off to; set when its NAVIGATE was cancelled, the retreat leaves once that has ended.</summary>
     public const string RetreatToKey = "retreatToEndpointId";
 
+    /// <summary>A free spot (not an endpoint) a MOVE steps aside to: {"x","y","yaw"}; see <see cref="YieldSpots"/>.</summary>
+    public const string RetreatToPoseKey = "retreatToPose";
+
+    /// <summary>How far a robot looks for a free spot to step aside to before it backs off to an endpoint.</summary>
+    public const double YieldSpotMaxMeters = 1.2;
+
     /// <summary>When a MOVE first hit a transient refusal (robot busy, a write race, a retreat handover) it retries.</summary>
     public const string RetryWaitSinceKey = "retryWaitSince";
 
@@ -1870,6 +1876,17 @@ public sealed partial class JobExecutionEngine(
 
     /// <summary>Who backed off last for a pair of robots: if they lock again soon after, the other one backs off.</summary>
     private static readonly Dictionary<(Guid, Guid), (Guid Loser, DateTimeOffset At)> LastLoserOfPair = [];
+
+    /// <summary>How often a pair locked again after a back-off, since when (within <see cref="DeadlockSwapWithinSeconds"/>).</summary>
+    private static readonly Dictionary<(Guid, Guid), (int Count, DateTimeOffset Since)> PairRelocks = [];
+
+    /// <summary>
+    /// From this many back-offs of the same pair (within <see cref="DeadlockSwapWithinSeconds"/>) a step aside close by has
+    /// not freed them: the one that gives way goes to a queue point / parking place instead. Two robots swapping through the
+    /// INBOUND/OUTBOUND junction (MAP-ONE-V015 sim, 2026-11-23) stepped aside in turn for minutes: each spot was clear of
+    /// the other robot's path at that moment, and its next plan took another way round.
+    /// </summary>
+    public const int SpotBackOffsPerPair = 2;
 
     /// <summary>A pair that locks again within this time swaps who backs off (the first retreat did not free them).</summary>
     public const double DeadlockSwapWithinSeconds = 120;
@@ -2095,8 +2112,16 @@ public sealed partial class JobExecutionEngine(
             }
 
             var winnerMove = loser.RobotId == robotId ? theirs.Value : mine.Value;
+            bool allowSpot;
+            lock (DeadlockSince)
+            {
+                allowSpot = !PairRelocks.TryGetValue(pair, out var relocks)
+                            || (now - relocks.Since).TotalSeconds >= DeadlockSwapWithinSeconds
+                            || relocks.Count < SpotBackOffsPerPair;
+            }
+
             var backedOff = await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, loser.Target, winnerId, winnerMove.StepId,
-                winnerMove.Target, cancellationToken);
+                winnerMove.Target, cancellationToken, allowSpot);
             if (!backedOff)
             {
                 var altLoser = loser.RobotId == robotId ? theirs.Value : mine.Value;
@@ -2106,7 +2131,7 @@ public sealed partial class JobExecutionEngine(
                     && (!LastRetreat.TryGetValue(altLoser.RobotId, out var altLast) || (now - altLast).TotalSeconds >= DeadlockCooldownSeconds))
                 {
                     if (await RetreatAsync(altLoser.JobId, altLoser.StepId, altLoser.RobotId, altLoser.Target, altWinnerId, loser.StepId,
-                            altWinnerGoal, cancellationToken))
+                            altWinnerGoal, cancellationToken, allowSpot))
                     {
                         loser = altLoser;
                         winnerId = altWinnerId;
@@ -2130,6 +2155,9 @@ public sealed partial class JobExecutionEngine(
                 {
                     LastRetreat[loser.RobotId] = now;
                     LastLoserOfPair[pair] = (loser.RobotId, now);
+                    PairRelocks[pair] = PairRelocks.TryGetValue(pair, out var seen) && (now - seen.Since).TotalSeconds < DeadlockSwapWithinSeconds
+                        ? (seen.Count + 1, seen.Since)
+                        : (1, now);
                     DeadlockSince.Remove(robotId);
                 }
 
@@ -2212,7 +2240,7 @@ public sealed partial class JobExecutionEngine(
     /// </summary>
     private async Task<bool> RetreatAsync(
         Guid jobId, Guid stepId, Guid robotId, Guid? ownGoalId, Guid winnerId, Guid winnerStepId, Guid? winnerGoalId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool allowSpot = true)
     {
         var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
         var winner = await fleet.GetRobotAsync(winnerId, cancellationToken);
@@ -2263,7 +2291,11 @@ public sealed partial class JobExecutionEngine(
                         && !standAside.Contains(e) && !headedTo.Contains(e.Id)
                         && Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= LentEndpointMaxMeters)
             .ToList();
-        var target = Pick(standAside) ?? Pick(lent);
+        // Best: step aside right here, out of the other robot's way (user, 2026-11-23: a robot at the end of the shelf B
+        // lane drove all the way to a queue point to let the other one pass). Endpoints only when no spot close by is free.
+        var spot = allowSpot ? await YieldSpotAsync(robot, winner, winnerGoal, others, cancellationToken) : null;
+        var target = spot is null ? Pick(standAside.Where(e => e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.QUEUE))
+                                    ?? Pick(standAside) ?? Pick(lent) : null;
         EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool)
         {
             var candidates = pool
@@ -2280,7 +2312,18 @@ public sealed partial class JobExecutionEngine(
                    ?? candidates.OrderByDescending(e => Away(e.X, e.Y)).FirstOrDefault();
         }
 
-        if (target is null || await navigation.GetEndpointPoseAsync(target.Id, cancellationToken) is not { } pose)
+        EndpointPoseSnapshot? pose = null;
+        if (spot is { } free)
+        {
+            pose = new EndpointPoseSnapshot(Guid.Empty, robot.CurrentMapVersionId,
+                FormattableString.Invariant($"spot ({free.X:F2}, {free.Y:F2})"), free.X, free.Y, free.Yaw, true, RetreatArrivalToleranceMeters);
+        }
+        else if (target is not null)
+        {
+            pose = await navigation.GetEndpointPoseAsync(target.Id, cancellationToken);
+        }
+
+        if (pose is null)
         {
             logger.LogWarning("Deadlock: robot {Robot} has no free place to back off to", robot.Code);
             return false;
@@ -2308,12 +2351,20 @@ public sealed partial class JobExecutionEngine(
                 [SupersededCommandIdsKey] = JsonSerializer.SerializeToElement(superseded),
                 [AreaWaitSinceKey] = JsonSerializer.SerializeToElement(now),
                 [AreaQueueZoneKey] = JsonSerializer.SerializeToElement(DeadlockRetreatZone),
-                [RetreatToKey] = JsonSerializer.SerializeToElement(pose.Id),
                 [RetreatFromStepKey] = JsonSerializer.SerializeToElement(winnerStepId), // Guid.Empty: an idle robot
                 [RetreatFromRobotKey] = JsonSerializer.SerializeToElement(winnerId),
                 [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1)),
                 ["waitingFor"] = JsonSerializer.SerializeToElement($"area_queue:{DeadlockRetreatZone} (backing off to {pose.Code})")
             };
+            if (spot is { } at)
+            {
+                step.OutputValues[RetreatToPoseKey] = JsonSerializer.SerializeToElement(new { x = at.X, y = at.Y, yaw = at.Yaw });
+            }
+            else
+            {
+                step.OutputValues[RetreatToKey] = JsonSerializer.SerializeToElement(pose.Id);
+            }
+
             SetStepStatus(job, task, step, Key(step), JobStepStatus.WAITING, now);
             await SaveAndPublishAsync(cancellationToken);
             await fleet.CancelNavigationAsync(robotId, old, cancellationToken);
@@ -2633,12 +2684,13 @@ public sealed partial class JobExecutionEngine(
 
                 var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
                 var tracked = await segmentedTraffic.EnsureTrackedAsync(
-                    robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
+                    robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken, robot.PoseYaw);
                 if (!tracked.Ok)
                 {
                     // A retreat starts right after its NAVIGATE was cancelled: traffic may still hold that route's
                     // authority, or the quarantine of the cancel, for a moment. Retry, within a bound.
-                    if (step.OutputValues.ContainsKey(RetreatToKey) && IsRetreatHandoverReason(tracked.Reason))
+                    if ((step.OutputValues.ContainsKey(RetreatToKey) || step.OutputValues.ContainsKey(RetreatToPoseKey))
+                        && IsRetreatHandoverReason(tracked.Reason))
                     {
                         return await RetryLaterAsync(job, task, step, stepKey, now, $"traffic: {tracked.Reason}", cancellationToken);
                     }
@@ -2664,6 +2716,14 @@ public sealed partial class JobExecutionEngine(
                         goal = retreat;
                         queueZone = DeadlockRetreatZone;
                         queueSince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var rs) ? rs.GetDateTimeOffset() : now;
+                    }
+                    else if (step.OutputValues.TryGetValue(RetreatToPoseKey, out var spotEl) && spotEl.ValueKind == JsonValueKind.Object)
+                    {
+                        var (sx, sy, syaw) = (spotEl.GetProperty("x").GetDouble(), spotEl.GetProperty("y").GetDouble(), spotEl.GetProperty("yaw").GetDouble());
+                        goal = new EndpointPoseSnapshot(Guid.Empty, job.MapVersionId,
+                            FormattableString.Invariant($"spot ({sx:F2}, {sy:F2})"), sx, sy, syaw, true, RetreatArrivalToleranceMeters);
+                        queueZone = DeadlockRetreatZone;
+                        queueSince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var ss) ? ss.GetDateTimeOffset() : now;
                     }
 
                     // Backed off and standing at the retreat point: wait there until the other robot's MOVE is over.
@@ -2712,7 +2772,7 @@ public sealed partial class JobExecutionEngine(
                         var zone = GoalZone(pose.Code);
                         var waitingAlready = step.OutputValues.TryGetValue(AreaQueueZoneKey, out var gz) && gz.GetString() == zone;
                         queueSince = waitingAlready && step.OutputValues.TryGetValue(AreaWaitSinceKey, out var gs) ? gs.GetDateTimeOffset() : now;
-                        var waitAt = await GoalWaitPlaceAsync(job, robot, pose, goalBusy.Robot, cancellationToken);
+                        var waitAt = await GoalWaitPlaceAsync(job, robot, pose, goalBusy.Robot, policy, cancellationToken);
                         if (waitAt is null
                             || Dist(robot.PoseX, robot.PoseY, waitAt.X, waitAt.Y) <= Math.Max(0.25, waitAt.PositionTolerance))
                         {
@@ -2859,7 +2919,7 @@ public sealed partial class JobExecutionEngine(
                 // Quarantines are lifted only by a verified robot state or an operator, never by starting a MOVE.
                 var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
                 var tracked = await segmentedTraffic.EnsureTrackedAsync(
-                    robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
+                    robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken, robot.PoseYaw);
                 if (!tracked.Ok)
                 {
                     Fail(job, task, step, stepKey, TrafficRobotUnavailable,

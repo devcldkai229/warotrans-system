@@ -1,8 +1,10 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Traffic;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.WorkflowExecution.Entities;
@@ -69,6 +71,9 @@ public sealed partial class JobExecutionEngine
     /// goal (not <see cref="GoalPullOutRadiusMeters"/>) and <see cref="OffWayMeters"/> from the other robot's path.
     /// </summary>
     public const double QueueGoalClearanceMeters = 0.6;
+
+    /// <summary>A queue point serves the goals within this distance (Queue B serves EP-INBOUND 0.74 m away).</summary>
+    public const double QueueServesGoalMeters = 1.5;
 
     private static string GoalZone(string endpointCode) => GoalQueuePrefix + endpointCode;
 
@@ -194,61 +199,37 @@ public sealed partial class JobExecutionEngine
     }
 
     /// <summary>
-    /// Where a robot waits for its goal: null = where it stands (it stands at a parking place or wait point clear of
-    /// the other robot, or there is nowhere better), else the free parking place / wait point with the least detour that
-    /// keeps clear of the other robot, of its way to the goal and of the goal itself.
+    /// Where a robot waits for its goal: null = where it stands. "In the way" is the traffic test itself: the cells and
+    /// zones its body takes standing there (<see cref="SemanticReservation.StandingCells"/>, the endpoint's heading)
+    /// against what the other robot still needs (the rest of its planned path, else its straight way to the goal, and
+    /// its own body). In this order:
+    /// <list type="number">
+    /// <item>where it stands, when that is out of the other robot's way and not a no-stop zone (2026-11-22: a robot at
+    /// the end of the shelf B lane drove to a far queue point although nobody needed its spot);</item>
+    /// <item>the free queue point (type QUEUE) nearest to the goal, out of the way (INBOUND waits at the queue point next
+    /// to INBOUND, not at one across the floor);</item>
+    /// <item>a parking place / wait point, then any free endpoint, out of the way and close by
+    /// (<see cref="LentEndpointMaxMeters"/>): waiting must not turn into a trip across the floor;</item>
+    /// <item>else where it stands: traffic keeps the two apart and a lock is broken by the deadlock retreat.</item>
+    /// </list>
     /// </summary>
     private async Task<EndpointPoseSnapshot?> GoalWaitPlaceAsync(
-        Job job, RobotSnapshot robot, EndpointPoseSnapshot goal, Guid? otherRobotId, CancellationToken cancellationToken)
+        Job job, RobotSnapshot robot, EndpointPoseSnapshot goal, Guid? otherRobotId, SemanticTrafficPolicy policy,
+        CancellationToken cancellationToken)
     {
         var other = otherRobotId is { } oid ? await fleet.GetRobotAsync(oid, cancellationToken) : null;
         var codes = WaitPointCodes();
         var endpoints = await navigation.GetEndpointsOnMapAsync(job.MapVersionId, cancellationToken);
+        var margin = Math.Max(0, trafficOptions?.Value.LocalizationMarginMeters ?? 0.05);
+        var otherWay = await OtherWayResourcesAsync(policy, other, goal, margin, cancellationToken);
+        bool OffWay(double x, double y, double? yaw) => !StandingResources(policy, x, y, yaw, margin).Overlaps(otherWay);
+        var stopRadius = Math.Min(policy.FootprintHalfLength, policy.FootprintHalfWidth);
+        bool MayStop(double x, double y) =>
+            policy.NoStopZones.IsDefaultOrEmpty || !policy.NoStopZones.Any(z => SemanticReservation.DiscHitsZone(x, y, stopRadius, z.Ring));
 
-        // Clear of the other robot, of the straight way to the goal and of the path it planned (where it is going next).
-        var otherPath = other is null ? [] : await ProposedPathAsync(other.Id, cancellationToken);
-        bool Clear(double x, double y) =>
-            Dist(x, y, goal.X, goal.Y) >= GoalPullOutRadiusMeters
-            && (other is null
-                || (Dist(x, y, other.PoseX, other.PoseY) >= WaitClearanceMeters
-                    && SegmentDistance(x, y, other.PoseX, other.PoseY, goal.X, goal.Y) >= WaitClearanceMeters
-                    && otherPath.All(p => Dist(x, y, p.X, p.Y) >= PathClearanceMeters)));
-        // A queue point: the author put it beside the goal, off the lanes. Clear of the other robot's actual way is enough.
-        bool QueueClear(double x, double y) =>
-            Dist(x, y, goal.X, goal.Y) >= QueueGoalClearanceMeters
-            && (other is null
-                || (Dist(x, y, other.PoseX, other.PoseY) >= WaitClearanceMeters
-                    && (otherPath.Count > 0
-                        ? otherPath.All(p => Dist(x, y, p.X, p.Y) >= OffWayMeters)
-                        : SegmentDistance(x, y, other.PoseX, other.PoseY, goal.X, goal.Y) >= OffWayMeters)));
-        bool PlaceClear(EndpointPoseWithType e) => e.EndpointType == EndpointType.QUEUE ? QueueClear(e.X, e.Y) : Clear(e.X, e.Y);
-
-        var standingAt = endpoints.FirstOrDefault(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= GoalOccupiedRadiusMeters);
-        if (standingAt is not null && WaitPoints.IsStandAside(standingAt, codes) && PlaceClear(standingAt))
-        {
-            return null;
-        }
-
-        // Off the other robot's way: its planned path (or, before it planned, its straight line to the goal) and itself.
-        double FromWay(double x, double y)
-        {
-            if (other is null)
-            {
-                return double.MaxValue;
-            }
-
-            var d = Dist(x, y, other.PoseX, other.PoseY);
-            return otherPath.Count > 0
-                ? Math.Min(d, otherPath.Min(p => Dist(x, y, p.X, p.Y)))
-                : Math.Min(d, SegmentDistance(x, y, other.PoseX, other.PoseY, goal.X, goal.Y));
-        }
-
-        // Standing on any endpoint (a shelf bay too) off its way: wait right there. It is re-checked every tick, and a
-        // farther place only made the robot wander across the floor (MAP-ONE-V013, 2026-11-22: SHELF-C-1, then all the
-        // way to SHELF-A-1 through ZONE-SINGLE-CENTER, while the other robot waited for it).
-        if (standingAt is not null && standingAt.EndpointType != EndpointType.CHARGER && standingAt.Id != goal.Id
-            && Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y) >= GoalPullOutRadiusMeters
-            && FromWay(robot.PoseX, robot.PoseY) >= OffWayMeters)
+        // 1. Where it stands.
+        if (Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y) >= QueueGoalClearanceMeters
+            && MayStop(robot.PoseX, robot.PoseY) && OffWay(robot.PoseX, robot.PoseY, robot.PoseYaw))
         {
             return null;
         }
@@ -267,44 +248,103 @@ public sealed partial class JobExecutionEngine
             .Where(s => s.StepType == StepType.MOVE && s.TargetEndpointId != null
                         && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING)
                         && s.JobTask.JobId != job.Id && s.JobTask.Job.Status == JobStatus.RUNNING)
-            .Select(s => s.OutputValues)
+            .Select(s => new { s.TargetEndpointId, s.OutputValues })
             .ToListAsync(cancellationToken);
-        foreach (var outputs in headed)
+        foreach (var h in headed)
         {
+            targets.Add(h.TargetEndpointId!.Value);
             // Another robot waiting at (or driving to) a wait point holds it.
-            if (outputs.TryGetValue(AreaQueueLegKey, out var leg) && leg.ValueKind == JsonValueKind.String
+            if (h.OutputValues.TryGetValue(AreaQueueLegKey, out var leg) && leg.ValueKind == JsonValueKind.String
                 && endpoints.FirstOrDefault(e => e.Code == leg.GetString()) is { } legEndpoint)
             {
                 targets.Add(legEndpoint.Id);
             }
         }
 
+        bool Free(EndpointPoseWithType e) =>
+            e.IsEnabled && e.EndpointType != EndpointType.CHARGER && e.Id != goal.Id && !targets.Contains(e.Id)
+            && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance));
+        bool Fits(EndpointPoseWithType e) =>
+            Dist(e.X, e.Y, goal.X, goal.Y) >= QueueGoalClearanceMeters && MayStop(e.X, e.Y) && OffWay(e.X, e.Y, e.Yaw);
+
+        // 2. The queue point nearest to the goal, if it serves that goal (close to it): a queue point across the floor is
+        // no place to wait for a shelf (sim 2026-11-23: a drop-off at EP-SHELF-C-1 waited at Queue B next to INBOUND).
         var place = endpoints
-            .Where(e => WaitPoints.IsStandAside(e, codes) && e.Id != goal.Id && !targets.Contains(e.Id)
-                        && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance))
-                        && PlaceClear(e))
-            // A queue point first (the place the map author made for waiting), then the least detour.
-            .OrderBy(e => e.EndpointType == EndpointType.QUEUE ? 0 : 1)
-            .ThenBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y) + Dist(e.X, e.Y, goal.X, goal.Y))
+            .Where(e => e.EndpointType == EndpointType.QUEUE && Free(e) && Fits(e)
+                        && Dist(e.X, e.Y, goal.X, goal.Y) <= QueueServesGoalMeters)
+            .OrderBy(e => Dist(e.X, e.Y, goal.X, goal.Y))
             .FirstOrDefault();
-        if (place is null && FromWay(robot.PoseX, robot.PoseY) < OffWayMeters)
+        // 3. Close by: a parking place / wait point. Never a working endpoint (an INBOUND gate, a shelf): another trip
+        // may need it any moment, and waiting there blocked it (sim 2026-11-23: a robot waited at EP-INBOUND).
+        place ??= endpoints
+            .Where(e => e.EndpointType != EndpointType.QUEUE && WaitPoints.IsStandAside(e, codes) && Free(e) && Fits(e)
+                        && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) <= LentEndpointMaxMeters)
+            .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y))
+            .FirstOrDefault();
+
+        if (place is not null)
         {
-            // No parking place / wait point is clear, and where it stands is in the other robot's way: waiting there locks
-            // both (2026-11-22: RBT-002 at EP-PARKING-B on the only corridor RBT-001 had to take to EP-INBOUND). The
-            // nearest free endpoint off that way.
-            place = endpoints
-                .Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && e.Id != goal.Id && !targets.Contains(e.Id)
-                            && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) > 0.3
-                            // close by only: a far one turned waiting into a trip across the floor
-                            && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) <= LentEndpointMaxMeters
-                            && Dist(e.X, e.Y, goal.X, goal.Y) >= GoalPullOutRadiusMeters
-                            && FromWay(e.X, e.Y) >= OffWayMeters
-                            && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance)))
-                .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y))
-                .FirstOrDefault();
+            return await navigation.GetEndpointPoseAsync(place.Id, cancellationToken);
         }
 
-        return place is null ? null : await navigation.GetEndpointPoseAsync(place.Id, cancellationToken);
+        // 4. In its way and no endpoint fits: step aside to free floor close by. A robot waiting at Queue B for EP-INBOUND
+        // (MAP-ONE-V015) stood on the only way out of the INBOUND dead end; the robot at INBOUND waited for its cells
+        // and it waited for INBOUND: no traffic cycle, so no deadlock retreat ever freed them (sim, 2026-11-23).
+        if (other is not null
+            && await YieldSpotAsync(robot, other, goal, robots, cancellationToken, maxRadius: GoalYieldSpotMaxMeters) is { } spot)
+        {
+            return new EndpointPoseSnapshot(Guid.Empty, job.MapVersionId,
+                FormattableString.Invariant($"spot ({spot.X:F2}, {spot.Y:F2})"), spot.X, spot.Y, spot.Yaw, true, RetreatArrivalToleranceMeters);
+        }
+
+        return null;
+    }
+
+    /// <summary>How far a robot waiting for its goal looks for free floor to step aside to (out of a dead end).</summary>
+    public const double GoalYieldSpotMaxMeters = 2.0;
+
+    /// <summary>Cells and zones a robot standing at (x, y) takes (the traffic's own rule, see TrafficState.ResourcesUnder).</summary>
+    private static HashSet<string> StandingResources(SemanticTrafficPolicy policy, double x, double y, double? yaw, double margin)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.StandingCells(policy, x, y, yaw, margin, set);
+        var zoneRadius = Math.Max(policy.FootprintHalfLength, policy.FootprintHalfWidth);
+        foreach (var z in policy.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, zoneRadius, z.Ring)))
+        {
+            set.Add($"zone:{z.Code}");
+        }
+
+        return set;
+    }
+
+    /// <summary>
+    /// What the other robot still needs: the rest of its planned path (or, before it planned, its straight way to the
+    /// goal) and its body at any heading. Empty without another robot.
+    /// </summary>
+    private async Task<HashSet<string>> OtherWayResourcesAsync(
+        SemanticTrafficPolicy policy, RobotSnapshot? other, EndpointPoseSnapshot goal, double margin, CancellationToken cancellationToken)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        if (other is null)
+        {
+            return set;
+        }
+
+        var path = await ProposedPosesAsync(other.Id, cancellationToken);
+        if (path.IsDefaultOrEmpty && Dist(other.PoseX, other.PoseY, goal.X, goal.Y) > GoalOccupiedRadiusMeters)
+        {
+            var heading = Math.Atan2(goal.Y - other.PoseY, goal.X - other.PoseX);
+            var n = Math.Max(1, (int)Math.Ceiling(Dist(other.PoseX, other.PoseY, goal.X, goal.Y) / 0.05));
+            path = Enumerable.Range(0, n + 1)
+                .Select(i => new SemanticPlanPose(
+                    other.PoseX + (goal.X - other.PoseX) * i / n, other.PoseY + (goal.Y - other.PoseY) * i / n,
+                    i == n ? goal.Yaw : heading))
+                .ToImmutableArray();
+        }
+
+        set.UnionWith(SemanticReservation.WholePathResources(policy, path));
+        SemanticReservation.StandingCells(policy, other.PoseX, other.PoseY, null, margin, set);
+        return set;
     }
 
     /// <summary>
@@ -314,7 +354,8 @@ public sealed partial class JobExecutionEngine
     private async Task<string?> RetreatHoldReasonAsync(JobStep step, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (!step.OutputValues.TryGetValue(RetreatFromStepKey, out var fromStep) || fromStep.ValueKind != JsonValueKind.String
-            || step.OutputValues.ContainsKey(RetreatToKey) || step.OutputValues.ContainsKey(RobotCommandIdKey))
+            || step.OutputValues.ContainsKey(RetreatToKey) || step.OutputValues.ContainsKey(RetreatToPoseKey)
+            || step.OutputValues.ContainsKey(RobotCommandIdKey))
         {
             return null;
         }
@@ -380,6 +421,51 @@ public sealed partial class JobExecutionEngine
         return view is null || view.ProposedPath.IsDefaultOrEmpty
             ? []
             : view.ProposedPath.Select(p => (p.X, p.Y)).ToList();
+    }
+
+    /// <summary>
+    /// A free spot close by (<see cref="YieldSpotMaxMeters"/>) where this robot stands out of the other robot's way:
+    /// none of the cells and zones the other one still needs, nor any another robot holds. Null without a semantic map
+    /// bundle or when nothing close by is free.
+    /// </summary>
+    private async Task<(double X, double Y, double Yaw)?> YieldSpotAsync(
+        RobotSnapshot robot, RobotSnapshot winner, EndpointPoseSnapshot? winnerGoal, IReadOnlyList<RobotSnapshot> others,
+        CancellationToken cancellationToken, double maxRadius = YieldSpotMaxMeters)
+    {
+        var mapDir = trafficOptions?.Value.SemanticMapDirectory?.Trim() ?? "";
+        if (segmentedTraffic is null || string.IsNullOrWhiteSpace(mapDir) || !Directory.Exists(mapDir)
+            || SemanticReservation.TryReadManifestMapVersionId(mapDir) != robot.CurrentMapVersionId
+            || SemanticReservation.TryLoadFromDirectory(mapDir, robot.CurrentMapVersionId, "") is not { } loaded
+            || FreeFloorGrid.TryLoad(mapDir) is not { } grid)
+        {
+            return null;
+        }
+
+        var policy = trafficOptions!.Value.ApplySemanticOverrides(loaded);
+        var margin = Math.Max(0, trafficOptions.Value.LocalizationMarginMeters);
+        var goal = winnerGoal ?? new EndpointPoseSnapshot(Guid.Empty, robot.CurrentMapVersionId, "", winner.PoseX, winner.PoseY, winner.PoseYaw, true);
+        var avoid = await OtherWayResourcesAsync(policy, winner, goal, margin, cancellationToken);
+        var snapshot = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);
+        foreach (var r in snapshot.Robots.Where(r => r.RobotId != robot.Id))
+        {
+            avoid.UnionWith(r.OccupiedResourceIds);
+        }
+
+        var positions = others.Where(o => o.Id != winner.Id).Select(o => (o.PoseX, o.PoseY))
+            .Append((winner.PoseX, winner.PoseY)).ToList();
+        return YieldSpots.Find(policy, grid, robot.PoseX, robot.PoseY, avoid, positions, margin, maxRadius: maxRadius);
+    }
+
+    /// <summary>A robot's proposed traffic path ahead of its pose, with headings; empty when none is known.</summary>
+    private async Task<ImmutableArray<SemanticPlanPose>> ProposedPosesAsync(Guid robotId, CancellationToken cancellationToken)
+    {
+        if (segmentedTraffic is null)
+        {
+            return [];
+        }
+
+        var view = (await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken)).Robots.FirstOrDefault(r => r.RobotId == robotId);
+        return view is null || view.ProposedPath.IsDefaultOrEmpty ? [] : view.ProposedPath;
     }
 
     /// <summary>Endpoints a MOVE of a live Job is driving to or waiting for.</summary>

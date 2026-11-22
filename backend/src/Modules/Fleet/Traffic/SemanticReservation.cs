@@ -154,6 +154,60 @@ public static class SemanticReservation
     }
 
     /// <summary>
+    /// Every grid cell the body of a robot standing still at (x, y) touches, grown by <paramref name="margin"/>. With a
+    /// known heading that is the rectangle of the body at that heading (exact: the cell square and the rectangle
+    /// overlap); without one the circle that covers the body at any heading. A robot that stands still does not turn
+    /// before its next grant (the plan's start reserves the circle then), so the rectangle is all it can touch. The
+    /// circle made two robots parked 0.72 m apart (MAP-ONE-V015 EP-PARKING-A / -B) block each other's way out.
+    /// </summary>
+    public static void StandingCells(
+        SemanticTrafficPolicy policy, double x, double y, double? yaw, double margin, HashSet<string> into)
+    {
+        margin = Math.Max(0, margin);
+        if (yaw is not double heading)
+        {
+            DiscCells(x, y, policy.FootprintRadiusMeters + margin, policy.EffectiveCellSize, into);
+            return;
+        }
+
+        RectCellsExact(x, y, heading, policy.FootprintHalfLength + margin, policy.FootprintHalfWidth + margin,
+            policy.EffectiveCellSize, into);
+    }
+
+    /// <summary>Every grid cell whose square overlaps the oriented rectangle (separating axis test, touching counts).</summary>
+    public static void RectCellsExact(
+        double x, double y, double heading, double halfLength, double halfWidth, double cellSize, HashSet<string> into)
+    {
+        var c = Math.Cos(heading);
+        var s = Math.Sin(heading);
+        var extentX = Math.Abs(c) * halfLength + Math.Abs(s) * halfWidth;
+        var extentY = Math.Abs(s) * halfLength + Math.Abs(c) * halfWidth;
+        var half = cellSize / 2.0;
+        for (var ix = (int)Math.Floor((x - extentX) / cellSize); ix <= (int)Math.Floor((x + extentX) / cellSize); ix++)
+        {
+            for (var iy = (int)Math.Floor((y - extentY) / cellSize); iy <= (int)Math.Floor((y + extentY) / cellSize); iy++)
+            {
+                // World axes: the cell's own extent (half) against the rectangle's projected extent.
+                var dx = (ix + 0.5) * cellSize - x;
+                var dy = (iy + 0.5) * cellSize - y;
+                if (Math.Abs(dx) > half + extentX || Math.Abs(dy) > half + extentY)
+                {
+                    continue;
+                }
+
+                // Rectangle axes: the rectangle's own extent against the cell square projected onto them.
+                var cellOnAxis = half * (Math.Abs(c) + Math.Abs(s));
+                if (Math.Abs(dx * c + dy * s) > halfLength + cellOnAxis || Math.Abs(-dx * s + dy * c) > halfWidth + cellOnAxis)
+                {
+                    continue;
+                }
+
+                into.Add(CellId(ix, iy));
+            }
+        }
+    }
+
+    /// <summary>
     /// Points along the path at most <paramref name="step"/> apart, until the travelled distance passes the horizon.
     /// </summary>
     public static List<(double X, double Y)> SamplePath(ImmutableArray<SemanticPlanPose> poses, double step, double horizon)
@@ -402,14 +456,16 @@ public static class SemanticReservation
     }
 
     /// <summary>
-    /// The robot footprint (any heading) grown by <paramref name="margin"/> no longer touches any of the resources.
+    /// The robot footprint (any heading, or <paramref name="standingYaw"/> for a robot that stands still: see
+    /// <see cref="StandingCells"/>) grown by <paramref name="margin"/> no longer touches any of the resources.
     /// Unknown ids and station bays are never clear here (fail closed).
     /// </summary>
     public static bool IsPhysicallyClearOfResources(
         SemanticTrafficPolicy policy,
         double x, double y,
         IEnumerable<string> resourceIds,
-        double margin)
+        double margin,
+        double? standingYaw = null)
     {
         var radius = policy.FootprintRadiusMeters + Math.Max(0, margin);
         HashSet<string>? under = null;
@@ -429,7 +485,7 @@ public static class SemanticReservation
                 if (under is null)
                 {
                     under = new HashSet<string>(StringComparer.Ordinal);
-                    DiscCells(x, y, radius, policy.EffectiveCellSize, under);
+                    StandingCells(policy, x, y, standingYaw, margin, under);
                 }
 
                 if (under.Contains(rid))
