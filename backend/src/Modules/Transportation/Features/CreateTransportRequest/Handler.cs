@@ -81,7 +81,6 @@ public sealed class CreateTransportRequestHandler(
 
         var containers = await EnsureContainersAsync(details, cancellationToken);
         EnsureContainersAtSource(details, containers);
-        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, endpoints, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
 
@@ -110,6 +109,10 @@ public sealed class CreateTransportRequestHandler(
             transportRequest.WorkflowId,
             TransportRequestSnapshotMapper.ToExecutionSnapshot(transportRequest),
             cancellationToken);
+
+        // Paperwork last: a request that does not fit its workflow says so first, not "make a voucher" for a move that
+        // could never run (e.g. an INTERNAL_RELOCATION to an Outbound gate).
+        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, endpoints, cancellationToken);
 
         // Hold the reservation locks through the atomic write of Request and Details.
         dbContext.TransportRequests.Add(transportRequest);
@@ -410,10 +413,10 @@ public sealed class CreateTransportRequestHandler(
                     throw new DomainValidationException("Select an enabled Inbound gate on the published map.", "inbound_source_not_gate");
                 required.Add((box, StockVoucherType.INBOUND));
             }
-            else if (box is { Status: ContainerStatus.STORED, CurrentStorageLocationId: not null } && !detail.DestinationStorageLocationId.HasValue
-                && !IsOutbound(endpoints[detail.DestinationEndpointId]))
+            else if (box is { Status: ContainerStatus.STORED, CurrentStorageLocationId: not null } && !detail.DestinationStorageLocationId.HasValue)
             {
-                // Keep the old voucher guard for custom workflows to non-shipping points.
+                // Off a shelf to a point that is not a shelf (an Outbound gate above all): only goods a CONFIRMED phiếu
+                // xuất reserved. Delivered at the gate they are ISSUED and their stock comes off the shelf.
                 required.Add((box, StockVoucherType.OUTBOUND));
             }
         }

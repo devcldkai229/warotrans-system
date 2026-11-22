@@ -1,9 +1,10 @@
 # Build context: backend/  ->  docker build -f src/WaroTrans.Evidence/Recorder/Dockerfile -t warotrans-evidence-recorder .
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TARGETARCH
 WORKDIR /src
 COPY src/WaroTrans.BuildingBlocks/ src/WaroTrans.BuildingBlocks/
 COPY src/WaroTrans.Evidence/ src/WaroTrans.Evidence/
-RUN dotnet publish src/WaroTrans.Evidence/Recorder/WaroTrans.Evidence.Recorder.csproj -c Release -o /app --nologo
+RUN dotnet publish src/WaroTrans.Evidence/Recorder/WaroTrans.Evidence.Recorder.csproj -c Release -a $TARGETARCH -o /app --nologo
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app

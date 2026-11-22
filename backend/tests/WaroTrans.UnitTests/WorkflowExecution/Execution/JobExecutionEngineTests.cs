@@ -2525,6 +2525,122 @@ public sealed class JobExecutionEngineTests
         Assert.Equal((1.0, 5.0), (_fleet.Commands[^1].X, _fleet.Commands[^1].Y));
     }
 
+    // ------------------------------------------------------------------ goal queue (wait point = queue point = recovery point)
+
+    private Guid AddStandAside(string code, WaroTrans.Navigation.Enums.EndpointType type, double x, double y)
+    {
+        var id = Guid.NewGuid();
+        _navigation.Poses[id] = new EndpointPoseSnapshot(id, _mapVersionId, code, x, y, 0.0, true);
+        _navigation.OnMap.Add(new EndpointPoseWithType(id, code, code, type, true, x, y, 0.1));
+        return id;
+    }
+
+    [Fact]
+    public async Task A_robot_whose_goal_another_robot_drives_to_waits_at_its_parking_place_until_that_robot_has_pulled_out()
+    {
+        var first = await ProvisionAsync();
+        var second = await ProvisionAnotherAsync();
+        var r2 = _fleet.AddRobot(_mapVersionId);
+        AddStandAside("EP-PARKING-B", WaroTrans.Navigation.Enums.EndpointType.PARK, 5, 5);
+        PlaceRobot(_fleet.RobotId, 0, 0);
+        PlaceRobot(r2, 5, 5);
+
+        await SemanticEngine().StartAsync(first, _fleet.RobotId);
+        await SemanticEngine().StartAsync(second, r2);
+
+        // R2 does not drive up behind R1: it waits at its parking place, no command.
+        Assert.DoesNotContain(_fleet.Commands, c => c.RobotId == r2);
+        var waiting = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.JobTask.JobId == second && s.Status == JobStepStatus.WAITING);
+        Assert.StartsWith("area_queue:GOAL:EP-1", waiting.OutputValues["waitingFor"].GetString());
+
+        // R1 at the pickup: still taken.
+        PlaceRobot(_fleet.RobotId, 1, 2);
+        await SemanticRobotResultAsync(_fleet.Commands.Last(c => c.RobotId == _fleet.RobotId).JobStepId);
+        await WakeAreaWaitsAsync(SemanticEngine());
+        Assert.DoesNotContain(_fleet.Commands, c => c.RobotId == r2);
+
+        // Loaded, on its way to D but still close to the pickup: pulling out, still taken.
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(first), C1, HumanConfirmationSource.StaffApp(_staff));
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(first), C2, HumanConfirmationSource.StaffApp(_staff));
+        PlaceRobot(_fleet.RobotId, 1.6, 2);
+        await WakeAreaWaitsAsync(SemanticEngine());
+        Assert.DoesNotContain(_fleet.Commands, c => c.RobotId == r2);
+
+        // Clear of it: R2 drives to the pickup.
+        PlaceRobot(_fleet.RobotId, 4, 2);
+        await WakeAreaWaitsAsync(SemanticEngine());
+        var go = _fleet.Commands[^1];
+        Assert.Equal(r2, go.RobotId);
+        Assert.Equal((1.0, 2.0), (go.X, go.Y));
+    }
+
+    [Fact]
+    public async Task A_robot_standing_elsewhere_waits_for_its_goal_at_the_free_wait_point_clear_of_the_other_robot()
+    {
+        var first = await ProvisionAsync();
+        var second = await ProvisionAnotherAsync();
+        var r2 = _fleet.AddRobot(_mapVersionId);
+        AddStandAside("EP-WAIT", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 1.2, 0.6);     // on R1's way: not this one
+        AddStandAside("EP-QUEUE-2", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 3, 4);
+        AddStandAside("EP-SHELF-X", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 2.5, 3.5);   // not a wait point
+        PlaceRobot(_fleet.RobotId, 1, 0);
+        PlaceRobot(r2, 5, 6);
+
+        await SemanticEngine().StartAsync(first, _fleet.RobotId);
+        await SemanticEngine().StartAsync(second, r2);
+
+        var toWait = _fleet.Commands[^1];
+        Assert.Equal(r2, toWait.RobotId);
+        Assert.Equal((3.0, 4.0), (toWait.X, toWait.Y));
+
+        // There: the MOVE is not done, it waits at the wait point for its goal.
+        PlaceRobot(r2, 3, 4);
+        await SemanticResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+            toWait.CommandId, r2, "RBT-SIM-02", "NAVIGATE_TO_POSE", "COMPLETED", null, toWait.JobStepId, "SUCCEEDED", null,
+            RobotCommandLifecycleChanged.Phases.Result));
+        var step = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == toWait.JobStepId);
+        Assert.Equal(JobStepStatus.WAITING, step.Status);
+        Assert.Equal("GOAL:EP-1", step.OutputValues[JobExecutionEngine.AreaQueueZoneKey].GetString());
+    }
+
+    [Fact]
+    public async Task An_idle_robot_on_the_goal_is_named_so_it_is_moved_away_and_the_move_waits_until_it_has_left()
+    {
+        var job = await ProvisionAsync();
+        var idle = _fleet.AddRobot(_mapVersionId);
+        AddStandAside("EP-PARKING-A", WaroTrans.Navigation.Enums.EndpointType.PARK, 0, 0);
+        PlaceRobot(idle, 1, 2);                 // no job, left on the goal (a dead-end bay: it needs the way out)
+        PlaceRobot(_fleet.RobotId, 0, 0);
+
+        await SemanticEngine().StartAsync(job, _fleet.RobotId);
+
+        Assert.Empty(_fleet.Commands);
+        var waiting = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Status == JobStepStatus.WAITING && s.StepType == StepType.MOVE);
+        Assert.Equal(idle, waiting.OutputValues[JobExecutionEngine.GoalBlockerKey].GetGuid());
+
+        // RobotCareService sent it off; once it is clear of the goal the MOVE goes.
+        PlaceRobot(idle, 4, 4);
+        await WakeAreaWaitsAsync(SemanticEngine());
+        Assert.Equal((1.0, 2.0), (_fleet.Commands[^1].X, _fleet.Commands[^1].Y));
+    }
+
+    [Theory]
+    [InlineData("EP-WAIT", "Wait", "WAYPOINT", true)]
+    [InlineData("EP-QUEUE-POINT", "Q", "WAYPOINT", true)]
+    [InlineData("EP-RECOVERY-1", "R", "WAYPOINT", true)]
+    [InlineData("EP-SIDE-7", "Side waiting bay", "WAYPOINT", true)]
+    [InlineData("EP-SIDING", "Siding", "WAYPOINT", true)]       // configured
+    [InlineData("EP-WAIT-CHARGE", "Wait", "CHARGER", false)]   // a charger never
+    [InlineData("EP-SHELF-A-1", "Shelf A 1", "WAYPOINT", false)]
+    [InlineData("EP-PARKING-A", "Parking A", "PARK", false)]     // parking: stand-aside, not a wait point
+    public void One_rule_says_what_a_wait_point_is(string code, string name, string type, bool waitPoint)
+    {
+        var e = new EndpointPoseWithType(Guid.NewGuid(), code, name, Enum.Parse<WaroTrans.Navigation.Enums.EndpointType>(type), true, 0, 0, 0.1);
+        var configured = WaroTrans.WorkflowExecution.Services.WaitPoints.ConfiguredCodes("EP-QUEUE-POINT", " EP-SIDING ,");
+        Assert.Equal(waitPoint, WaroTrans.WorkflowExecution.Services.WaitPoints.Is(e, configured));
+        Assert.Equal(waitPoint || type == "PARK", WaroTrans.WorkflowExecution.Services.WaitPoints.IsStandAside(e, configured));
+    }
+
     // ------------------------------------------------------------------ Semantic traffic mode (Nav2 plans, backend grants)
 
     /// <summary>

@@ -82,3 +82,16 @@ Joystick và xác nhận bằng nút robot đang tắt mặc định. `mobileCap
 - [ ] **Bàn giao và ngoại lệ.** Dùng hai tài khoản Staff để kiểm tra mở lượt MOVE +10 giây, ưu tiên zone, claim đồng thời, nhả lượt trước Begin, giữ lượt sau Begin và mở tin cũ. Thử Confirm All, Issue chặn xác nhận, Issue + Pause, quyền Resume, hazard và recovery đủ manifest. Kiểm tra TR bị hủy giữa lúc đang chuyển hàng.
 - [ ] **Bản đồ native.** Trên iPhone 12, thử pan/pinch/Fit/Follow, đổi bản đồ, pose cũ và asset hết hạn. Đo FPS và độ ổn định liên tục ít nhất 10 phút với số robot dự kiến demo. Mục tiêu gesture là 60 FPS.
 - [ ] **Robot thật.** Ghi kết quả riêng cho `RBT-001` và `RBT-002` cùng cấu hình sức chở. Khi gateway sẵn sàng, kiểm thử bấm nút theo lượt/version và case đang chờ, thao tác lặp hoặc đến muộn, dừng an toàn, deadman và ngắt joystick khi khóa màn hình/ra nền/mất kết nối. Dùng kết quả trên thiết bị thật để đóng các mục này.
+
+## Running against the local backend or the AWS demo
+
+The app reads the backend address from `EXPO_PUBLIC_API_URL`.
+
+| Where | How | Backend |
+|---|---|---|
+| Local (unchanged) | `app/.env` = `EXPO_PUBLIC_API_URL=http://localhost:5090`, then `npx expo start`, open in Expo Go | the laptop Host; on a phone `localhost` is replaced by the Metro host's LAN address |
+| AWS demo, from Expo Go | put `EXPO_PUBLIC_API_URL=https://d3pchn7po42i3p.cloudfront.net` in `app/.env`, restart `npx expo start -c` | the demo (only while the lab is on) |
+| AWS demo, installable APK | `npx eas-cli login`, `npx eas-cli init` (once), `npx eas-cli build -p android --profile preview` | `eas.json` sets the demo URL; `app/.env` is not committed, so it never reaches the cloud build |
+
+The demo answers only while the lab is on (`infrastructure/terraform/scripts/lab.sh start`). With the lab off, every
+API call fails.

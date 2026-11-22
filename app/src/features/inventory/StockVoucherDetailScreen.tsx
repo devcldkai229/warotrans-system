@@ -12,10 +12,10 @@ import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
 import { getActiveMapVersion, getMapVersionDetail } from '../../shared/api/navigationApi';
-import { addStockVoucherLines, cancelStockVoucher, confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
+import { addStockVoucherLines, cancelStockVoucher, closeStockVoucherShort, confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
-import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text } from '../../shared/ui';
+import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text, TextField } from '../../shared/ui';
 import {
   clearPendingBatch,
   inboundBatchProblem,
@@ -52,6 +52,8 @@ export function StockVoucherDetailScreen() {
   const [scanning, setScanning] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [closingShort, setClosingShort] = useState(false);
+  const [closeReason, setCloseReason] = useState('');
   const [actionError, setActionError] = useState<string | null>(() => typeof params?.batchError === 'string' ? params.batchError : null);
   const alive = useRef(true);
   const pending = useRef(false);
@@ -60,6 +62,11 @@ export function StockVoucherDetailScreen() {
   useEffect(() => { setActionError(typeof params?.batchError === 'string' ? params.batchError : null); setConfirmingCancel(false); }, [voucherId, params?.batchError]);
   useEffect(() => { if (data && data.status !== 'DRAFT') setConfirmingCancel(false); }, [data?.status]);
 
+  /** Lines still waiting for a robot: not done and not dropped when the voucher was closed short. */
+  const openLines = useMemo(() => (data?.lines ?? []).filter(line => !line.done && !line.closedShort), [data?.lines]);
+  /** Open lines whose Container is where the trip starts (received for inbound, on its shelf for outbound). */
+  const dispatchLines = useMemo(() => openLines.filter(line => (data?.type === 'INBOUND'
+    ? line.containerStatus === 'CREATED' || line.containerStatus === 'PACKED' : line.containerStatus === 'STORED')), [openLines, data?.type]);
   const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
   const hasPendingBatch = Boolean(
     data && inbound && data.status === 'DRAFT' && !data.lines.length && prep.ready
@@ -200,6 +207,31 @@ export function StockVoucherDetailScreen() {
     }
   };
 
+  /** A CONFIRMED voucher whose remaining Containers will not be moved: close those lines and keep what is done. */
+  const closeShort = async () => {
+    if (pending.current || acting || !data || data.status !== 'CONFIRMED' || !closeReason.trim() || !canCreateVoucher(session)) {
+      return;
+    }
+    pending.current = true; setActing(true); setActionError(null);
+    const controller = new AbortController(); request.current = controller;
+    try {
+      const closed = await closeStockVoucherShort(data.id, closeReason, controller.signal);
+      if (!alive.current || controller.signal.aborted) return;
+      setClosingShort(false); setCloseReason('');
+      client.setQueryData(['stock-voucher', session?.id, data.id], closed);
+      void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+      void client.invalidateQueries({ queryKey: ['inventory-containers'] });
+      void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
+    } catch (failure) {
+      if (!alive.current || controller.signal.aborted) return;
+      if (uncertainDraftWrite(failure)) void query.refetch();
+      setActionError(getUserErrorMessage(failure, 'The voucher could not be closed. Try again.'));
+    } finally {
+      pending.current = false;
+      if (alive.current) setActing(false);
+    }
+  };
+
   const cancelDraft = async () => {
     if (pending.current || acting || !data || data.status !== 'DRAFT' || !canCreateVoucher(session)) {
       return;
@@ -252,12 +284,29 @@ export function StockVoucherDetailScreen() {
               {!!data.referenceNo && <View style={styles.flex}><Text variant="caption" color="textSecondary">Reference</Text><Text variant="bodyMedium" selectable>{data.referenceNo}</Text></View>}
               {!!data.note && <Text variant="body" color="textSecondary">{data.note}</Text>}
               {!!data.confirmedAt && <Text variant="caption" color="textSecondary">{t('Confirmed {date}', { date: voucherDate(data.confirmedAt) })}</Text>}
-              {data.status === 'CONFIRMED' && <Text variant="caption" color="textSecondary">{data.stockPostedAt ? t('Stock posted {date}', { date: voucherDate(data.stockPostedAt) }) : 'Stock posting status is unavailable.'}</Text>}
+              {data.status === 'CONFIRMED' && <Text variant="caption" color="textSecondary">{t('{done}/{total} done', { done: data.doneCount, total: data.containerCount })} · {inbound
+                ? t('Stock is added as robots put each container on a shelf.')
+                : t('Stock comes off each shelf when a robot delivers the container to an Outbound gate.')}</Text>}
+              {!!data.completedAt && <Text variant="caption" color="textSecondary">{t('Completed {date}', { date: voucherDate(data.completedAt) })}</Text>}
+              {!!data.closedShortAt && <Text variant="caption" color="warningText">{t('Closed short {date}: {reason}', { date: voucherDate(data.closedShortAt), reason: data.closedShortReason ?? '' })}</Text>}
               {!!data.cancelledAt && <Text variant="caption" color="textSecondary">{t('Cancelled {date}', { date: voucherDate(data.cancelledAt) })}</Text>}
-              {/* A confirmed inbound voucher with containers still to put away: dispatch robots from the receiving point. */}
-              {inbound && data.status === 'CONFIRMED' && data.lines.some(line => !line.done) ? <Button
-                title="Dispatch Robots To Put Away" icon={Truck} fullWidth
-                onPress={() => navigate('transport_create', { workflow: 'inbound', containers: data.lines.filter(line => !line.done && (!checked.length || checked.includes(line.containerBarcode))).map(line => line.containerBarcode) })} /> : null}
+              {/* A confirmed voucher with containers still to move: dispatch robots (put away, or ship to an Outbound gate). */}
+              {data.status === 'CONFIRMED' && dispatchLines.length ? <Button
+                title={inbound ? 'Dispatch Robots To Put Away' : 'Dispatch Robots To Ship'} icon={Truck} fullWidth
+                onPress={() => navigate('transport_create', { workflow: inbound ? 'inbound' : 'outbound', containers: dispatchLines.filter(line => !checked.length || checked.includes(line.containerBarcode)).map(line => line.containerBarcode) })} /> : null}
+              {data.status === 'CONFIRMED' && openLines.length && canCreateVoucher(session) ? (closingShort ? (
+                <View style={styles.error}>
+                  <Text variant="caption" color="warningText">{t('{count} containers not done will leave this voucher. Containers already done keep their stock.', { count: openLines.length })}</Text>
+                  <TextField accessibilityLabel="Reason for closing short" placeholder="Reason (required)" value={closeReason} onChangeText={setCloseReason} editable={!acting} maxLength={500} />
+                  <View style={styles.row}>
+                    <Button title="Keep Open" variant="outline" size="sm" style={styles.flex} disabled={acting} onPress={() => { setClosingShort(false); setCloseReason(''); }} />
+                    <Button title="Close Short" variant="danger" size="sm" style={styles.flex} loading={acting} disabled={acting || query.isError || !closeReason.trim()} onPress={() => { void closeShort(); }} />
+                  </View>
+                </View>
+              ) : (
+                <Button title="Close Voucher Short" variant="outline" size="sm" disabled={acting || query.isError} onPress={() => { setActionError(null); setClosingShort(true); }} />
+              )) : null}
+              {data.status !== 'DRAFT' && actionError ? <Text variant="caption" color="dangerText" accessibilityRole="alert">{actionError}</Text> : null}
               {data.status !== 'CANCELLED' && data.lines.length ? <Button title={checked.length ? t('Scan Containers ({done}/{total} checked)', { done: checked.length, total: data.lines.length }) : 'Scan Containers To Check'}
                 icon={ScanLine} variant="outline" fullWidth onPress={() => setScanning(true)} /> : null}
               <Button title={showCode ? 'Hide Voucher Code' : 'Show Voucher Code'} icon={QrCode} variant="ghost" size="sm" onPress={() => setShowCode(value => !value)} />
@@ -290,6 +339,7 @@ export function StockVoucherDetailScreen() {
                 <View style={styles.summaryInfo}>
                   <View style={styles.between}>{checked.includes(line.containerBarcode) ? <CheckCircle2 size={16} color={colors.success} /> : null}<Text variant="code" selectable style={{ flex: 1 }}>{line.containerBarcode}</Text><StatusPill status={line.containerStatus} /></View>
                   <Text variant="bodyMedium" numberOfLines={1}>{line.productName}</Text>
+                  {line.closedShort ? <Text variant="caption" color="warningText">Closed Short</Text> : null}
                   <Text variant="caption" color="textSecondary" numberOfLines={1}>
                     {line.productSku}
                     {line.contentsQuantity != null && line.contentsUnit ? ` · ${line.contentsQuantity} ${line.contentsUnit}` : ''}
@@ -359,7 +409,7 @@ export function StockVoucherDetailScreen() {
                   disabled={!canCreateVoucher(session) || !mobileCapabilities.confirmStockVoucher || acting || query.isError}
                   onPress={() => { void confirmVoucher(); }} />
               </> : <>
-                <Text variant="caption" color="textSecondary">{inbound ? 'Allocate container barcodes on the server before confirming inbound stock.' : 'Select staged containers at Outbound before confirming outbound stock.'}</Text>
+                <Text variant="caption" color="textSecondary">{inbound ? 'Allocate container barcodes on the server before confirming inbound stock.' : 'Select containers on shelves before confirming the outbound voucher.'}</Text>
                 <Button title={inbound ? 'Confirm Inbound Voucher' : 'Confirm Outbound Voucher'} fullWidth disabled onPress={() => {}} />
               </>}
             </View>;

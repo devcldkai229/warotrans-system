@@ -1,4 +1,4 @@
-# Required checks (early stage): backend, frontend-web, frontend-app, infrastructure (Terraform is kept out of the repo)
+# Required checks (early stage): backend, frontend-web, frontend-app, infrastructure, terraform, images. Nothing here deploys.
 # Trigger: PR feature/* → develop (fast feedback; no DB/tests yet)
 
 name: PR Check
@@ -72,3 +72,44 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose config
       - run: docker compose --profile evidence config --quiet
+
+  terraform:
+    name: Terraform fmt/validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.5"
+      - run: terraform fmt -check -recursive infrastructure/terraform
+      - name: validate every stack (no backend, no AWS credentials)
+        run: |
+          for d in bootstrap/state-backend envs/dev envs/demo/persistent envs/demo/runtime envs/demo/edge; do
+            echo "== $d"
+            terraform -chdir=infrastructure/terraform/$d init -backend=false -input=false >/dev/null
+            terraform -chdir=infrastructure/terraform/$d validate
+          done
+      - name: shell scripts parse
+        run: for f in infrastructure/terraform/scripts/*.sh; do bash -n "$f"; done
+
+  images:
+    name: Docker images build (linux/arm64)
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - { name: system, file: src/WaroTrans.Host/Dockerfile, target: "" }
+          - { name: evidence-recorder, file: src/WaroTrans.Evidence/Recorder/Dockerfile, target: "" }
+          - { name: evidence-worker, file: src/WaroTrans.Evidence/Worker/Dockerfile, target: runtime }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/${{ matrix.file }}
+          target: ${{ matrix.target }}
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

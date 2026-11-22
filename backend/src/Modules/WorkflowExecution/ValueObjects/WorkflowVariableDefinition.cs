@@ -15,4 +15,15 @@ public sealed class WorkflowVariableDefinition
     public JsonElement? ConfiguredValue { get; set; }
     public string? Description { get; set; }
     public int SequenceNo { get; set; }
+
+    /// <summary>
+    /// How a UUID variable is edited, nothing more: <see cref="WaypointFormat"/> = an Endpoint of the published map,
+    /// picked from a list. The value stays the Endpoint's UUID for the workflow and the runtime.
+    /// </summary>
+    public string? Format { get; set; }
+
+    public const string WaypointFormat = "WAYPOINT";
+
+    /// <summary>A UUID of an EndpointGroup: a MOVE to it goes to a free member, picked when the step starts.</summary>
+    public const string WaypointGroupFormat = "WAYPOINT_GROUP";
 }

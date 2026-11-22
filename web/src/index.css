@@ -96,8 +96,11 @@
   --radius-xl: 16px;
 
   --shadow-*: initial;
-  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.2), 0 12px 28px rgb(0 0 0 / 0.35);
-  --shadow-modal: 0 0 0 1px rgb(255 255 255 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.7);
+  /* Through runtime variables (set per theme in the base layer): Tailwind copies a theme shadow's literal value into the
+     utility, so a light-theme override of --shadow-float itself never reached .shadow-float and light pages got the
+     dark theme's heavy black shadows (stacked map callouts turned into a black blot). */
+  --shadow-float: var(--app-shadow-float);
+  --shadow-modal: var(--app-shadow-modal);
 
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
 
@@ -132,6 +135,8 @@
   :root {
     /* Occupancy images are black walls on a white floor: in the dark theme they are flipped to light walls on dark. */
     --map-image-filter: invert(0.88) brightness(0.62);
+    --app-shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.2), 0 12px 28px rgb(0 0 0 / 0.35);
+    --app-shadow-modal: 0 0 0 1px rgb(255 255 255 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.7);
   }
 
   /* Light theme: Facebook-style white cards on a light grey page. */
@@ -175,8 +180,8 @@
     --color-rose-ink: #a61e4d;
     --color-rose-soft: rgb(214 51 108 / 0.12);
 
-    --shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.08), 0 12px 28px rgb(0 0 0 / 0.12);
-    --shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.35);
+    --app-shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.08), 0 12px 28px rgb(0 0 0 / 0.12);
+    --app-shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.35);
     --map-image-filter: none;
   }
 

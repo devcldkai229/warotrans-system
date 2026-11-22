@@ -62,8 +62,43 @@ internal sealed class EvidenceEventCapture(
     public Task HandleAsync(JobStepStatusChanged e, CancellationToken ct = default) =>
         Guarded(e, async () =>
             await JobAsync(e.JobId, ct) is { TransportRequestId: not null } job
-                ? Envelope(e, EvidenceEventTypes.JobStepStatusChanged, job, jobStepId: e.JobStepId, status: e.Status)
+                ? Envelope(e, EvidenceEventTypes.JobStepStatusChanged, job, jobStepId: e.JobStepId, status: e.Status,
+                    payload: await StepPayloadAsync(e, ct))
                 : null, ct);
+
+    /// <summary>
+    /// The event plus what the replay shows for the step (type, name, "4/9", target endpoint). Extra fields only: a
+    /// lookup that finds nothing leaves the plain event.
+    /// </summary>
+    private async Task<JsonElement> StepPayloadAsync(JobStepStatusChanged e, CancellationToken ct)
+    {
+        var payload = JsonSerializer.SerializeToNode(e, EvidenceOutboxWriter.Json)!.AsObject();
+        if (await jobs.GetStepAsync(e.JobStepId, ct) is { } step)
+        {
+            payload["stepType"] = step.StepType;
+            payload["stepName"] = step.StepName;
+            payload["taskName"] = step.TaskName;
+            payload["stepPosition"] = step.Position;
+            payload["stepCount"] = step.StepCount;
+            if (step.Purpose is not null)
+            {
+                payload["purpose"] = step.Purpose;
+            }
+
+            if (step.OperationCode is not null)
+            {
+                payload["operationCode"] = step.OperationCode;
+            }
+            if (step.TargetEndpointId is { } endpointId
+                && (await navigation.GetEndpointsAsync([endpointId], ct)).FirstOrDefault() is { } endpoint)
+            {
+                payload["targetEndpointCode"] = endpoint.Code;
+                payload["targetEndpointName"] = endpoint.Name;
+            }
+        }
+
+        return JsonSerializer.SerializeToElement(payload, EvidenceOutboxWriter.Json);
+    }
 
     public Task HandleAsync(JobContainerStatusChanged e, CancellationToken ct = default) =>
         Guarded(e, async () =>

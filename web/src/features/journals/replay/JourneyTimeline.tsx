@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { Annotation, EvidenceEvent, RecordingSpans, ReplayRun } from '@/shared/api/evidence'
 import { t } from '@/shared/i18n'
 import { cx } from '@/shared/lib/cx'
-import { footage, formatElapsed, fraction, ms } from './replayModel'
+import { footage, formatElapsed, fraction, ms, type StepSpan, type VideoHole } from './replayModel'
 
 interface JourneyTimelineProps {
   fromMs: number
@@ -13,6 +13,11 @@ interface JourneyTimelineProps {
   spansByRecording: Record<string, RecordingSpans | undefined>
   events: EvidenceEvent[]
   annotations: Annotation[]
+  /** The trips' steps; each run shows those of its own Job on a row under it. */
+  steps: StepSpan[]
+  activeStepId: string | null
+  /** Stretches of each run without picture: amber hatching on the video bar, click to go to where video resumes. */
+  holesByRun?: Record<string, VideoHole[]>
   selectedRunId: string | null
   onSelectRun: (runId: string) => void
   onSeek: (t: number) => void
@@ -26,6 +31,21 @@ export const SEVERITY_COLOR: Record<string, string> = {
 }
 
 export const NOTE_COLOR = '#9333ea'
+
+/** Step blocks: driving in the run's colour, waiting for people in amber, everything else (checks, scans) grey. */
+export const STEP_TYPE_COLOR: Record<string, string> = {
+  HUMAN_INTERACTION: '#f59e0b',
+}
+export const STEP_OTHER_COLOR = '#94a3b8'
+
+export const stepColor = (type: string | null, runColor: string) =>
+  type === 'MOVE' ? runColor : (type && STEP_TYPE_COLOR[type]) || STEP_OTHER_COLOR
+
+/** Steps of a run: those of its Job; on journals whose events carry no job, every step goes to the only run. */
+export function stepsOfRun(steps: StepSpan[], run: ReplayRun, runCount: number): StepSpan[] {
+  const own = steps.filter((s) => s.jobId != null && s.jobId === run.sourceJobId)
+  return own.length > 0 || runCount > 1 ? own : steps
+}
 
 const clock = (time: number) =>
   new Date(time).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -44,6 +64,9 @@ export function JourneyTimeline({
   spansByRecording,
   events,
   annotations,
+  steps,
+  activeStepId,
+  holesByRun = {},
   selectedRunId,
   onSelectRun,
   onSeek,
@@ -104,7 +127,11 @@ export function JourneyTimeline({
             <span className="size-2.5 shrink-0 rounded-full" style={{ background: colors[lane % colors.length] }} />
             <span className="truncate font-mono">{run.robotCode}</span>
           </button>
-        ))}
+        )).flatMap((button, lane) =>
+          stepsOfRun(steps, runs[lane]!, runs.length).length > 0
+            ? [button, <span key={`${runs[lane]!.id}-steps`} className="flex h-7 items-center pl-6 text-muted">{t('Steps')}</span>]
+            : [button],
+        )}
         {annotations.length > 0 ? <span className="flex h-6 items-center px-2 text-muted">{t('Notes')}</span> : null}
       </div>
 
@@ -145,8 +172,10 @@ export function JourneyTimeline({
           const color = colors[lane % colors.length]
           const start = ms(run.startedAtUtc) ?? fromMs
           const end = ms(run.endedAtUtc) ?? toMs
+          const runSteps = stepsOfRun(steps, run, runs.length)
           return (
-            <div key={run.id} className="relative h-9 border-t border-outline-variant/60">
+            <div key={run.id}>
+            <div className="relative h-9 border-t border-outline-variant/60">
               {/* The trip */}
               <div
                 className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full opacity-30"
@@ -163,6 +192,27 @@ export function JourneyTimeline({
                   />
                 )),
               )}
+              {/* No video: amber hatching where the run has no picture */}
+              {(holesByRun[run.id] ?? []).map((h) => {
+                const a = fraction(h.fromMs, fromMs, toMs)
+                const b = fraction(h.toMs, fromMs, toMs)
+                return (
+                  <button
+                    key={`hole-${h.fromMs}`}
+                    type="button"
+                    data-mark
+                    data-testid="video-hole-mark"
+                    title={`${clock(h.fromMs)} → ${clock(h.toMs)} · ${t('No video')} (${formatElapsed(h.toMs - h.fromMs)})`}
+                    onClick={() => onSeek(h.nextVideoMs ?? h.fromMs)}
+                    className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"
+                    style={{
+                      left: `${a * 100}%`,
+                      width: `max(3px, ${Math.max(0, b - a) * 100}%)`,
+                      background: 'repeating-linear-gradient(135deg, rgb(245 158 11 / 0.85) 0 3px, rgb(245 158 11 / 0.25) 3px 6px)',
+                    }}
+                  />
+                )
+              })}
               {/* Incidents */}
               {events
                 .filter((e) => e.runId === run.id && e.severity !== 'INFO')
@@ -177,6 +227,39 @@ export function JourneyTimeline({
                     style={{ left: left(Date.parse(e.occurredAtUtc)), background: SEVERITY_COLOR[e.severity] ?? '#94a3b8' }}
                   />
                 ))}
+            </div>
+            {runSteps.length > 0 ? (
+              <div className="relative h-7" data-testid="step-lane">
+                {runSteps.map((s) => {
+                  const a = fraction(s.startMs, fromMs, toMs)
+                  const b = fraction(s.endMs ?? Math.max(cursorMs, s.startMs), fromMs, toMs)
+                  const active = s.stepId === activeStepId
+                  const label = `${s.position != null && s.count != null ? `${s.position}/${s.count} ` : ''}${s.name}${s.targetCode ? ` · ${s.targetCode}` : ''}`
+                  return (
+                    <button
+                      key={s.stepId}
+                      type="button"
+                      data-mark
+                      data-step-id={s.stepId}
+                      data-active={active || undefined}
+                      title={`${clock(s.startMs)} · ${label} · ${formatElapsed((s.endMs ?? cursorMs) - s.startMs)}`}
+                      aria-label={label}
+                      onClick={() => onSeek(s.startMs)}
+                      className={cx(
+                        'absolute top-1/2 h-4 -translate-y-1/2 rounded-[3px] border border-container transition-[opacity,box-shadow]',
+                        active ? 'z-10 opacity-100 shadow-[0_0_0_2px_var(--color-ink)]' : 'opacity-55 hover:opacity-90',
+                        s.status === 'FAILED' && 'bg-[repeating-linear-gradient(45deg,transparent_0_3px,rgba(0,0,0,.25)_3px_6px)]',
+                      )}
+                      style={{
+                        left: `${a * 100}%`,
+                        width: `max(4px, ${Math.max(0, b - a) * 100}%)`,
+                        backgroundColor: s.status === 'FAILED' ? SEVERITY_COLOR.ERROR : stepColor(s.type, color),
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            ) : null}
             </div>
           )
         })}

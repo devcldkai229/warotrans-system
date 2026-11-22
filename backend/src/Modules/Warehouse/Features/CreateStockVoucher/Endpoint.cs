@@ -18,8 +18,11 @@ public static class CreateStockVoucherEndpoint
             return Results.Created($"/api/warehouse/stock-vouchers/{response.Id}", response);
         })
         .WithName("CreateStockVoucher")
-        .WithSummary("Open a DRAFT inbound or outbound stock voucher")
-        .WithDescription("Code is generated: PN-YYYYMMDD-SEQ6 for INBOUND, PX-YYYYMMDD-SEQ6 for OUTBOUND.")
+        .WithSummary("Open an inbound or outbound stock voucher, as a DRAFT or confirmed at once")
+        .WithDescription("Code is generated: PN-YYYYMMDD-SEQ6 for INBOUND, PX-YYYYMMDD-SEQ6 for OUTBOUND. " +
+            "containerIds adds those Containers in the same call; confirm=true (with containerIds) confirms it too, so it " +
+            "is born CONFIRMED. It becomes COMPLETED by itself once every Container is on a shelf (INBOUND) or issued at an " +
+            "Outbound gate (OUTBOUND).")
         .RequirePermission(Permissions.VoucherWrite);
 
         return group;

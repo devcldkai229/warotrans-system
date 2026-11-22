@@ -16,6 +16,47 @@ internal sealed class JobEvidenceQuery(WorkflowExecutionDbContext db) : IJobEvid
             .Select(s => (Guid?)s.JobTask.JobId)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<JobStepEvidenceView?> GetStepAsync(Guid jobStepId, CancellationToken cancellationToken = default)
+    {
+        var jobId = await GetJobIdOfStepAsync(jobStepId, cancellationToken);
+        if (jobId is null)
+        {
+            return null;
+        }
+
+        var steps = await (
+                from step in db.JobSteps.AsNoTracking()
+                join task in db.JobTasks.AsNoTracking() on step.JobTaskId equals task.Id
+                join definition in db.WorkflowSteps.AsNoTracking() on step.WorkflowStepId equals definition.Id
+                join taskDefinition in db.WorkflowTasks.AsNoTracking() on task.WorkflowTaskId equals taskDefinition.Id
+                where task.JobId == jobId
+                orderby task.SequenceNo, step.SequenceNo
+                select new
+                {
+                    step.Id,
+                    step.StepType,
+                    definition.Name,
+                    TaskName = taskDefinition.Name,
+                    step.TargetEndpointId,
+                    step.ResolvedInputs,
+                    definition.Config
+                })
+            .ToListAsync(cancellationToken);
+        var index = steps.FindIndex(s => s.Id == jobStepId);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        var found = steps[index];
+        var purpose = found.ResolvedInputs.TryGetValue("purpose", out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+        var operation = string.IsNullOrWhiteSpace(found.Config?.OperationCode) ? null : found.Config.OperationCode;
+        return new JobStepEvidenceView(found.Id, found.StepType.ToString(), found.Name, found.TaskName, index + 1, steps.Count,
+            found.TargetEndpointId, purpose, operation);
+    }
+
     public async Task<IReadOnlyList<JobEvidenceContext>> GetJobsOfRequestAsync(
         Guid transportRequestId, CancellationToken cancellationToken = default)
     {

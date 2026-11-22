@@ -46,6 +46,7 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                 l.ContainerId == c.Id
                 && l.StockVoucher.Type == type
                 && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED
+                && l.ClosedShortAt == null
                 && l.StockVoucher.WarehouseId == request.WarehouseId));
         }
 
@@ -64,7 +65,7 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
         // Newest confirmed voucher first when filtering by voucher: the phiếu just made comes on top.
         var ordered = byVoucher
             ? query.OrderByDescending(c => db.StockVoucherLines
-                    .Where(l => l.ContainerId == c.Id && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED)
+                    .Where(l => l.ContainerId == c.Id && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED && l.ClosedShortAt == null)
                     .Max(l => l.StockVoucher.ConfirmedAt))
                 .ThenBy(c => c.Barcode)
             : query.OrderBy(c => c.Barcode);
@@ -87,10 +88,10 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                 false, null, c.ContentsQuantity, c.ContentsUnit))
             .ToListAsync(cancellationToken);
 
-        // The latest voucher each Container is on (cancelled ones do not count).
+        // The latest voucher each Container is on (cancelled ones and lines closed short do not count).
         var ids = items.Select(i => i.Id).ToList();
         var vouchers = (await db.StockVoucherLines.AsNoTracking()
-                .Where(l => ids.Contains(l.ContainerId) && l.StockVoucher.Status != StockVoucherStatus.CANCELLED)
+                .Where(l => ids.Contains(l.ContainerId) && l.StockVoucher.Status != StockVoucherStatus.CANCELLED && l.ClosedShortAt == null)
                 .Select(l => new
                 {
                     l.ContainerId,

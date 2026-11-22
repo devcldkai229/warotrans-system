@@ -272,4 +272,6 @@ export const vi_requests: Record<string, string> = {
   'Robot not localized': 'Robot chưa định vị',
   'Already parked': 'Đã ở bãi đậu',
   'Robot on another job': 'Robot đang làm việc khác',
+  'Set by the workflow': 'Do quy trình quy định',
+  'Endpoint not on this map': 'Điểm không có trên bản đồ này',
 }

@@ -11,6 +11,10 @@ public interface IJobEvidenceQuery
     /// <summary>The Job a step belongs to.</summary>
     Task<Guid?> GetJobIdOfStepAsync(Guid jobStepId, CancellationToken cancellationToken = default);
 
+    /// <summary>What a step is (type, name, place in the trip, target endpoint), for the replay's step lane. Default: unknown.</summary>
+    Task<JobStepEvidenceView?> GetStepAsync(Guid jobStepId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<JobStepEvidenceView?>(null);
+
     /// <summary>Every trip (Job) of a transport request, with all its robot assignments.</summary>
     Task<IReadOnlyList<JobEvidenceContext>> GetJobsOfRequestAsync(Guid transportRequestId, CancellationToken cancellationToken = default);
 }
@@ -24,6 +28,21 @@ public sealed record JobEvidenceContext(
     Guid? TransportRequestId,
     IReadOnlyList<Guid> ContainerIds,
     IReadOnlyList<JobRobotAssignmentView> Assignments);
+
+/// <param name="Position">1-based place of the step in the whole trip (tasks in order, then steps in order).</param>
+/// <param name="StepCount">Number of steps of the trip.</param>
+/// <param name="Purpose">What a MOVE goes for, as resolved (PICKUP, DROPOFF …); null when the step has none.</param>
+/// <param name="OperationCode">What a staff step confirms (PICKUP_CONFIRM, DROPOFF_CONFIRM …); null when none.</param>
+public sealed record JobStepEvidenceView(
+    Guid JobStepId,
+    string StepType,
+    string StepName,
+    string TaskName,
+    int Position,
+    int StepCount,
+    Guid? TargetEndpointId,
+    string? Purpose = null,
+    string? OperationCode = null);
 
 public sealed record JobRobotAssignmentView(
     Guid AssignmentId,

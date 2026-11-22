@@ -34,8 +34,26 @@ export const VOUCHER_TYPE_TONE: Record<StockVoucherType, Tone> = {
 
 export const VOUCHER_STATUS_TONE: Record<StockVoucherStatus, Tone> = {
   DRAFT: 'amber',
-  CONFIRMED: 'green',
+  CONFIRMED: 'blue',
+  COMPLETED: 'green',
   CANCELLED: 'grey',
+}
+
+export const VOUCHER_STATUS_LABEL: Record<StockVoucherStatus, string> = {
+  DRAFT: t('Draft'),
+  CONFIRMED: t('Confirmed'),
+  COMPLETED: t('Completed'),
+  CANCELLED: t('Cancelled'),
+}
+
+/**
+ * A line a robot can be sent for now: open (not done, not closed short) and its Container where that trip starts —
+ * received and not shelved (inbound) or on its shelf (outbound). One still recorded on a robot (IN_TRANSIT) or on hold
+ * needs Recover first.
+ */
+export function dispatchableLine(type: StockVoucherType, line: { done: boolean; closedShort?: boolean; containerStatus: string }) {
+  if (line.done || line.closedShort) return false
+  return type === 'INBOUND' ? line.containerStatus === 'CREATED' || line.containerStatus === 'PACKED' : line.containerStatus === 'STORED'
 }
 
 /** What "done" means for a line: on a shelf for inbound, issued for outbound. */

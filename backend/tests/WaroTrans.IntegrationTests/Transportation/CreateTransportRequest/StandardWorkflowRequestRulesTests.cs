@@ -38,7 +38,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     [Fact]
     public async Task Outbound_of_two_containers_from_two_shelves_runs_through_the_published_steps()
     {
-        var floor = await SeedFloorAsync();
+        var floor = await SeedFloorAsync(outboundVoucher: true);
         var workflows = await SeedWorkflowsAsync();
 
         var created = await Client.PostAsJsonAsync(Route, Body(floor, workflows["OUTBOUND_RETRIEVAL"],
@@ -150,7 +150,8 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     private async Task<Dictionary<string, Guid>> SeedWorkflowsAsync()
     {
         await using var scope = Factory.Services.CreateAsyncScope();
-        var outcomes = await scope.ServiceProvider.GetRequiredService<StandardWorkflowSeeder>().SeedAsync(false, CancellationToken.None);
+        var outcomes = await scope.ServiceProvider.GetRequiredService<StandardWorkflowSeeder>()
+            .SeedAsync(WaroTrans.IntegrationTests.WorkflowExecution.StandardWorkflows.StandardWorkflowFixtures.Definitions(), new WorkflowSeedOptions(Publish: true), CancellationToken.None);
         Assert.All(outcomes, o => Assert.Equal(WorkflowStatus.PUBLISHED, o.Status));
         return outcomes.ToDictionary(o => o.Code, o => o.WorkflowId);
     }
@@ -183,7 +184,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
         destinationEndpointId = destination
     };
 
-    private async Task<Floor> SeedFloorAsync(bool unshelvedContainer = false, bool inboundVoucher = false)
+    private async Task<Floor> SeedFloorAsync(bool unshelvedContainer = false, bool inboundVoucher = false, bool outboundVoucher = false)
     {
         var warehouseId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -223,6 +224,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
         db.StorageLocations.AddRange(slA, slB);
 
         var stored = new[] { slA.Id, slA.Id, slB.Id };
+        var shelved = new List<Container>();
         for (var i = 0; i < stored.Length; i++)
         {
             var container = new Container
@@ -232,6 +234,17 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
             };
             db.Containers.Add(container);
             containers.Add(container.Id);
+            shelved.Add(container);
+        }
+
+        if (outboundVoucher)
+        {
+            // Goods off a shelf to an Outbound gate need a CONFIRMED phiếu xuất (containers 0 and 2, one per shelf).
+            var issue = StockVoucher.Create("PX-WF-000001", StockVoucherType.OUTBOUND, warehouseId, null, null, TestAccountId, now);
+            issue.AddLine(shelved[0], now);
+            issue.AddLine(shelved[2], now);
+            issue.Confirm(TestAccountId, now);
+            db.StockVouchers.Add(issue);
         }
 
         if (unshelvedContainer)

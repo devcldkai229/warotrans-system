@@ -73,32 +73,30 @@ public sealed class StandardWorkflowSeedTests(WaroTransWebApplicationFactory fac
     }
 
     [Fact]
-    public async Task A_changed_definition_becomes_a_new_version_and_the_published_one_is_not_edited()
+    public async Task A_changed_definition_is_left_alone_unless_a_new_version_is_asked_for()
     {
-        var definition = StandardWorkflowSeeder.Definitions()[0];
+        var definition = StandardWorkflowFixtures.Definitions()[0];
         definition.Code = "SEEDTEST_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var v1 = Assert.Single(await SeedAsync([definition]));
         var v1Steps = await StepTimeoutsAsync(v1.WorkflowId);
 
         definition.Tasks[0].Steps[1].TimeoutSeconds = 600;
-        var v2 = Assert.Single(await SeedAsync([definition]));
+        var skipped = Assert.Single(await SeedAsync([definition]));
+        var v2 = Assert.Single(await SeedAsync([definition], new WorkflowSeedOptions(NewVersion: true, Publish: true)));
         var again = Assert.Single(await SeedAsync([definition]));
 
+        Assert.StartsWith("skipped: v1 is PUBLISHED and differs", skipped.Action);
         Assert.Equal((2, WorkflowStatus.PUBLISHED, "new version v2, published"), (v2.VersionNo, v2.Status, v2.Action));
         Assert.NotEqual(v1.WorkflowId, v2.WorkflowId);
         Assert.Equal(v1Steps, await StepTimeoutsAsync(v1.WorkflowId));
         Assert.Contains(600, await StepTimeoutsAsync(v2.WorkflowId));
         Assert.Equal(("unchanged", v2.WorkflowId), (again.Action, again.WorkflowId));
-
-        await using var scope = Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
-        Assert.Equal(WorkflowStatus.PUBLISHED, (await db.Workflows.SingleAsync(w => w.Id == v1.WorkflowId)).Status);
     }
 
     [Fact]
-    public async Task A_left_over_draft_is_completed_and_published_instead_of_adding_a_version()
+    public async Task A_left_over_draft_is_not_overwritten()
     {
-        var definition = StandardWorkflowSeeder.Definitions()[1];
+        var definition = StandardWorkflowFixtures.Definitions()[1];
         definition.Code = "SEEDTEST_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         Guid draftId;
         await using (var scope = Factory.Services.CreateAsyncScope())
@@ -115,8 +113,30 @@ public sealed class StandardWorkflowSeedTests(WaroTransWebApplicationFactory fac
 
         var outcome = Assert.Single(await SeedAsync([definition]));
 
-        Assert.Equal((draftId, 1, WorkflowStatus.PUBLISHED), (outcome.WorkflowId, outcome.VersionNo, outcome.Status));
-        Assert.Equal("updated draft v1, published", outcome.Action);
+        Assert.Equal((draftId, 1, WorkflowStatus.DRAFT), (outcome.WorkflowId, outcome.VersionNo, outcome.Status));
+        Assert.StartsWith("skipped: v1 is a DRAFT", outcome.Action);
+    }
+
+    [Fact]
+    public async Task The_json_seed_leaves_drafts_with_empty_admin_values()
+    {
+        var definitions = WorkflowSeedJson.ReadDirectory(SeedDirectory());
+        foreach (var d in definitions) d.Code = "SEEDTEST_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+        var outcomes = await SeedAsync(definitions, new WorkflowSeedOptions());
+
+        Assert.All(outcomes, o => Assert.Equal((1, WorkflowStatus.DRAFT), (o.VersionNo, o.Status)));
+    }
+
+    private static string SeedDirectory()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "seed", "workflows");
+            if (Directory.Exists(candidate)) return candidate;
+        }
+
+        throw new DirectoryNotFoundException("backend/seed/workflows");
     }
 
     /// <summary>
@@ -168,13 +188,14 @@ public sealed class StandardWorkflowSeedTests(WaroTransWebApplicationFactory fac
         Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.PENDING, c.Status));
     }
 
-    private async Task<IReadOnlyList<WorkflowSeedOutcome>> SeedAsync(IReadOnlyList<UpsertWorkflowRequest>? definitions = null)
+    /// <summary>Default: the plain test fixtures, published (as the transport tests need them).</summary>
+    private async Task<IReadOnlyList<WorkflowSeedOutcome>> SeedAsync(
+        IReadOnlyList<UpsertWorkflowRequest>? definitions = null,
+        WorkflowSeedOptions? options = null)
     {
         await using var scope = Factory.Services.CreateAsyncScope();
         var seeder = scope.ServiceProvider.GetRequiredService<StandardWorkflowSeeder>();
-        return definitions is null
-            ? await seeder.SeedAsync(dryRun: false, CancellationToken.None)
-            : await seeder.SeedAsync(definitions, dryRun: false, CancellationToken.None);
+        return await seeder.SeedAsync(definitions ?? StandardWorkflowFixtures.Definitions(), options ?? new WorkflowSeedOptions(Publish: true), CancellationToken.None);
     }
 
     private async Task<List<int>> StepTimeoutsAsync(Guid workflowId)

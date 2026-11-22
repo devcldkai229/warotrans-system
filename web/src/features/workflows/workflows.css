@@ -1282,3 +1282,25 @@
 .wf-view__io-desc {
   color: var(--color-ink-2);
 }
+
+.endpoint-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.endpoint-picker select,
+.endpoint-picker input {
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.endpoint-picker__warn {
+  color: var(--color-red, #c62828);
+  font-size: 12px;
+}

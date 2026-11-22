@@ -114,8 +114,10 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
     }
 
     [Fact]
-    public async Task Outbound_voucher_issues_its_staged_containers_only_on_confirmation()
+    public async Task Outbound_voucher_confirmed_up_front_completes_when_the_robot_delivers_at_the_gate()
     {
+        // Confirm up front, complete with the robots: the goods are put on the voucher while still on their shelf; the
+        // voucher is confirmed before any robot moves; a container counts as issued once a robot delivers it at the gate.
         var (client, token) = await SignInAsync();
         var (warehouse, product, shelf) = await SeedAsync();
         var older = await SeedStoredContainerAsync(product, shelf);
@@ -126,8 +128,6 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
                 new { warehouseId = warehouse.Id, type = "OUTBOUND", referenceNo = "SO-9" }),
             HttpStatusCode.Created);
         Assert.StartsWith("PX-", voucher.Code);
-        await StageAsync(older, warehouse.Id);
-        Assert.Equal(2, await StockAsync(product.Id, shelf.Id));
 
         var picked = await ReadAsync<VoucherDto>(await client.SendWithTokenAsync(
             HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/lines", token, new { containerIds = new[] { older } }));
@@ -136,10 +136,14 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
         var confirmed = await ReadAsync<VoucherDto>(await client.SendWithTokenAsync(
             HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/confirm", token));
         Assert.Equal("CONFIRMED", confirmed.Status);
-        Assert.Equal(1, confirmed.DoneCount);
+        Assert.Equal(0, confirmed.DoneCount);
+        Assert.Equal(2, await StockAsync(product.Id, shelf.Id));
 
+        await StageAsync(older, warehouse.Id);
+
+        // Its only line is done: the voucher completes by itself (CONFIRMED -> COMPLETED).
         var after = await ReadAsync<VoucherDto>(await client.GetWithTokenAsync($"/api/warehouse/stock-vouchers/{voucher.Id}", token));
-        Assert.Equal("CONFIRMED", after.Status);
+        Assert.Equal("COMPLETED", after.Status);
         Assert.Equal(1, after.DoneCount);
         Assert.Equal("ISSUED", after.Lines[0].ContainerStatus);
         Assert.Equal(1, await StockAsync(product.Id, shelf.Id));
@@ -182,7 +186,6 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
         var (client, token) = await SignInAsync();
         var (warehouse, product, shelf) = await SeedAsync();
         var containerId = await SeedStoredContainerAsync(product, shelf);
-        await StageAsync(containerId, warehouse.Id);
         var voucher = await ReadAsync<VoucherDto>(
             await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/stock-vouchers", token,
                 new { warehouseId = warehouse.Id, type = "OUTBOUND" }),

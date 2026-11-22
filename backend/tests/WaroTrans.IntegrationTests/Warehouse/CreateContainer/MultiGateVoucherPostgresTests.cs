@@ -32,7 +32,7 @@ public sealed partial class ContainerBatchPostgresTests
     private readonly Guid _outboundWorkflowId = Guid.NewGuid();
 
     [IsolatedPostgresFact]
-    public async Task Two_inbound_and_two_outbound_gates_post_stock_at_voucher_effectiveness_only()
+    public async Task Two_inbound_and_two_outbound_gates_post_stock_per_container_and_complete_both_vouchers()
     {
         var inboundA = await AddGateAsync("EP-INBOUND-A");
         var inboundB = await AddGateAsync("EP-INBOUND-B");
@@ -72,30 +72,28 @@ public sealed partial class ContainerBatchPostgresTests
         for (var i = 0; i < dockPairs.Length; i++)
         {
             var box = batch.Items[i].Id;
-            var (receiveGate, shipGate) = dockPairs[i];
+            var (receiveGate, _) = dockPairs[i];
             var putaway = await RequestTransportAsync(client, Transport(_inboundWorkflowId, box, receiveGate,
                 shelf.EndpointId, destination: shelf.Id));
             Assert.Null(Assert.Single(putaway.Details).SourceStorageLocationId);
             await HandoverAsync(putaway.Id, box, "ONBOARD", "DELIVERED");
-
-            var shipment = await RequestTransportAsync(client, Transport(_outboundWorkflowId, box,
-                shelf.EndpointId, shipGate, source: shelf.Id));
-            await HandoverAsync(shipment.Id, box, "ONBOARD");
-            Assert.Equal(2, (await InventoryAsync(client)).WarehouseContainerCount);
-            await HandoverAsync(shipment.Id, box, "DELIVERED", "DELIVERED");
         }
 
-        var staged = (await client.GetFromJsonAsync<ListContainersResponse>(
-            $"/api/warehouse/containers?warehouseId={_warehouse}&eligibleOnly=false&status=STAGED_OUTBOUND"))!.Items;
-        Assert.Equal(new Guid?[] { outboundA, outboundB }.Order(), staged.Select(c => c.CurrentEndpointId).Order());
-        Assert.All(staged, box => { Assert.Null(box.CurrentStorageLocationId); Assert.False(box.InActiveTransport); });
-        var stagedStock = await InventoryAsync(client);
-        Assert.Equal(2, stagedStock.WarehouseContainerCount);
-        Assert.Equal(0, stagedStock.UnallocatedContainerCount);
-        Assert.Equal(2, Assert.Single(stagedStock.Items).ContainerCount);
+        // Both boxes are on the shelf: the phiếu nhập completed by itself.
+        var putAway = (await client.GetFromJsonAsync<StockVoucherDetailResponse>(inboundPath))!;
+        Assert.Equal("COMPLETED", putAway.Status);
+        Assert.NotNull(putAway.CompletedAt);
+        Assert.Equal(2, putAway.DoneCount);
+        Assert.Equal(2, Assert.Single((await InventoryAsync(client)).Items).ContainerCount);
+
+        // A shelf box goes to an Outbound gate only on a CONFIRMED phiếu xuất.
+        var ids = batch.Items.Select(c => c.Id).ToArray();
+        var noVoucher = await client.PostAsJsonAsync("/api/transportation/transport-requests",
+            Transport(_outboundWorkflowId, ids[0], shelf.EndpointId, outboundA, source: shelf.Id));
+        Assert.Equal(HttpStatusCode.BadRequest, noVoucher.StatusCode);
+        Assert.Contains("outbound_voucher_required", await noVoucher.Content.ReadAsStringAsync());
 
         var voucher = await OutboundDraftAsync(client);
-        var ids = batch.Items.Select(c => c.Id).ToArray();
         var linesPath = $"{Vouchers}/{voucher.Id}/lines";
         var adds = await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => client.PostAsJsonAsync(linesPath, new { containerIds = ids })));
         Assert.All(adds, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
@@ -104,28 +102,42 @@ public sealed partial class ContainerBatchPostgresTests
         var competing = await OutboundDraftAsync(client);
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"{Vouchers}/{competing.Id}/lines", new { containerIds = ids })).StatusCode);
 
+        // Confirming reserves the boxes; the stock stays on the shelf.
         var confirmations = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => ConfirmAsync(client, $"{Vouchers}/{voucher.Id}")));
         Assert.All(confirmations, receipt =>
         {
             Assert.Equal("CONFIRMED", receipt.Status);
             Assert.Equal(confirmations[0].StockPostedAt, receipt.StockPostedAt);
-            Assert.NotNull(receipt.StockPostedAt);
-            Assert.All(receipt.Lines, line =>
-            {
-                Assert.Equal("ISSUED", line.ContainerStatus);
-                Assert.Null(line.CurrentEndpointId);
-                Assert.Null(line.CurrentStorageLocationId);
-            });
+            Assert.All(receipt.Lines, line => Assert.Equal("STORED", line.ContainerStatus));
         });
-        Assert.Equal(0, (await InventoryAsync(client)).WarehouseContainerCount);
+        Assert.Equal(2, (await InventoryAsync(client)).WarehouseContainerCount);
+
+        for (var i = 0; i < dockPairs.Length; i++)
+        {
+            var (_, shipGate) = dockPairs[i];
+            var shipment = await RequestTransportAsync(client, Transport(_outboundWorkflowId, ids[i],
+                shelf.EndpointId, shipGate, source: shelf.Id));
+            await HandoverAsync(shipment.Id, ids[i], "ONBOARD");
+            // Carried, not shipped yet: still counted on its shelf.
+            Assert.Equal(2 - i, (await InventoryAsync(client)).WarehouseContainerCount);
+            await HandoverAsync(shipment.Id, ids[i], "DELIVERED", "DELIVERED");
+            Assert.Equal(1 - i, (await InventoryAsync(client)).WarehouseContainerCount);
+        }
+
+        var shipped = (await client.GetFromJsonAsync<StockVoucherDetailResponse>($"{Vouchers}/{voucher.Id}"))!;
+        Assert.Equal("COMPLETED", shipped.Status);
+        Assert.All(shipped.Lines, line =>
+        {
+            Assert.Equal("ISSUED", line.ContainerStatus);
+            Assert.Null(line.CurrentEndpointId);
+            Assert.Null(line.CurrentStorageLocationId);
+        });
         await using var db = Warehouse();
-        var issues = await db.ContainerMovements.Where(m => m.Type == ContainerMovementType.ISSUED).ToListAsync();
-        Assert.Equal(2, issues.Count);
-        Assert.Equal(new Guid?[] { outboundA, outboundB }.Order(), issues.Select(m => m.FromEndpointId).Order());
+        Assert.Equal(2, await db.ContainerMovements.CountAsync(m => m.Type == ContainerMovementType.ISSUED));
     }
 
     [IsolatedPostgresFact]
-    public async Task Legacy_shelf_stock_is_retained_when_staging_and_confirm_rechecks_the_gate_and_transport()
+    public async Task Legacy_shelf_stock_comes_off_the_shelf_when_issued_at_the_gate()
     {
         var gate = await AddGateAsync("EP-OUTBOUND-B");
         var shelf = await AddLocationAsync("RACK-01");
@@ -148,29 +160,22 @@ public sealed partial class ContainerBatchPostgresTests
         using var client = app.GetTestClient();
         var voucher = await OutboundDraftAsync(client);
         var path = $"{Vouchers}/{voucher.Id}";
-        var selection = new { containerIds = new[] { box.Id } };
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"{path}/lines", selection)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"{path}/lines", new { containerIds = new[] { box.Id } })).StatusCode);
+
+        _transportLookup.Moving.Add(box.Id);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync($"{path}/confirm", null)).StatusCode);
+        _transportLookup.Moving.Clear();
+        Assert.Equal("CONFIRMED", (await ConfirmAsync(client, path)).Status);
 
         var trip = await RequestTransportAsync(client, Transport(_outboundWorkflowId, box.Id, shelf.EndpointId, gate, source: shelf.Id));
         await HandoverAsync(trip.Id, box.Id, "ONBOARD");
         Assert.Equal(1, (await InventoryAsync(client)).WarehouseContainerCount);
         await HandoverAsync(trip.Id, box.Id, "DELIVERED");
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"{path}/lines", selection)).StatusCode);
 
-        _transportLookup.Moving.Add(box.Id);
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync($"{path}/confirm", null)).StatusCode);
-        _transportLookup.Moving.Clear();
-
-        await using (var nav = Navigation())
-        {
-            (await nav.Endpoints.FindAsync(gate))!.IsEnabled = false;
-            await nav.SaveChangesAsync();
-        }
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync($"{path}/confirm", null)).StatusCode);
-        Assert.Equal(1, (await InventoryAsync(client)).WarehouseContainerCount);
-        var stillDraft = (await client.GetFromJsonAsync<StockVoucherDetailResponse>(path))!;
-        Assert.Null(stillDraft.StockPostedAt);
-        Assert.Equal("STAGED_OUTBOUND", Assert.Single(stillDraft.Lines).ContainerStatus);
+        Assert.Equal(0, (await InventoryAsync(client)).WarehouseContainerCount);
+        var done = (await client.GetFromJsonAsync<StockVoucherDetailResponse>(path))!;
+        Assert.Equal("COMPLETED", done.Status);
+        Assert.Equal("ISSUED", Assert.Single(done.Lines).ContainerStatus);
     }
 
     private TransportationDbContext Transportation() => new(new DbContextOptionsBuilder<TransportationDbContext>().UseNpgsql(_connection).Options);

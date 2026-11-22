@@ -68,10 +68,13 @@ samples/**/*.token
 
 # Local MCP config (personal)
 .mcp.json
-/infrastructure/terraform/**
+# infrastructure/terraform: only state, plans, tfvars and keys are ignored (infrastructure/terraform/.gitignore)
 
 
 
 # tools/run-backend.ps1 output
 .logs/
 
+
+# Local design notes, never pushed (2026-11-22)
+/WaroTrans_AWS_Deployment_Architecture_Terraform.md

@@ -38,35 +38,29 @@ public sealed class MqttSubscriberHostedService(
                     await OnMessageAsync(e, stoppingToken).ConfigureAwait(false);
                 };
 
-                var builder = new MqttClientOptionsBuilder()
-                    .WithTcpServer(mqtt.Host, mqtt.Port)
-                    .WithClientId($"{mqtt.ClientId}-{Environment.ProcessId}")
-                    .WithCleanSession();
-
-                if (!string.IsNullOrWhiteSpace(mqtt.Username))
-                {
-                    builder.WithCredentials(mqtt.Username, mqtt.Password);
-                }
+                var builder = MqttConnection.Configure(new MqttClientOptionsBuilder(), mqtt, MqttConnection.SubscriberRole);
 
                 await client.ConnectAsync(builder.Build(), stoppingToken).ConfigureAwait(false);
 
-                // The robot publishes these at QoS 1; a QoS 0 subscription downgrades delivery to at-most-once,
-                // and a lost RESULT leaves the Job step EXECUTING (there is no execution timeout after ACK).
-                // Heartbeat/telemetry stay QoS 0: they are periodic and superseded by the next sample.
-                const MqttQualityOfServiceLevel reliable = MqttQualityOfServiceLevel.AtLeastOnce;
-                var subscribeOptions = factory.CreateSubscribeOptionsBuilder()
-                    .WithTopicFilter(RobotMqttTopics.HeartbeatFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.TelemetryFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.CommandAckFilter(mqtt.TopicPrefix), reliable)
-                    .WithTopicFilter(RobotMqttTopics.CommandResultFilter(mqtt.TopicPrefix), reliable)
-                    .WithTopicFilter(RobotMqttTopics.InteractionConfirmFilter(mqtt.TopicPrefix), reliable)
-                    .WithTopicFilter(RobotMqttTopics.TrafficProgressFilter(mqtt.TopicPrefix), reliable)
-                    .WithTopicFilter(RobotMqttTopics.TrafficPlanFilter(mqtt.TopicPrefix), reliable)
-                    .WithTopicFilter(RobotMqttTopics.AuthorityStateFilter(mqtt.TopicPrefix), reliable)
-                    .WithTopicFilter(RobotMqttTopics.HealthFilter(mqtt.TopicPrefix))
-                    .Build();
+                foreach (var batch in SubscriptionBatches(mqtt.TopicPrefix))
+                {
+                    var subscribe = factory.CreateSubscribeOptionsBuilder();
+                    foreach (var (filter, qos) in batch)
+                    {
+                        subscribe.WithTopicFilter(filter, qos);
+                    }
 
-                await client.SubscribeAsync(subscribeOptions, stoppingToken).ConfigureAwait(false);
+                    var result = await client.SubscribeAsync(subscribe.Build(), stoppingToken).ConfigureAwait(false);
+                    var refused = result.Items
+                        .Where(i => i.ResultCode > MqttClientSubscribeResultCode.GrantedQoS2)
+                        .Select(i => $"{i.TopicFilter.Topic} ({i.ResultCode})")
+                        .ToList();
+                    if (refused.Count > 0)
+                    {
+                        // A refused uplink filter means silently lost ACK/RESULTs: fail loudly and retry.
+                        throw new InvalidOperationException($"MQTT broker refused subscriptions: {string.Join(", ", refused)}");
+                    }
+                }
                 logger.LogInformation(
                     "MQTT subscribed to robot uplink topics (incl. traffic_progress/traffic_plan/authority_state) on {Host}:{Port}",
                     mqtt.Host,
@@ -114,6 +108,34 @@ public sealed class MqttSubscriberHostedService(
                 }
             }
         }
+    }
+
+    /// <summary>AWS IoT Core accepts at most 8 topic filters per SUBSCRIBE and drops the connection otherwise.</summary>
+    public const int MaxFiltersPerSubscribe = 8;
+
+    /// <summary>
+    /// The robot uplink filters, in SUBSCRIBE packets of at most <see cref="MaxFiltersPerSubscribe"/>.
+    /// The robot publishes the reliable ones at QoS 1; a QoS 0 subscription downgrades delivery to at-most-once, and a
+    /// lost RESULT leaves the Job step EXECUTING (there is no execution timeout after ACK). Heartbeat, telemetry and
+    /// health stay QoS 0: they are periodic and superseded by the next sample.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<(string Filter, MqttQualityOfServiceLevel Qos)>> SubscriptionBatches(string prefix)
+    {
+        const MqttQualityOfServiceLevel reliable = MqttQualityOfServiceLevel.AtLeastOnce;
+        const MqttQualityOfServiceLevel sample = MqttQualityOfServiceLevel.AtMostOnce;
+        (string, MqttQualityOfServiceLevel)[] all =
+        [
+            (RobotMqttTopics.HeartbeatFilter(prefix), sample),
+            (RobotMqttTopics.TelemetryFilter(prefix), sample),
+            (RobotMqttTopics.CommandAckFilter(prefix), reliable),
+            (RobotMqttTopics.CommandResultFilter(prefix), reliable),
+            (RobotMqttTopics.InteractionConfirmFilter(prefix), reliable),
+            (RobotMqttTopics.TrafficProgressFilter(prefix), reliable),
+            (RobotMqttTopics.TrafficPlanFilter(prefix), reliable),
+            (RobotMqttTopics.AuthorityStateFilter(prefix), reliable),
+            (RobotMqttTopics.HealthFilter(prefix), sample),
+        ];
+        return all.Chunk(MaxFiltersPerSubscribe).Select(c => (IReadOnlyList<(string, MqttQualityOfServiceLevel)>)c).ToList();
     }
 
     private async Task OnMessageAsync(MqttApplicationMessageReceivedEventArgs e, CancellationToken cancellationToken)

@@ -68,7 +68,6 @@ const TONE_BY_STATUS: Record<string, SemanticTone> = {
   RUNNING: 'info',
   IN_PROGRESS: 'info',
   IN_TRANSIT: 'info',
-  STAGED_OUTBOUND: 'info',
   EN_ROUTE: 'info',
   ASSIGNED: 'info',
   ONBOARD: 'info',

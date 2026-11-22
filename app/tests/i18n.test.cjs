@@ -74,7 +74,7 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(t('Stock posted {date}', { date: '17 Nov 2026' }), 'Đã ghi sổ tồn kho: 17 Nov 2026');
   assert.equal(t('Signed in as {name}', { name: 'Alex Tran' }), 'Đã đăng nhập: Alex Tran');
   assert.equal(t('Save Selected Containers'), 'Lưu container đã chọn');
-  assert.equal(translateText('STAGED_OUTBOUND'), 'Chờ xuất tại cổng');
+  assert.equal(t('Create And Confirm'), 'Tạo và xác nhận');
   assert.equal(translateText('By Product (FIFO)'), 'Theo sản phẩm (FIFO)');
   assert.equal(t('{count} FIFO Selected', { count: 4 }), 'Đã chọn 4 thùng FIFO');
   assert.equal(t('Containers currently stored on a shelf.'), 'Container hiện đang lưu trên kệ.');

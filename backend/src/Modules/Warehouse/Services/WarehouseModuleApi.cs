@@ -100,11 +100,17 @@ public sealed class WarehouseModuleApi(WarehouseDbContext dbContext) : IWarehous
                              && shelf != null && shelf.WarehouseId == warehouseId && shelf.IsActive
                              && shelfEndpointIds.Contains(shelf.EndpointId)
                              && !unavailableContainerIds.Contains(box.Id)
+                             // Only goods a CONFIRMED phiếu xuất has reserved go to an Outbound gate.
+                             && dbContext.StockVoucherLines.Any(l => l.ContainerId == box.Id && l.ClosedShortAt == null
+                                 && l.StockVoucher.Type == StockVoucherType.OUTBOUND
+                                 && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED
+                                 && l.StockVoucher.WarehouseId == warehouseId)
                              && dbContext.InventoryStocks.Any(stock => stock.ProductId == box.ProductId
                                  && stock.StorageLocationId == shelf.Id && stock.LevelNo == level && stock.ContainerCount > 0)
                          let admitted = dbContext.StockVouchers
                              .Where(v => v.Id == box.InboundStockVoucherId && v.WarehouseId == warehouseId
-                                 && v.Type == StockVoucherType.INBOUND && v.Status == StockVoucherStatus.CONFIRMED)
+                                 && v.Type == StockVoucherType.INBOUND
+                                 && (v.Status == StockVoucherStatus.CONFIRMED || v.Status == StockVoucherStatus.COMPLETED))
                              .Select(v => v.StockPostedAt).FirstOrDefault()
                              ?? dbContext.ContainerMovements.Where(m => m.ContainerId == box.Id
                                  && m.ToStatus == ContainerStatus.STORED
@@ -128,7 +134,7 @@ public sealed class WarehouseModuleApi(WarehouseDbContext dbContext) : IWarehous
 
         return await dbContext.StockVoucherLines
             .AsNoTracking()
-            .Where(l => containerIds.Contains(l.ContainerId) && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED)
+            .Where(l => containerIds.Contains(l.ContainerId) && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED && l.ClosedShortAt == null)
             .Select(l => new ContainerVoucherSnapshot(
                 l.ContainerId,
                 l.StockVoucherId,

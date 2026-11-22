@@ -12,9 +12,8 @@ export function voucherLineLocation(
   if (line.currentEndpointId) {
     const resolved = endpointLabelById?.get(line.currentEndpointId);
     if (resolved) return resolved;
-    return line.containerStatus === 'STAGED_OUTBOUND' ? 'Outbound Gate' : 'At Station';
+    return 'At Station';
   }
-  if (line.containerStatus === 'STAGED_OUTBOUND') return 'Outbound Gate';
   if (line.containerStatus === 'ISSUED') return null;
   return 'None';
 }

@@ -164,11 +164,12 @@ export interface WarehouseMapProps {
   children?: ReactNode
 }
 
-// A raised dark tooltip; a warning or an alarm is the same tooltip with a ring in the tone.
+// A raised dark tooltip; a warning or an alarm is the same tooltip with a ring in the tone. Always dark (its text is
+// white): container-higher is a light grey in the light theme, which left the white text unreadable there.
 const CALLOUT_TONE = {
-  dark: 'bg-container-higher',
-  warn: 'bg-container-higher ring-2 ring-amber',
-  danger: 'bg-container-higher ring-2 ring-red',
+  dark: 'bg-[#3a3b3c]',
+  warn: 'bg-[#3a3b3c] ring-2 ring-amber',
+  danger: 'bg-[#3a3b3c] ring-2 ring-red',
 }
 
 /** Map size (metres) the mark sizes below were designed for (see MAP_BOUNDS in scene.ts). */

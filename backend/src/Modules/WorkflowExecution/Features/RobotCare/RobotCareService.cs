@@ -29,8 +29,10 @@ public sealed class FleetIdleOptions
     public int IdleSeconds { get; set; } = 300;
 
     /// <summary>
-    /// Where an idle robot goes when every parking place is taken: endpoint codes, comma separated, tried nearest first.
-    /// Empty: it stays where it is. A robot already standing on one of them stays there until a parking place frees up.
+    /// More wait points (= queue = recovery points), comma separated, besides the endpoints coded or named as one
+    /// (<see cref="Services.WaitPoints"/>). An idle robot goes to the nearest free wait point when every parking place is
+    /// taken; with none on the map it stays where it is. A robot already standing on one stays there until a parking
+    /// place frees up.
     /// </summary>
     public string FallbackEndpointCodes { get; set; } = "EP-QUEUE-POINT";
 
@@ -62,8 +64,14 @@ public sealed class RobotCareService(
     IOptions<FleetIdleOptions> idle,
     TimeProvider clock,
     ILogger<RobotCareService> logger,
-    WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator? traffic = null)
+    WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator? traffic = null,
+    Services.FreeEndpointSelector? freeEndpoints = null,
+    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? trafficOptions = null)
 {
+    /// <summary>Codes configured as wait points (FleetIdle fallback + Traffic deadlock retreat), see <see cref="Services.WaitPoints"/>.</summary>
+    private IReadOnlyList<string> WaitPointCodes() =>
+        Services.WaitPoints.ConfiguredCodes(idle.Value.FallbackEndpointCodes, trafficOptions?.Value.DeadlockRetreatEndpointCodes);
+
     /// <summary>A robot waits this long behind an idle robot before that robot is asked to make way.</summary>
     public const double YieldAfterSeconds = 5;
 
@@ -72,6 +80,12 @@ public sealed class RobotCareService(
 
     private static readonly Dictionary<(Guid Waiter, Guid Blocker), DateTimeOffset> BlockedSince = [];
     private static readonly Dictionary<Guid, DateTimeOffset> LastYield = [];
+
+    /// <summary>When a waiting robot's unentered reservation was last freed so an idle robot could make way.</summary>
+    private static readonly Dictionary<Guid, DateTimeOffset> LastFreedForYield = [];
+
+    /// <summary>How long a waiting robot gets no new grant after its unentered cells were freed for a robot making way.</summary>
+    public const double YieldPassSeconds = 8;
     private static readonly object YieldLock = new();
 
     public const string ParkWorkflow = "ROBOT_RETURN_TO_PARK";
@@ -88,7 +102,7 @@ public sealed class RobotCareService(
     public async Task<Job> ReturnToParkAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken)
+        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow)
             ?? throw new ConflictException("No parking place is free on this map.", "no_free_parking");
         return await RunAsync(robot, ParkWorkflow, ParkInput, target, actor, cancellationToken);
     }
@@ -96,7 +110,7 @@ public sealed class RobotCareService(
     public async Task<Job> GoToChargerAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.CHARGER, ChargerInput, cancellationToken)
+        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.CHARGER, cancellationToken, ChargeWorkflow)
             ?? throw new ConflictException("No charger is free on this map.", "no_free_charger");
         return await RunAsync(robot, ChargeWorkflow, ChargerInput, target, actor, cancellationToken);
     }
@@ -207,8 +221,23 @@ public sealed class RobotCareService(
             .Select(r => (Waiter: r.RobotId, Blocker: r.BlockingOwner!.Value))
             .Concat(snapshot.Waits.Where(w => w.BlockingOwner is not null).Select(w => (Waiter: w.RobotId, Blocker: w.BlockingOwner!.Value)))
             .Where(p => p.Waiter != p.Blocker)
-            .Distinct()
             .ToList();
+        // A robot waiting for its goal (goal queue) is not waiting in traffic: the robot on that goal is named on its MOVE.
+        var goalWaits = await db.JobSteps.AsNoTracking()
+            .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.WAITING && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => new { s.ResolvedInputs, s.OutputValues })
+            .ToListAsync(cancellationToken);
+        foreach (var wait in goalWaits)
+        {
+            if (wait.OutputValues.TryGetValue(Execution.JobExecutionEngine.GoalBlockerKey, out var b) && b.ValueKind == JsonValueKind.String
+                && wait.ResolvedInputs.TryGetValue("robotId", out var w) && w.ValueKind == JsonValueKind.String
+                && b.GetGuid() != w.GetGuid())
+            {
+                pairs.Add((w.GetGuid(), b.GetGuid()));
+            }
+        }
+
+        pairs = pairs.Distinct().ToList();
 
         List<(Guid Waiter, Guid Blocker)> due;
         lock (YieldLock)
@@ -233,6 +262,34 @@ public sealed class RobotCareService(
             .Where(r => r.WaitingReason == WaroTrans.Fleet.Traffic.TrafficWaitingReason.DeadlockRisk)
             .Select(r => r.RobotId)
             .ToHashSet();
+
+        // An idle robot sent to make way is refused (DEADLOCK_RISK): what the waiting robot was granted but has not
+        // entered lies across its way out (traffic cells do not know walls: MAP-ONE SHELF-B-2 next to the INBOUND
+        // corridor). Free those cells and hold the waiting robot a moment, as a deadlock retreat does, instead of
+        // cancelling the move and trying again a minute later.
+        foreach (var (waiterId, blockerId) in pairs)
+        {
+            bool sentByUs;
+            bool freedRecently;
+            lock (YieldLock)
+            {
+                sentByUs = LastYield.TryGetValue(blockerId, out var y) && (now - y).TotalSeconds < YieldCooldownSeconds;
+                freedRecently = LastFreedForYield.TryGetValue(waiterId, out var f) && (now - f).TotalSeconds < YieldPassSeconds + 2;
+            }
+
+            if (!sentByUs || freedRecently || !positioning.Contains(blockerId) || !deadlockIds.Contains(blockerId))
+            {
+                continue;
+            }
+
+            var freed = await traffic.ReleaseUnenteredReservationAsync(waiterId, YieldPassSeconds, "IDLE_YIELD", cancellationToken);
+            lock (YieldLock)
+            {
+                LastFreedForYield[waiterId] = now;
+            }
+
+            logger.LogInformation("Robot {Waiter} lets the robot making way for it pass ({Result})", waiterId, freed.Ok ? "freed" : freed.Reason);
+        }
         var sent = 0;
         foreach (var (waiterId, blockerId) in due)
         {
@@ -245,7 +302,14 @@ public sealed class RobotCareService(
 
             if (positioning.Contains(blockerId))
             {
-                if (deadlockIds.Contains(blockerId))
+                bool makingWay;
+                lock (YieldLock)
+                {
+                    makingWay = LastYield.TryGetValue(blockerId, out var y) && (now - y).TotalSeconds < YieldCooldownSeconds;
+                }
+
+                // A robot going home in the way of work gives up; one we sent to make way keeps going (freed above).
+                if (deadlockIds.Contains(blockerId) && !makingWay)
                 {
                     await fleet.YieldPositioningAsync(blockerId, Guid.Empty, cancellationToken);
                     logger.LogInformation("Robot {Blocker} positioning intent cancelled: deadlocked with {Waiter}", blocker.Code, waiter.Code);
@@ -264,7 +328,7 @@ public sealed class RobotCareService(
 
             // Where the waiting robot is going: the endpoint of its open MOVE, if any.
             var goal = await db.JobSteps.AsNoTracking()
-                .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING
+                .Where(s => s.StepType == StepType.MOVE && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING)
                             && s.JobTask.Job.Status == JobStatus.RUNNING && s.TargetEndpointId != null)
                 .Select(s => new { s.TargetEndpointId, s.ResolvedInputs })
                 .ToListAsync(cancellationToken);
@@ -278,7 +342,7 @@ public sealed class RobotCareService(
                 }
             }
 
-            var fallbackCodes = idle.Value.FallbackCodes();
+            var waitPointCodes = WaitPointCodes();
             var endpoints = await navigation.GetEndpointsOnMapAsync(blocker.CurrentMapVersionId, cancellationToken);
             var others = (await fleet.GetDispatchCandidatesAsync(blocker.CurrentMapVersionId, cancellationToken))
                 .Where(r => r.Id != blockerId && r.LocalizationStatus == LocalizationStatus.LOCALIZED)
@@ -296,15 +360,32 @@ public sealed class RobotCareService(
                 return d;
             }
 
-            var target = endpoints
-                .Where(e => e.IsEnabled
-                            && (e.EndpointType == EndpointType.PARK || fallbackCodes.Contains(e.Code, StringComparer.Ordinal)
-                                || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal))
-                            && Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
+            // Off the way the waiting robot planned (what traffic holds it to), else it would only block it further on.
+            var waiterPath = snapshot.Robots.FirstOrDefault(r => r.RobotId == waiterId) is { ProposedPath.IsDefaultOrEmpty: false } view
+                ? view.ProposedPath.Select(p => (p.X, p.Y)).ToList()
+                : [];
+            bool OffItsPath(EndpointPoseWithType e) =>
+                waiterPath.All(p => Math.Sqrt(Math.Pow(e.X - p.X, 2) + Math.Pow(e.Y - p.Y, 2)) >= Execution.JobExecutionEngine.PathClearanceMeters);
+            var headedTo = await db.JobSteps.AsNoTracking()
+                .Where(s => s.StepType == StepType.MOVE && s.TargetEndpointId != null
+                            && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING || s.Status == JobStepStatus.READY)
+                            && s.JobTask.Job.Status == JobStatus.RUNNING)
+                .Select(s => s.TargetEndpointId!.Value)
+                .ToListAsync(cancellationToken);
+            EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool) => pool
+                .Where(e => Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
                             && !targets.Contains(e.Id)
                             && others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)))
-                .OrderByDescending(Away)
+                .OrderByDescending(e => OffItsPath(e))
+                .ThenByDescending(Away)
                 .FirstOrDefault();
+            // A parking place or wait point first; on a map with too few, any free endpoint off the waiting robot's way
+            // that no live Job is headed to (a charger never).
+            var standAside = endpoints.Where(e => Services.WaitPoints.IsStandAside(e, waitPointCodes)).ToList();
+            var target = Pick(standAside.Where(OffItsPath))
+                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
+                                                      && !headedTo.Contains(e.Id) && OffItsPath(e)))
+                         ?? Pick(standAside);
             // Any free place beats standing in the way of a robot with work (the cooldown stops ping-pong).
             if (target is null || Away(target) <= 0.30)
             {
@@ -383,15 +464,15 @@ public sealed class RobotCareService(
                 continue;
             }
 
-            // A parking place first; when all are taken, the fallback (the queue point), unless the robot already stands on it.
-            var fallbackCodes = idle.Value.FallbackCodes();
-            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken);
+            // A parking place first; when all are taken, a wait point (= queue = recovery point), unless the robot
+            // already stands on one.
+            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
-                var atFallback = endpoints.Any(e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal) && Distance(robot, e) <= ParkedRadius(e));
+                var atFallback = endpoints.Any(e => IsRecoveryPoint(e) && Distance(robot, e) <= ParkedRadius(e));
                 target = atFallback
                     ? null
-                    : await ChooseFreeEndpointAsync(robot, e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal), ParkInput, cancellationToken);
+                    : await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, cancellationToken);
                 if (target is not null)
                 {
                     logger.LogInformation("Robot {RobotCode}: every parking place is taken, going to the fallback endpoint", robot.Code);
@@ -426,31 +507,10 @@ public sealed class RobotCareService(
 
     /// <summary>
     /// Wait = Queue = Recovery Point: an enabled, non-charger endpoint named or coded as one (EP-QUEUE*, EP-WAIT*,
-    /// EP-RECOVERY*, "wait" / "queue" / "recovery" in its name) or listed in FleetIdle:FallbackEndpointCodes.
+    /// EP-RECOVERY*, "wait" / "queue" / "recovery" in its name) or listed in FleetIdle:FallbackEndpointCodes or
+    /// Traffic:DeadlockRetreatEndpointCodes. The same rule decides where robots make way and back off (WaitPoints).
     /// </summary>
-    public bool IsRecoveryPoint(EndpointPoseWithType e)
-    {
-        if (!e.IsEnabled || e.EndpointType == EndpointType.CHARGER)
-        {
-            return false;
-        }
-
-        if (idle.Value.FallbackCodes().Contains(e.Code, StringComparer.Ordinal))
-        {
-            return true;
-        }
-
-        var code = e.Code.ToUpperInvariant();
-        if (code.StartsWith("EP-QUEUE", StringComparison.Ordinal) || code.StartsWith("EP-WAIT", StringComparison.Ordinal)
-            || code.StartsWith("EP-RECOVERY", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        var name = e.Name ?? string.Empty;
-        return name.Contains("wait", StringComparison.OrdinalIgnoreCase) || name.Contains("queue", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("recovery", StringComparison.OrdinalIgnoreCase);
-    }
+    public bool IsRecoveryPoint(EndpointPoseWithType e) => Services.WaitPoints.Is(e, WaitPointCodes());
 
     /// <summary>The recovery points on the robot's map, free ones first, nearest first.</summary>
     public async Task<IReadOnlyList<RecoveryPointView>> RecoveryPointsAsync(Guid robotId, CancellationToken cancellationToken)
@@ -542,7 +602,7 @@ public sealed class RobotCareService(
         }
         else
         {
-            target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken);
+            target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
                 if (endpoints.Where(IsRecoveryPoint).FirstOrDefault(e => Distance(robot, e) <= ParkedRadius(e)) is { } waiting)
@@ -550,7 +610,7 @@ public sealed class RobotCareService(
                     return new RobotDestinationResult(RobotDestinationResult.NotNeeded, waiting.Code, "already_at_wait_point");
                 }
 
-                target = await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, ParkInput, cancellationToken);
+                target = await ChooseFreeEndpointAsync(robot, IsRecoveryPoint, cancellationToken);
             }
         }
 
@@ -660,36 +720,51 @@ public sealed class RobotCareService(
         return id ?? throw new ConflictException($"Publish the workflow {code} first (samples/workflows has one).", "workflow_not_published");
     }
 
-    /// <summary>The nearest enabled place matching <paramref name="kind"/> where no other robot is standing and none is headed.</summary>
-    private async Task<Guid?> ChooseFreeEndpointAsync(RobotSnapshot robot, Func<EndpointPoseWithType, bool> kind, string input, CancellationToken cancellationToken)
+    /// <summary>
+    /// A free place for the robot. When <paramref name="workflowCode"/>'s published version names an EndpointGroup (an
+    /// ADMIN_INPUT variable of format WAYPOINT_GROUP) on the robot's map, its members are the candidates and its selection
+    /// policy decides; otherwise every enabled place matching <paramref name="kind"/>, nearest first.
+    /// </summary>
+    private async Task<Guid?> ChooseFreeEndpointAsync(
+        RobotSnapshot robot,
+        Func<EndpointPoseWithType, bool> kind,
+        CancellationToken cancellationToken,
+        string? workflowCode = null)
     {
-        var endpoints = (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken))
-            .Where(e => kind(e) && e.IsEnabled)
-            .ToList();
-        if (endpoints.Count == 0)
+        var group = workflowCode is null ? null : await ConfiguredGroupAsync(workflowCode, robot, cancellationToken);
+        var candidates = group?.Members
+            ?? (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken)).Where(e => kind(e) && e.IsEnabled).ToList();
+        var selector = freeEndpoints ?? new Services.FreeEndpointSelector(db, fleet, idle);
+        return await selector.ChooseAsync(robot, candidates, group?.SelectionPolicy ?? EndpointSelectionPolicy.NEAREST, null, cancellationToken);
+    }
+
+    /// <summary>The EndpointGroup an administrator chose in the published workflow, when it is active and on the robot's map.</summary>
+    private async Task<EndpointGroupSnapshot?> ConfiguredGroupAsync(string workflowCode, RobotSnapshot robot, CancellationToken cancellationToken)
+    {
+        var variables = await db.Workflows.AsNoTracking()
+            .Where(w => w.Code == workflowCode && w.Status == WorkflowStatus.PUBLISHED)
+            .OrderByDescending(w => w.VersionNo)
+            .Select(w => w.VariablesSchema)
+            .FirstOrDefaultAsync(cancellationToken);
+        var configured = variables?
+            .Where(v => v.Format == ValueObjects.WorkflowVariableDefinition.WaypointGroupFormat && v.ConfiguredValue is { ValueKind: JsonValueKind.String })
+            .Select(v => v.ConfiguredValue!.Value.TryGetGuid(out var id) ? id : (Guid?)null)
+            .FirstOrDefault(id => id is not null);
+        if (configured is not { } groupId)
         {
             return null;
         }
 
-        var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))
-            .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
-            .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == robot.CurrentMapVersionId)
-            .ToList();
-        // FL-08: a place another robot is already driving to on its own is taken too.
-        var claimed = await fleet.GetPositioningTargetsAsync(robot.CurrentMapVersionId, cancellationToken);
-        var liveJobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProvisioningKey.StartsWith("robot-care:") && Live.Contains(j.Status))
-            .ToListAsync(cancellationToken);
-        var headedFor = liveJobs
-            .Select(j => j.ContextValues.TryGetValue(input, out var v) && v.ValueKind == JsonValueKind.String ? v.GetGuid() : (Guid?)null)
-            .OfType<Guid>()
-            .ToHashSet();
+        var group = await navigation.GetEndpointGroupAsync(groupId, cancellationToken);
+        if (group is not { IsActive: true } || group.MapVersionId != robot.CurrentMapVersionId)
+        {
+            logger.LogWarning(
+                "{Workflow}: endpoint group {GroupId} is inactive or not on {Robot}'s map; choosing by endpoint type instead",
+                workflowCode, groupId, robot.Code);
+            return null;
+        }
 
-        return endpoints
-            .Where(e => !headedFor.Contains(e.Id) && !claimed.Contains(e.Id) && !others.Any(r => Distance(r, e) <= OccupiedRadius(e)))
-            .OrderBy(e => Distance(robot, e))
-            .Select(e => (Guid?)e.Id)
-            .FirstOrDefault();
+        return group;
     }
 
     private double OccupiedRadius(EndpointPoseWithType endpoint) => Math.Max(endpoint.PositionTolerance, idle.Value.OccupiedRadiusMeters);

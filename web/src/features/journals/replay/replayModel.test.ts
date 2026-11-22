@@ -11,6 +11,15 @@ import {
   pathUntil,
   planAt,
   poseAt,
+  STEP_EVENT_TYPE,
+  stepAt,
+  stepJump,
+  stepTimeline,
+  activityAt,
+  holeAt,
+  tickerPosition,
+  videoHoles,
+  type StepSpan,
 } from './replayModel'
 
 const T0 = Date.parse('2026-11-17T10:00:00Z')
@@ -138,5 +147,166 @@ describe('player helpers', () => {
     expect(currentEventId(events, T0 + 11_000)).toBe('a')
     expect(currentEventId(events, T0 + 16_000)).toBe('info')
     expect(currentEventId(events, T0 + 25_000)).toBeNull()
+  })
+})
+
+describe('step timeline', () => {
+  const step = (offsetMs: number, jobStepId: string, status: string, extra: Record<string, unknown> = {}) => ({
+    eventType: STEP_EVENT_TYPE,
+    occurredAtUtc: iso(offsetMs),
+    payload: { jobId: 'J1', jobStepId, stepKey: jobStepId.toLowerCase(), status, ...extra },
+  })
+  const events = [
+    step(0, 'S1', 'EXECUTING', { stepName: 'Move to inbound', stepType: 'MOVE', stepPosition: 1, stepCount: 3, targetEndpointCode: 'EP-INBOUND' }),
+    step(20_000, 'S1', 'COMPLETED'),
+    step(20_000, 'S2', 'EXECUTING', { stepName: 'Confirm pickup', stepType: 'HUMAN_INTERACTION', stepPosition: 2, stepCount: 3 }),
+    step(21_000, 'S2', 'WAITING'),
+    step(45_000, 'S3', 'EXECUTING', { stepName: 'Move to shelf', stepType: 'MOVE', stepPosition: 3, stepCount: 3 }),
+    step(46_000, 'X9', 'SKIPPED'),
+    { eventType: 'robot.command-lifecycle', occurredAtUtc: iso(1000), payload: {} },
+  ]
+
+  it('builds one span per step, closing a step that never said so at the next start', () => {
+    const spans = stepTimeline(events)
+    expect(spans.map((s) => [s.stepId, s.startMs - T0, s.endMs == null ? null : s.endMs - T0, s.status])).toEqual([
+      ['S1', 0, 20_000, 'COMPLETED'],
+      ['S2', 20_000, 45_000, 'WAITING'],
+      ['S3', 45_000, null, 'EXECUTING'],
+    ])
+    expect(spans[0]).toMatchObject({ name: 'Move to inbound', type: 'MOVE', position: 1, count: 3, targetCode: 'EP-INBOUND' })
+  })
+
+  it('falls back to the step key on old journals', () => {
+    expect(stepTimeline([step(0, 'MOVE_A', 'EXECUTING')])[0]!.name).toBe('move_a')
+  })
+
+  it('finds the step at any second, and none before the first', () => {
+    const spans = stepTimeline(events)
+    expect(stepAt(spans, T0 - 1)).toBeNull()
+    expect(stepAt(spans, T0 + 19_999)?.stepId).toBe('S1')
+    expect(stepAt(spans, T0 + 20_000)?.stepId).toBe('S2')
+    expect(stepAt(spans, T0 + 30_000)?.stepId).toBe('S2')
+    expect(stepAt(spans, T0 + 90_000)?.stepId).toBe('S3')
+  })
+
+  it('jumps to the next step start, and back to the current start first', () => {
+    const spans = stepTimeline(events)
+    expect(stepJump(spans, T0 + 5000, 1)).toBe(T0 + 20_000)
+    expect(stepJump(spans, T0 + 30_000, -1)).toBe(T0 + 20_000)
+    expect(stepJump(spans, T0 + 20_500, -1)).toBe(T0)
+    expect(stepJump(spans, T0 + 50_000, 1)).toBeNull()
+  })
+
+  it('reads the envelope the Recorder returns (core event under payload, status as sourceStatusCode)', () => {
+    // Shape copied from GET /api/evidence/journals/{id}/events of the real RBT-001 trip R211126002.
+    const envelope = (offsetMs: number, status: string, inner: Record<string, unknown>) => ({
+      eventType: STEP_EVENT_TYPE,
+      occurredAtUtc: iso(offsetMs),
+      payload: {
+        jobId: 'J1',
+        jobNo: 'J211126002',
+        source: 'warotrans-core',
+        jobStepId: 'S1',
+        sourceStatusCode: status,
+        eventType: STEP_EVENT_TYPE,
+        payload: { jobId: 'J1', jobStepId: 'S1', status, stepKey: 'MOVE_TO_PICKUP', ...inner },
+      },
+    })
+    const spans = stepTimeline([
+      envelope(0, 'EXECUTING', { stepName: 'Move to Pickup', stepType: 'MOVE', stepPosition: 1, stepCount: 4, targetEndpointCode: 'EP-SHELF-C-1', targetEndpointName: 'Shelf C 1' }),
+      envelope(24_000, 'COMPLETED', { stepName: 'Move to Pickup', stepType: 'MOVE', stepPosition: 1, stepCount: 4 }),
+    ])
+    expect(spans).toHaveLength(1)
+    expect(spans[0]).toMatchObject({
+      stepId: 'S1',
+      jobId: 'J1',
+      name: 'Move to Pickup',
+      type: 'MOVE',
+      position: 1,
+      count: 4,
+      targetCode: 'EP-SHELF-C-1',
+      targetName: 'Shelf C 1',
+      status: 'COMPLETED',
+    })
+    expect(spans[0]!.endMs! - spans[0]!.startMs).toBe(24_000)
+  })
+
+  it('takes the status from sourceStatusCode when the core event has none', () => {
+    const spans = stepTimeline([
+      { eventType: STEP_EVENT_TYPE, occurredAtUtc: iso(0), payload: { jobStepId: 'S9', sourceStatusCode: 'EXECUTING', payload: { stepKey: 'X' } } },
+      { eventType: STEP_EVENT_TYPE, occurredAtUtc: iso(5000), payload: { jobStepId: 'S9', sourceStatusCode: 'COMPLETED', payload: { stepKey: 'X' } } },
+    ])
+    expect(spans[0]).toMatchObject({ name: 'X', status: 'COMPLETED' })
+    expect(spans[0]!.endMs! - spans[0]!.startMs).toBe(5000)
+  })
+})
+
+describe('video holes', () => {
+  const span = (a: number, b: number) => ({ utcStart: iso(a), utcEnd: iso(b) })
+
+  it('finds the start, the holes between pieces of video and the end of a run (trip R211126002)', () => {
+    // Real shape: camera 0.4 s late, a 4 s hole between two recordings, a 1 s hole the server explains, video to the end.
+    const holes = videoHoles(
+      [span(400, 40_000), span(44_000, 54_600), span(57_200, 87_200), span(88_300, 118_000)],
+      [{ fromUtc: iso(87_200), toUtc: iso(88_300), reason: 'FRAME_GAP' }],
+      T0,
+      T0 + 118_000,
+    )
+    expect(holes.map((h) => [h.fromMs - T0, h.toMs - T0, h.reason, h.nextVideoMs == null ? null : h.nextVideoMs - T0])).toEqual([
+      [0, 400, 'NOT_YET_RECORDED', 400],
+      [40_000, 44_000, 'RECORDING_STOPPED', 44_000],
+      [54_600, 57_200, 'RECORDING_STOPPED', 57_200],
+      [87_200, 88_300, 'FRAME_GAP', 88_300],
+    ])
+  })
+
+  it('says a run without any video has no recording, and ignores slivers', () => {
+    expect(videoHoles([], [], T0, T0 + 60_000)).toEqual([{ fromMs: T0, toMs: T0 + 60_000, reason: 'NO_RECORDING', nextVideoMs: null }])
+    expect(videoHoles([span(100, 10_000), span(10_150, 20_000)], [], T0, T0 + 20_000)).toEqual([])
+  })
+
+  it('finds the hole under the cursor', () => {
+    const holes = videoHoles([span(0, 10_000), span(14_000, 20_000)], [], T0, T0 + 20_000)
+    expect(holeAt(holes, T0 + 12_000)?.reason).toBe('RECORDING_STOPPED')
+    expect(holeAt(holes, T0 + 15_000)).toBeNull()
+  })
+})
+
+describe('activity', () => {
+  const places = [
+    { code: 'EP-PARKING-A', name: 'Parking A', x: -0.61, y: -0.71 },
+    { code: 'EP-SHELF-B-2', name: 'Shelf B 2', x: 1.24, y: 1.07 },
+  ]
+  const step = (id: string, type: string, extra: Partial<StepSpan>): StepSpan => ({
+    stepId: id, jobId: 'J', key: id, name: id, type, taskName: null, position: null, count: null, targetCode: null, targetName: null,
+    purpose: null, operationCode: null, startMs: 0, endMs: null, status: 'EXECUTING', ...extra,
+  })
+  const steps = [
+    step('S1', 'MOVE', { purpose: 'PICKUP', targetCode: 'EP-SHELF-B-2', targetName: 'Shelf B 2' }),
+    step('S2', 'HUMAN_INTERACTION', { operationCode: 'PICKUP_CONFIRM' }),
+    step('S3', 'MOVE', { purpose: 'DROPOFF', targetCode: 'EP-SHELF-C-1', targetName: 'Shelf C 1' }),
+    step('S4', 'HUMAN_INTERACTION', { key: 'CONFIRM_DROPOFF', name: 'Confirm Dropoff' }),
+  ]
+
+  it('names the first leg from where the robot stood', () => {
+    expect(activityAt(steps, steps[0]!, { x: -0.58, y: -0.74 }, places)).toEqual({
+      kind: 'TO_PICKUP', from: 'Parking A (EP-PARKING-A)', to: 'Shelf B 2 (EP-SHELF-B-2)',
+    })
+  })
+
+  it('names a later leg from the previous stop, and a staff step where the robot stands', () => {
+    expect(activityAt(steps, steps[2]!, null, places)).toMatchObject({ kind: 'TO_DROPOFF', from: 'Shelf B 2 (EP-SHELF-B-2)', to: 'Shelf C 1 (EP-SHELF-C-1)' })
+    expect(activityAt(steps, steps[1]!, null, places)).toMatchObject({ kind: 'AT_PICKUP', to: 'Shelf B 2 (EP-SHELF-B-2)' })
+    expect(activityAt(steps, steps[3]!, null, places)).toMatchObject({ kind: 'AT_DROPOFF', to: 'Shelf C 1 (EP-SHELF-C-1)' })
+  })
+})
+
+describe('ticker position', () => {
+  it('slides steadily between events', () => {
+    const times = [T0, T0 + 10_000, T0 + 12_000]
+    expect(tickerPosition(times, T0 - 5)).toBe(0)
+    expect(tickerPosition(times, T0 + 5_000)).toBeCloseTo(0.5)
+    expect(tickerPosition(times, T0 + 11_000)).toBeCloseTo(1.5)
+    expect(tickerPosition(times, T0 + 99_000)).toBe(2)
   })
 })

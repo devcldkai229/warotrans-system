@@ -17,8 +17,29 @@ import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EVIDENCE_LABEL, EVIDENCE_TONE, SEVERITY_LABEL, SEVERITY_TONE } from './journalTones'
 import { CameraPlayer } from './replay/CameraPlayer'
-import { JourneyTimeline, NOTE_COLOR, SEVERITY_COLOR } from './replay/JourneyTimeline'
-import { cameraState, currentEventId, formatElapsed, incidentJump, incidents, mediaAt, ms, pathUntil, planAt, poseAt } from './replay/replayModel'
+import { EventTicker } from './replay/EventTicker'
+import { JourneyTimeline, NOTE_COLOR, SEVERITY_COLOR, STEP_OTHER_COLOR, STEP_TYPE_COLOR, stepColor, stepsOfRun } from './replay/JourneyTimeline'
+import {
+  cameraState,
+  currentEventId,
+  formatElapsed,
+  incidentJump,
+  incidents,
+  mediaAt,
+  ms,
+  pathUntil,
+  planAt,
+  poseAt,
+  activityAt,
+  holeAt,
+  stepAt,
+  stepJump,
+  stepTimeline,
+  videoHoles,
+  type Activity,
+  type StepSpan,
+  type VideoHole,
+} from './replay/replayModel'
 
 const COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed']
 const RATES = [0.5, 1, 2, 4]
@@ -70,49 +91,6 @@ export function JournalReplayPage() {
   const [rate, setRate] = useState(1)
   const [mainRun, setMainRun] = useState<string | null>(params.get('run'))
   const [tab, setTab] = useState<Tab>('events')
-  const cursorMs = Math.min(Math.max(cursor ?? fromMs, fromMs), toMs)
-
-  // The global clock: real time × rate while playing. It belongs to the page, never to a video player.
-  const last = useRef<number | null>(null)
-  useEffect(() => {
-    if (!playing) {
-      last.current = null
-      return
-    }
-    let frame = 0
-    const step = (now: number) => {
-      const before = last.current ?? now
-      last.current = now
-      setCursor((c) => {
-        const next = (c ?? fromMs) + (now - before) * rate
-        if (next >= toMs) {
-          setPlaying(false)
-          return toMs
-        }
-        return next
-      })
-      frame = requestAnimationFrame(step)
-    }
-    frame = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(frame)
-  }, [playing, rate, fromMs, toMs])
-
-  // Deep link kept current (rounded to 100 ms, written at most twice a second).
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current)
-          next.set('t', String(Math.round(cursorMs / 100) * 100))
-          if (mainRun) next.set('run', mainRun)
-          return next
-        },
-        { replace: true },
-      )
-    }, 500)
-    return () => clearTimeout(id)
-  }, [cursorMs, mainRun, setParams])
-
   const trajectories = useQueries({
     queries: runs.map((run) => ({
       queryKey: ['evidence-trajectory', run.id],
@@ -133,12 +111,63 @@ export function JournalReplayPage() {
     recordings.forEach((r, i) => (out[r.id] = spans[i]?.data))
     return out
   }, [recordings, spans])
+  // Until the technician moves it (or a deep link sets it), the cursor sits on the first frame of video: the journal
+  // opens a moment before the camera starts, and opening on "No video at this time" looked broken.
+  const firstFootageMs = useMemo(() => {
+    const starts = Object.values(spansByRecording).flatMap((r) => (r?.spans ?? []).map((sp) => Date.parse(sp.utcStart)))
+    const first = starts.length > 0 ? Math.min(...starts) : null
+    return first != null && first > fromMs && first < toMs ? first : fromMs
+  }, [spansByRecording, fromMs, toMs])
+  const cursorMs = Math.min(Math.max(cursor ?? firstFootageMs, fromMs), toMs)
+
+  // The global clock: real time × rate while playing. It belongs to the page, never to a video player.
+  const last = useRef<number | null>(null)
+  useEffect(() => {
+    if (!playing) {
+      last.current = null
+      return
+    }
+    let frame = 0
+    const step = (now: number) => {
+      const before = last.current ?? now
+      last.current = now
+      setCursor((c) => {
+        const next = (c ?? firstFootageMs) + (now - before) * rate
+        if (next >= toMs) {
+          setPlaying(false)
+          return toMs
+        }
+        return next
+      })
+      frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [playing, rate, fromMs, toMs, firstFootageMs])
+
+  // Deep link kept current (rounded to 100 ms, written at most twice a second).
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          next.set('t', String(Math.round(cursorMs / 100) * 100))
+          if (mainRun) next.set('run', mainRun)
+          return next
+        },
+        { replace: true },
+      )
+    }, 500)
+    return () => clearTimeout(id)
+  }, [cursorMs, mainRun, setParams])
+
   const eventsQuery = useQuery({ queryKey: ['evidence-events', journalId], queryFn: () => evidenceApi.events(journalId), enabled: Boolean(manifest) })
   const notesQuery = useQuery({ queryKey: ['evidence-notes', journalId], queryFn: () => evidenceApi.annotations(journalId), enabled: Boolean(manifest) })
   const mapVersionId = runs.find((r) => r.mapVersionId)?.mapVersionId ?? null
   const mapQuery = useQuery({ queryKey: ['map-detail', mapVersionId], queryFn: () => getMapVersionDetail(mapVersionId!), enabled: Boolean(mapVersionId), staleTime: 300_000 })
   const geometry = useMemo(() => mapDetailToGeometry(mapQuery.data), [mapQuery.data])
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data])
+  const steps = useMemo(() => stepTimeline(events), [events])
 
   const seek = useCallback((time: number) => setCursor(Math.min(Math.max(time, fromMs), toMs)), [fromMs, toMs])
   const jump = useCallback(
@@ -147,6 +176,13 @@ export function JournalReplayPage() {
       if (target != null) seek(target)
     },
     [events, cursorMs, seek],
+  )
+  const jumpStep = useCallback(
+    (direction: 1 | -1, among: StepSpan[] = steps) => {
+      const target = stepJump(among, cursorMs, direction)
+      if (target != null) seek(target)
+    },
+    [steps, cursorMs, seek],
   )
 
   // Keyboard shortcuts, except while typing a note.
@@ -161,10 +197,12 @@ export function JournalReplayPage() {
       else if (event.key === 'ArrowLeft' && target?.getAttribute('role') !== 'slider') seek(cursorMs - (event.shiftKey ? 1000 : SKIP_MS))
       else if (event.key === ']') jump(1)
       else if (event.key === '[') jump(-1)
+      else if (event.key === '.') jumpStep(1)
+      else if (event.key === ',') jumpStep(-1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [cursorMs, seek, jump])
+  }, [cursorMs, seek, jump, jumpStep])
 
   const addNote = useMutation({
     mutationFn: (body: { category: string; note: string }) =>
@@ -189,7 +227,10 @@ export function JournalReplayPage() {
     if (pose) robots.push({ code: run.robotCode, status: 'EXECUTING', x: pose.x, y: pose.y, yaw: pose.yaw })
     else if (active && points.length > 0) {
       const lastValid = [...points].reverse().find((p) => p[0] <= cursorMs && p[4] === 1)
-      if (lastValid) callouts.push({ x: lastValid[1], y: lastValid[2], tone: 'warn', lines: [run.robotCode, t('Position unknown (localization gap)')] })
+      // An invalid sample = the robot said it was not localized; no sample at all = the robot sent no position here.
+      const lastSample = [...points].reverse().find((p) => p[0] <= cursorMs)
+      const why = lastSample && lastSample[4] === 0 ? t('Position unknown (localization gap)') : t('No position data at this moment')
+      if (lastValid) callouts.push({ x: lastValid[1], y: lastValid[2], tone: 'warn', lines: [run.robotCode, why] })
     }
   })
 
@@ -203,6 +244,35 @@ export function JournalReplayPage() {
     return options.find((c) => c.rec && spansByRecording[c.rec.id] && mediaAt(spansByRecording[c.rec.id]!.spans, cursorMs)) ?? options[0] ?? null
   }
   const others = runs.filter((run) => run.id !== selectedRunId)
+  // Every stretch of a run without picture, with its reason (camera late, robot stopped recording, no video at all…).
+  // Unknown while a recording's spans are still loading: no warning rather than a wrong one.
+  const holesByRun: Record<string, VideoHole[]> = {}
+  for (const run of runs) {
+    const runStart = ms(run.startedAtUtc)
+    if (runStart == null) continue
+    const runEnd = ms(run.endedAtUtc) ?? toMs
+    const loaded = run.recordings.map((rec) => spansByRecording[rec.id])
+    if (loaded.some((x) => !x)) continue
+    holesByRun[run.id] = videoHoles(
+      loaded.flatMap((x) => x!.spans),
+      loaded.flatMap((x) => x!.gaps),
+      runStart,
+      runEnd,
+    )
+  }
+  const holeFor = (run: ReplayRun): { title: string; reason: string; jumpLabel?: string; onJump?: () => void } | null => {
+    const hole = holeAt(holesByRun[run.id] ?? [], cursorMs)
+    if (!hole) return null
+    const span = hole.reason === 'NO_RECORDING' ? '' : ` · ${clockOf(hole.fromMs)} → ${clockOf(hole.toMs)} (${formatElapsed(Math.round((hole.toMs - hole.fromMs) / 1000) * 1000)})`
+    return {
+      title: `${t(hole.reason === 'NO_RECORDING' ? 'No video for this trip' : 'No video at this moment')}${span}`,
+      reason: t(HOLE_REASON[hole.reason] ?? 'No video was received for this part'),
+      jumpLabel: hole.nextVideoMs != null ? t('Go to the next video ({time})', { time: clockOf(hole.nextVideoMs) }) : undefined,
+      onJump: hole.nextVideoMs != null ? () => seek(hole.nextVideoMs!) : undefined,
+    }
+  }
+  const selectedSteps = selectedRun ? stepsOfRun(steps, selectedRun, runs.length) : []
+  const currentStep = stepAt(selectedSteps, cursorMs)
   const activeEvent = currentEventId(events, cursorMs)
   const visibleEvents = showAllEvents ? events : events.filter((e) => e.severity !== 'INFO')
   const incidentCount = incidents(events).length
@@ -213,6 +283,8 @@ export function JournalReplayPage() {
 
   const selectedPose = selectedRun ? poseAt(trajectories[selectedIndex]?.data?.points ?? [], cursorMs) : null
   const selectedPlan = selectedRun ? planAt(plans[selectedIndex]?.data ?? [], cursorMs) : null
+  const legStart = currentStep && selectedRun ? poseAt(trajectories[selectedIndex]?.data?.points ?? [], currentStep.startMs + 300) : null
+  const activity = activityAt(selectedSteps, currentStep, legStart, geometry.endpoints.map((e) => ({ code: e.code, name: e.name, x: e.x, y: e.y })))
   const selectedCam = selectedRun ? pickRecording(selectedRun.id) : null
   const selectedSpans = selectedCam?.rec ? spansByRecording[selectedCam.rec.id] ?? null : null
   const selectedCamState = cameraState(
@@ -255,6 +327,8 @@ export function JournalReplayPage() {
           ) : null}
         </header>
 
+        <EvidenceNotice status={manifest.evidenceStatus} runs={runs} holesByRun={holesByRun} onSeek={seek} />
+
         {runs.length === 0 ? (
           <div className="rounded-lg bg-container p-8 text-center text-sm text-ink-2">{t('No robot has taken a trip of this request yet.')}</div>
         ) : (
@@ -270,8 +344,20 @@ export function JournalReplayPage() {
                     cursorMs={cursorMs}
                     playing={playing}
                     rate={rate}
+                    hole={holeFor(selectedRun)}
                   />
                 ) : null}
+                {selectedRun ? (
+                  <CurrentStepBar
+                    steps={selectedSteps}
+                    current={currentStep}
+                    cursorMs={cursorMs}
+                    color={COLORS[selectedIndex % COLORS.length]!}
+                    onSeek={seek}
+                    onJump={(direction) => jumpStep(direction, selectedSteps)}
+                  />
+                ) : null}
+                <EventTicker events={events} cursorMs={cursorMs} onSeek={seek} />
                 {others.length > 0 ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {others.map((run) => {
@@ -286,6 +372,7 @@ export function JournalReplayPage() {
                             playing={playing}
                             rate={rate}
                             secondary
+                            hole={holeFor(run)}
                           />
                         </button>
                       )
@@ -323,8 +410,14 @@ export function JournalReplayPage() {
                     <Fact icon="crosshair" label={t('Position')} mono>
                       {selectedPose ? `${selectedPose.x.toFixed(2)}, ${selectedPose.y.toFixed(2)} · ${((selectedPose.yaw * 180) / Math.PI).toFixed(0)}°` : t('Unknown')}
                     </Fact>
-                    <Fact icon="route" label={t('Planned route')}>
-                      {selectedPlan ? `v${selectedPlan.planVersion}${selectedPlan.reason ? ` · ${humanize(selectedPlan.reason)}` : ''}` : t('None')}
+                    <Fact icon="route" label={t('What the robot is doing')}>
+                      <span className="block">{activityText(activity)}</span>
+                      {selectedPlan ? (
+                        <span className="block text-[11px] font-normal text-muted">
+                          {t('Nav2 route #{version}', { version: selectedPlan.planVersion })}
+                          {selectedPlan.reason === 'replan' ? ` · ${t('recalculated on the way')}` : selectedPlan.reason === 'initial' ? ` · ${t('first plan of the leg')}` : ''}
+                        </span>
+                      ) : null}
                     </Fact>
                     <Fact icon="play" label={t('Camera')}>{t(CAMERA_TEXT[selectedCamState] ?? selectedCamState)}</Fact>
                     <Fact icon="clock" label={t('Clock sync')}>
@@ -393,6 +486,9 @@ export function JournalReplayPage() {
                 spansByRecording={spansByRecording}
                 events={events}
                 annotations={notes}
+                steps={steps}
+                activeStepId={currentStep?.stepId ?? null}
+                holesByRun={holesByRun}
                 selectedRunId={selectedRunId}
                 onSelectRun={setMainRun}
                 onSeek={seek}
@@ -402,7 +498,14 @@ export function JournalReplayPage() {
                 <span className="flex items-center gap-1.5"><span className="h-1 w-4 rounded-full bg-ink-2/30" />{t('Trip')}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 rotate-45" style={{ background: SEVERITY_COLOR.WARNING }} />{t('Incident')}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: NOTE_COLOR }} />{t('Note')}</span>
-                <span className="ml-auto">{t('Local time; recorded in UTC')} · {t('Space: play / pause · ← →: 5 s · [ ]: incidents')}</span>
+                {steps.length > 0 ? (
+                  <>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-[2px]" style={{ background: COLORS[selectedIndex % COLORS.length] }} />{t('Driving step')}</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-[2px]" style={{ background: STEP_TYPE_COLOR.HUMAN_INTERACTION }} />{t('Waiting for staff')}</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-[2px]" style={{ background: STEP_OTHER_COLOR }} />{t('Other step')}</span>
+                  </>
+                ) : null}
+                <span className="ml-auto">{t('Local time; recorded in UTC')} · {t('Space: play / pause · ← →: 5 s · [ ]: incidents · , .: steps')}</span>
               </p>
             </section>
 
@@ -557,6 +660,221 @@ function ControlButton({ icon, label, shortcut, onClick, disabled }: { icon: Ico
     >
       <Icon name={icon} size={16} />
     </button>
+  )
+}
+
+const clockOf = (time: number) =>
+  new Date(time).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+/** Why there is no picture, in plain words (reasons from the Recorder's spans, plus the page's own). */
+const HOLE_REASON: Record<string, string> = {
+  NOT_YET_RECORDED: 'The camera had not started recording yet.',
+  NO_VIDEO: 'No video was received for this part.',
+  PROCESSING: 'This part of the video is still being processed.',
+  FRAME_GAP: 'The robot was too busy to keep recording, frames were skipped.',
+  CAMERA_LOST: 'The camera stopped sending pictures.',
+  REBOOT: 'The robot restarted.',
+  CLOCK_UNCERTAIN: "The robot's clock could not be trusted here.",
+  INPUT_LIMIT: 'This part was longer than one processing job allows.',
+  RECORDING_STOPPED: 'The robot stopped recording here and started again later.',
+  AFTER_RECORDING: 'The recording ended before the trip was closed.',
+  NO_RECORDING: 'The robot sent no video for this trip: its camera or recording agent was not running or could not reach the Recorder.',
+}
+
+const ACTIVITY_TEXT: Record<Activity['kind'], string> = {
+  TO_PICKUP: 'Going to pick up',
+  TO_DROPOFF: 'Going to deliver',
+  MOVING: 'Driving',
+  AT_PICKUP: 'Waiting for staff to load',
+  AT_DROPOFF: 'Waiting for staff to unload',
+  AT_STOP: 'Waiting for staff',
+  IDLE: 'Not on a trip step',
+}
+
+/** "Going to deliver: Shelf B-2 → Shelf C-1" / "Waiting for staff to load at Shelf B-2". */
+function activityText(a: Activity): string {
+  const what = t(ACTIVITY_TEXT[a.kind])
+  if (a.kind === 'IDLE') return what
+  if (a.from && a.to) return `${what}: ${a.from} → ${a.to}`
+  if (a.to) return a.kind.startsWith('AT_') ? `${what} · ${t('at {place}', { place: a.to })}` : `${what} → ${a.to}`
+  return what
+}
+
+/**
+ * Why the evidence is not complete, per robot, above the player: a run without any video or path, and the stretches
+ * of a run without picture (click to go there). Nothing when every run is fully recorded.
+ */
+function EvidenceNotice({
+  status,
+  runs,
+  holesByRun,
+  onSeek,
+}: {
+  status: string
+  runs: ReplayRun[]
+  holesByRun: Record<string, VideoHole[]>
+  onSeek: (t: number) => void
+}) {
+  const lines = runs.flatMap((run) => {
+    const holes = (holesByRun[run.id] ?? []).filter((h) => h.toMs - h.fromMs >= 1000)
+    if (holes.some((h) => h.reason === 'NO_RECORDING')) {
+      return [{
+        key: run.id,
+        robot: run.robotCode,
+        text: run.trajectoryAvailable
+          ? t('No video for this trip; the path on the map is there.')
+          : t('Neither video nor path reached the Recorder: the camera / recording agent of this robot was not running or not connected during the trip.'),
+        holes: [] as VideoHole[],
+      }]
+    }
+    if (holes.length === 0) return []
+    const total = holes.reduce((sum, h) => sum + (h.toMs - h.fromMs), 0)
+    return [{
+      key: run.id,
+      robot: run.robotCode,
+      text: t('{count} stretches without video, {seconds} s in all (amber on the timeline).', { count: holes.length, seconds: Math.round(total / 1000) }),
+      holes,
+    }]
+  })
+  if (lines.length === 0 && (status === 'FINALIZED' || status === 'OPEN' || status === 'FINALIZING')) return null
+  const partial = status === 'PARTIAL'
+  return (
+    <div
+      role="note"
+      data-testid="evidence-notice"
+      className="flex gap-3 rounded-lg border px-4 py-3 text-sm"
+      style={{ borderColor: 'rgb(245 158 11 / 0.45)', background: 'rgb(245 158 11 / 0.08)' }}
+    >
+      <span style={{ color: '#d97706' }}><Icon name="alert" size={18} /></span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="font-semibold">
+          {partial ? t('Evidence is incomplete (PARTIAL): the trip happened, but part of its record is missing.') : t('Some moments of this journey have no video.')}
+        </span>
+        {lines.map((line) => (
+          <span key={line.key} className="text-ink-2">
+            <span className="font-mono font-semibold text-ink">{line.robot}</span> — {line.text}
+            {line.holes.slice(0, 4).map((h) => (
+              <button
+                key={h.fromMs}
+                type="button"
+                onClick={() => onSeek(h.fromMs)}
+                className="ml-2 rounded-sm px-1.5 py-0.5 font-mono text-xs underline-offset-2 hover:underline"
+                style={{ background: 'rgb(245 158 11 / 0.15)' }}
+                title={t(HOLE_REASON[h.reason] ?? 'No video was received for this part.')}
+              >
+                {clockOf(h.fromMs)} · {formatElapsed(Math.round((h.toMs - h.fromMs) / 1000) * 1000)}
+              </button>
+            ))}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+type StepTone = 'blue' | 'amber' | 'green' | 'red' | 'grey'
+
+const STEP_STATUS: Record<string, { label: string; tone: StepTone }> = {
+  EXECUTING: { label: 'Running', tone: 'blue' },
+  READY: { label: 'Running', tone: 'blue' },
+  WAITING: { label: 'Waiting', tone: 'amber' },
+  PAUSED: { label: 'Paused', tone: 'amber' },
+  COMPLETED: { label: 'Done', tone: 'green' },
+  FAILED: { label: 'Failed', tone: 'red' },
+  CANCELLED: { label: 'Cancelled', tone: 'grey' },
+  SKIPPED: { label: 'Skipped', tone: 'grey' },
+}
+
+const STEP_TYPE_ICON: Record<string, IconName> = { MOVE: 'route', HUMAN_INTERACTION: 'user' }
+
+/**
+ * "Where is the trip at this second": the step under the cursor, its target, how long it has run and a dot per step.
+ * Follows the cursor on every frame, so dragging the timeline or playing the video moves it with the picture.
+ */
+function CurrentStepBar({
+  steps,
+  current,
+  cursorMs,
+  color,
+  onSeek,
+  onJump,
+}: {
+  steps: StepSpan[]
+  current: StepSpan | null
+  cursorMs: number
+  color: string
+  onSeek: (t: number) => void
+  onJump: (direction: 1 | -1) => void
+}) {
+  if (steps.length === 0) {
+    return <p className="rounded-lg border border-dashed border-outline-variant px-3 py-2 text-xs text-ink-2">{t('This journal has no step data.')}</p>
+  }
+  const index = current ? steps.indexOf(current) : -1
+  const before = !current && cursorMs < steps[0]!.startMs
+  // The status the step had at the cursor: a step that later completed is still running before its end.
+  const status = current ? (current.endMs != null && cursorMs < current.endMs && current.status === 'COMPLETED' ? 'EXECUTING' : current.status) : null
+  const shown = status ? (STEP_STATUS[status] ?? { label: status, tone: 'grey' as const }) : null
+  const position =
+    current?.position != null && current.count != null ? `${current.position}/${current.count}` : index >= 0 ? `${index + 1}/${steps.length}` : null
+  const target = current?.targetCode
+    ? current.targetName && current.targetName !== current.targetCode
+      ? `${current.targetName} (${current.targetCode})`
+      : current.targetCode
+    : null
+  return (
+    <div
+      className="flex items-center gap-3 rounded-lg border border-outline-soft bg-container px-3 py-2"
+      data-testid="current-step"
+      data-step-id={current?.stepId ?? ''}
+    >
+      <span
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-white"
+        style={{ background: current ? stepColor(current.type, color) : STEP_OTHER_COLOR }}
+      >
+        <Icon name={(current?.type && STEP_TYPE_ICON[current.type]) || 'list'} size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-[11px] font-medium tracking-wide text-muted uppercase">{t('Step now')}</span>
+          {position ? <span className="font-mono text-xs text-ink-2">{position}</span> : null}
+          {shown ? <StatusBadge tone={shown.tone}>{t(shown.label)}</StatusBadge> : null}
+        </div>
+        <p className="truncate text-sm font-semibold" data-testid="current-step-name">
+          {current ? current.name : before ? t('Before the first step') : t('Between steps')}
+          {target ? <span className="font-normal text-ink-2"> · {target}</span> : null}
+        </p>
+        {/* One dot per step; the current one is wide. Click to go to that step. */}
+        <div className="mt-1 flex flex-wrap items-center gap-1" aria-label={t('Steps')}>
+          {steps.map((s, i) => (
+            <button
+              key={s.stepId}
+              type="button"
+              onClick={() => onSeek(s.startMs)}
+              title={`${i + 1}. ${s.name}${s.targetCode ? ` · ${s.targetCode}` : ''}`}
+              aria-label={`${i + 1}. ${s.name}`}
+              className={cx('h-1.5 rounded-full transition-all', s === current ? 'w-5' : 'w-1.5 opacity-50 hover:opacity-90')}
+              style={{ background: s.startMs <= cursorMs ? stepColor(s.type, color) : 'var(--color-outline-variant)' }}
+            />
+          ))}
+        </div>
+      </div>
+      {current ? (
+        <span className="hidden shrink-0 text-right font-mono text-xs text-ink-2 tabular-nums sm:block">
+          {formatElapsed(cursorMs - current.startMs)}
+          {current.endMs != null ? <span className="text-muted"> / {formatElapsed(current.endMs - current.startMs)}</span> : null}
+        </span>
+      ) : null}
+      <div className="flex shrink-0 items-center">
+        <ControlButton icon="chevronLeft" label={t('Previous step')} shortcut="," onClick={() => onJump(-1)} />
+        <ControlButton
+          icon="chevronRight"
+          label={t('Next step')}
+          shortcut="."
+          onClick={() => onJump(1)}
+          disabled={!steps.some((s) => s.startMs > cursorMs + 250)}
+        />
+      </div>
+    </div>
   )
 }
 

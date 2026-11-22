@@ -52,6 +52,7 @@ import { WorkflowEditor } from '@/features/workflows/workflow-editor-page'
 import { EndpointStorageField } from './EndpointStorageField'
 import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
+import { EndpointGroupsPanel } from './editor/EndpointGroupsPanel'
 import { MapEditorCanvas, type EditorTool } from './editor/MapEditorCanvas'
 import { degToRad, normalizeYaw, radToDeg } from './yaw'
 import { t } from '@/shared/i18n'
@@ -439,6 +440,7 @@ export function MapEditorPage() {
   }, [zones, selectedZone, zoneDraft])
 
   const workflowOpen = mode.kind === 'workflow'
+  const [groupsOpen, setGroupsOpen] = useState(false)
   const panelOpen = Boolean(selectedZone ?? selectedEndpoint ?? selectedEdge ?? workflowOpen)
   const openPanelWidth = workflowOpen
     ? panelWidth
@@ -1040,6 +1042,7 @@ export function MapEditorPage() {
             {clearGraphCacheMutation.isPending ? t('Clearing…') : t('Clear graph cache')}
           </Button>
           ) : null}
+          <Button variant={groupsOpen ? 'outline' : 'ghost'} onClick={() => setGroupsOpen((open) => !open)}>{t('Endpoint groups')}</Button>
           <Button variant="ghost" onClick={() => navigate('/configure/facility')}>{t('Close')}</Button>
           {!canWrite ? null : isDraft ? (
             <Button variant="primary" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>{t('Publish')}</Button>
@@ -1593,6 +1596,12 @@ export function MapEditorPage() {
                 </Button>
               </div>
             ) : null}
+          </Inspector>
+        ) : null}
+
+        {groupsOpen && version && !panelOpen ? (
+          <Inspector title={t('Endpoint groups')} onClose={() => setGroupsOpen(false)}>
+            <EndpointGroupsPanel mapVersionId={version.id} isDraft={isDraft} endpoints={endpoints} />
           </Inspector>
         ) : null}
 

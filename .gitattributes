@@ -1,0 +1,4 @@
+# Run by bash / cloud-init on Linux and Git Bash: never CRLF, whatever core.autocrlf says.
+*.sh text eol=lf
+*.tftpl text eol=lf
+infrastructure/mosquitto/** text eol=lf
