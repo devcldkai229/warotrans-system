@@ -2346,4 +2346,7 @@ export const vi: Record<string, string> = {
   'Width {width} m · Max {speed} m/s': 'Rộng {width} m · Tối đa {speed} m/s',
   'Width {width} m': 'Rộng {width} m',
   '{meters} m · {zoom}×': '{meters} m · {zoom}×',
+  'Warehouse Operations': 'Vận hành kho',
+  'Recall All Fleet Robots': 'Thu hồi toàn bộ đội robot',
+  'Polling': 'Cập nhật định kỳ',
 };

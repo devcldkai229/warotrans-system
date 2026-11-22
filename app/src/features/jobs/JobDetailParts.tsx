@@ -100,7 +100,7 @@ export function JobOverviewCard({ job, places, robotName, online, speed, battery
         <Text variant="caption" color="textSecondary">From</Text>
         <Text variant="headline" numberOfLines={2}>{from}</Text>
       </View>
-      <View style={styles.routeArrow}><ArrowRight size={18} color={colors.primaryText} /></View>
+      <ArrowRight size={16} color={colors.textMuted} />
       <View style={styles.routeEnd}>
         <Text variant="caption" color="textSecondary">To</Text>
         <Text variant="headline" numberOfLines={2}>{to}</Text>
@@ -116,9 +116,7 @@ export function JobOverviewCard({ job, places, robotName, online, speed, battery
     </View>
 
     <View style={styles.robotBox}>
-      <View style={[styles.robotIcon, { backgroundColor: assigned ? colors.primaryLight : colors.surfaceMuted }]}>
-        <Bot size={22} color={assigned ? colors.primaryText : colors.textMuted} />
-      </View>
+      <Bot size={22} color={assigned ? colors.textPrimary : colors.textMuted} />
       {assigned ? <>
         <View style={{ flex: 1, gap: 4 }}>
           <View style={styles.rowBetween}>
@@ -128,7 +126,7 @@ export function JobOverviewCard({ job, places, robotName, online, speed, battery
           <View style={styles.robotStats}>
             <View style={styles.robotStat}>
               <Gauge size={16} color={colors.textSecondary} />
-              <Text variant="bodyMedium" fontWeight="700">{speed !== null ? `${Math.abs(speed).toFixed(2)} m/s` : '—'}</Text>
+              <Text variant="bodyMedium" fontWeight="700">{speed !== null ? `${Math.abs(speed).toFixed(2)} m/s` : '--'}</Text>
             </View>
             <BatteryIndicator percent={battery} charging={charging} />
           </View>
@@ -155,7 +153,7 @@ export function JobContainersCard({ containers, places, from, to, tasks }: { con
   const routes = containerRoutes(tasks);
   return <View style={styles.card}>
     <View style={styles.sectionHeader}>
-      <View style={styles.sectionIcon}><Package size={18} color={colors.primaryText} /></View>
+      <Package size={18} color={colors.textSecondary} />
       <View style={{ flex: 1 }}>
         <Text variant="headline">Containers</Text>
         <Text variant="caption" color="textSecondary">{t('{count} containers in this job', { count: containers.length })}</Text>
@@ -201,7 +199,7 @@ export function JobStepsAccordion({ tasks, places, activeStepId }: { tasks: AppJ
   const done = stops.filter(stop => stopStatus(stop) === 'COMPLETED').length;
   return <View style={styles.card}>
     <View style={styles.sectionHeader}>
-      <View style={styles.sectionIcon}><Truck size={18} color={colors.primaryText} /></View>
+      <Truck size={18} color={colors.textSecondary} />
       <View style={{ flex: 1 }}>
         <Text variant="headline">Workflow Steps</Text>
         <Text variant="caption" color="textSecondary">{t('{done} of {total} stops done', { done, total: stops.length })}</Text>
@@ -254,7 +252,7 @@ export function JobStepsAccordion({ tasks, places, activeStepId }: { tasks: AppJ
 export function ReportProblemCard({ onPress }: { onPress: () => void }) {
   const { styles, colors } = useThemedStyles(createStyles);
   return <Pressable onPress={onPress} style={({ pressed }) => [styles.reportCard, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Report a problem">
-    <View style={styles.reportIcon}><AlertTriangle size={20} color={colors.dangerText} /></View>
+    <AlertTriangle size={20} color={colors.dangerText} />
     <View style={{ flex: 1 }}>
       <Text variant="bodyMedium" fontWeight="700" color={colors.dangerText}>Report a problem</Text>
       <Text variant="caption" color="textSecondary">Wrong container, blocked path, damaged goods… The supervisor is told right away.</Text>
@@ -271,15 +269,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   linkButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.primaryLight },
   route: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   routeEnd: { flex: 1, gap: 2, padding: 12, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  routeArrow: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
   track: { height: 8, borderRadius: 4, backgroundColor: colors.surfaceMuted, overflow: 'hidden' },
   fill: { height: 8, borderRadius: 4 },
   robotBox: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  robotIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   robotStats: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   robotStat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sectionIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
   containerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
   inlineRoute: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   smallPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
@@ -293,5 +288,4 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   stepLine: { width: 2, flex: 1, minHeight: 12 },
   stepError: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 2 },
   reportCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radii.lg, backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.dangerBorder },
-  reportIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
 });

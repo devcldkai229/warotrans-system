@@ -1,8 +1,7 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors, ThemeColors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
 import { translateText } from '../i18n';
-import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { Text } from './Text';
@@ -41,7 +40,7 @@ export function SegmentedControl<TValue extends string = string>({
   accessibilityLabel,
   style,
 }: SegmentedControlProps<TValue>) {
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const isSm = size === 'sm';
 
   return (
@@ -85,15 +84,15 @@ export function SegmentedControl<TValue extends string = string>({
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+const createStyles = (_colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     track: {
       flexDirection: 'row',
       alignSelf: 'stretch',
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      borderColor: colors.border,
+      backgroundColor: isDark ? 'rgba(118, 118, 128, 0.24)' : 'rgba(118, 118, 128, 0.11)',
+      borderRadius: 10,
+      borderCurve: 'continuous',
+      gap: 2,
     },
     trackSm: {
       padding: 3,
@@ -110,11 +109,18 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       minHeight: 44,
       minWidth: 0,
       paddingHorizontal: 8,
-      borderRadius: radii.sm,
+      borderRadius: 8,
+      borderCurve: 'continuous',
     },
     segmentActive: {
-      backgroundColor: colors.surface,
-      ...shadows.sm,
+      backgroundColor: isDark ? '#3a3b40' : '#ffffff',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.04)',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0.28 : 0.08,
+      shadowRadius: 3,
+      elevation: 1,
     },
     segmentPressed: {
       opacity: 0.6,

@@ -8,7 +8,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors, ThemeColors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
 import { translateText } from '../i18n';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
@@ -38,7 +38,7 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
-  const { baseStyles, pressedStyles, textStyles } = useThemedStyles(createButtonStyles);
+  const { baseStyles, pressedStyles, textStyles, colors } = useThemedStyles(createButtonStyles);
   const isInteractive = !disabled && !loading;
   const resolvedLabel = translateText(label);
 
@@ -109,13 +109,13 @@ const createButtonStyles = (colors: ThemeColors) => ({
     },
     outline: {
       backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderColor: colors.primary,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
     },
     danger: {
       backgroundColor: colors.danger,
-      borderBottomWidth: 3,
-      borderBottomColor: '#991b1b',
+      borderWidth: 1,
+      borderColor: colors.danger,
     },
     sm: {
       paddingVertical: 8,
@@ -133,7 +133,7 @@ const createButtonStyles = (colors: ThemeColors) => ({
     disabled: {
       backgroundColor: colors.surfaceMuted,
       borderColor: colors.border,
-      borderBottomWidth: 0,
+      opacity: 0.5,
       shadowOpacity: 0,
       elevation: 0,
     },
@@ -169,15 +169,15 @@ const createButtonStyles = (colors: ThemeColors) => ({
       transform: [{ scale: 0.98 }],
     },
     danger: {
-      backgroundColor: '#b91c1c',
+      opacity: 0.88,
       transform: [{ scale: 0.98 }],
     },
   }),
   textStyles: StyleSheet.create({
     base: {
-      fontWeight: '800',
+      fontWeight: '600',
       fontFamily: typography.fontSans,
-      letterSpacing: 0.5,
+      letterSpacing: 0,
       textAlign: 'center',
       flexShrink: 1,
     },
@@ -194,19 +194,19 @@ const createButtonStyles = (colors: ThemeColors) => ({
       color: '#ffffff',
     },
     sm: {
-      fontSize: 12,
-      fontWeight: '800',
+      fontSize: 13,
+      fontWeight: '600',
       fontFamily: typography.fontSans,
     },
     md: {
       fontSize: 14,
-      fontWeight: '800',
+      fontWeight: '600',
       fontFamily: typography.fontSans,
     },
     lg: {
       fontSize: 15,
-      fontWeight: '900',
-      letterSpacing: 0.8,
+      fontWeight: '700',
+      letterSpacing: 0,
       fontFamily: typography.fontSans,
     },
     disabled: {

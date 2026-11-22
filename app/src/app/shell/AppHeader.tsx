@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Bell, ScanLine } from 'lucide-react-native';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
@@ -51,7 +51,7 @@ export function AppHeader({
   initialOpen,
 }: AppHeaderProps) {
   const topInset = useTopInset();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const { unreadCount } = useRealtime();
   const { session } = useAuth();
   const { navigate } = useNavigation();
@@ -77,9 +77,9 @@ export function AppHeader({
             }}
             accessibilityRole="button"
             accessibilityLabel="Scan a code"
-            style={({ pressed }) => [styles.iconBtn, styles.scanBtn, pressed && styles.iconBtnPressed]}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <ScanLine size={18} color="#ffffff" strokeWidth={2.4} />
+            <ScanLine size={18} color={colors.textPrimary} strokeWidth={2.1} />
           </Pressable>
 
           <Pressable
@@ -91,7 +91,7 @@ export function AppHeader({
             accessibilityLabel={`Notifications, ${unreadCount} unread`}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <Bell size={18} color={colors.textPrimary} strokeWidth={2.2} />
+            <Bell size={18} color={colors.textPrimary} strokeWidth={2.1} />
             {unreadCount > 0 && (
               <View style={styles.notifBadge}>
                 <Text style={styles.notifBadgeText}>{unreadCount}</Text>
@@ -140,7 +140,6 @@ export function AppHeader({
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
-    scanBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
     header: {
       backgroundColor: colors.surface,
       borderBottomWidth: 1,

@@ -328,7 +328,7 @@ export function JobsScreen() {
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
         <View style={styles.screenHeader}>
           <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
-            Job Execution Center
+            Jobs
           </Text>
         </View>
 

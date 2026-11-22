@@ -1,5 +1,17 @@
-import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import {
   AlertTriangle,
   Bell,
@@ -7,11 +19,10 @@ import {
   PackageCheck,
   Truck,
 } from 'lucide-react-native';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
-import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
-import { useThemedStyles } from '../../shared/theme/ThemeContext';
+import { useTheme, useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
 import { localizedNotificationText, translateText } from '../../shared/i18n';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -26,6 +37,8 @@ export interface NotificationSheetProps {
   onUnreadCountChange?: (count: number) => void;
 }
 
+const POPOVER_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
 /** Compact notification popover; tap outside or use the accessibility escape gesture to close. */
 export function NotificationSheet({
   visible,
@@ -33,10 +46,44 @@ export function NotificationSheet({
   onUnreadCountChange,
 }: NotificationSheetProps) {
   const topInset = useTopInset();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { navigate } = useNavigation();
   const { session } = useAuth();
   const open = useRef(visible);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const enterAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(enabled => {
+        if (active) setReducedMotion(enabled);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReducedMotion);
+    return () => {
+      active = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible) {
+      enterAnim.setValue(0);
+      return;
+    }
+    enterAnim.setValue(0);
+    const animation = Animated.timing(enterAnim, {
+      toValue: 1,
+      duration: reducedMotion ? 120 : 180,
+      easing: POPOVER_EASE_OUT,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [visible, reducedMotion, enterAnim]);
+
   open.current = visible;
   useEffect(() => {
     open.current = visible;
@@ -94,14 +141,43 @@ export function NotificationSheet({
     ) {
       return <PackageCheck size={16} color={colors.primary} strokeWidth={2.2} />;
     }
-    return <Truck size={16} color={colors.primaryText} strokeWidth={2.2} />;
+    return <Truck size={16} color={colors.primary} strokeWidth={2.2} />;
   };
+
+  const webGlassStyle: ViewStyle | null =
+    Platform.OS === 'web'
+      ? ({
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        } as unknown as ViewStyle)
+      : null;
+
+  const popoverMotionStyle = reducedMotion
+    ? { opacity: enterAnim }
+    : {
+        opacity: enterAnim,
+        transformOrigin: '100% 0%',
+        transform: [
+          {
+            scale: enterAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.94, 1],
+            }),
+          },
+          {
+            translateY: enterAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-4, 0],
+            }),
+          },
+        ],
+      };
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
       statusBarTranslucent
     >
@@ -115,11 +191,15 @@ export function NotificationSheet({
         />
 
         {/* Anchored Popover Card below Header Bell */}
-        <View style={[styles.cardContainer, compact && styles.cardCompact, { top: topInset + 54 }]}>
-          {/* Top Anchor Caret pointing directly to Notification Bell */}
-          <View style={styles.caret} />
-
-          <View style={styles.card}>
+        <Animated.View
+          style={[
+            styles.dropdownCard,
+            webGlassStyle,
+            compact && styles.cardCompact,
+            { top: topInset + 52 },
+            popoverMotionStyle,
+          ]}
+        >
             {(notificationReadError || notificationsError) && (
               <View style={styles.state}>
                 {notificationReadError && <Text variant="caption" color="dangerText" accessibilityRole="alert">{notificationReadError}</Text>}
@@ -160,12 +240,6 @@ export function NotificationSheet({
               showsVerticalScrollIndicator={false}
             >
               {notifications.map((item) => {
-                const isCompleted = item.kind === 'ISSUE_RESOLVED';
-                const isHazard = item.category === 'HAZARD';
-                const isReadyOrAssigned =
-                  item.category === 'JOB_ASSIGNED' ||
-                  item.title?.toLowerCase().includes('ready') ||
-                  item.message?.toLowerCase().includes('ready');
                 const rawDisplayTitle = item.title.startsWith('Job JOB-')
                   ? item.title.slice(4)
                   : item.title;
@@ -189,18 +263,7 @@ export function NotificationSheet({
                       pressed && styles.itemPressed,
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.iconBox,
-                        isCompleted
-                          ? styles.iconBoxJob
-                          : isHazard
-                          ? styles.iconBoxHazard
-                          : isReadyOrAssigned
-                          ? styles.iconBoxRobot
-                          : undefined,
-                      ]}
-                    >
+                    <View style={styles.iconSlot}>
                       {renderIcon(item)}
                     </View>
 
@@ -245,59 +308,46 @@ export function NotificationSheet({
                 <Text variant="caption" color="primary" fontWeight="600">{isSavingNotification ? 'Saving…' : 'Mark All As Read'}</Text>
               </Pressable>
             )}
-          </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     backdrop: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: colors.overlay,
+      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.06)',
     },
-    cardContainer: {
+    dropdownCard: {
       position: 'absolute',
-      right: 14,
+      right: 16,
       width: 280,
+      maxHeight: 340,
       zIndex: 1000,
+      backgroundColor: isDark ? 'rgba(34, 36, 40, 0.90)' : 'rgba(255, 255, 255, 0.90)',
+      borderRadius: 16,
+      borderCurve: 'continuous',
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.08)',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: isDark ? 0.48 : 0.14,
+      shadowRadius: 32,
+      elevation: 14,
     },
     cardCompact: {
       width: 240,
-    },
-    caret: {
-      position: 'absolute',
-      top: -5,
-      // Bell center is 84 from the screen edge; subtract the card inset (14) and half the caret (5).
-      right: 65,
-      width: 10,
-      height: 10,
-      backgroundColor: colors.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      transform: [{ rotate: '45deg' }],
-      zIndex: 10,
-    },
-    card: {
-      width: '100%',
-      maxHeight: 320,
-      backgroundColor: colors.surface,
-      borderRadius: radii.lg,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      overflow: 'hidden',
-      ...shadows.md,
     },
     btnPressed: {
       opacity: 0.65,
     },
     list: {
-      maxHeight: 260,
+      maxHeight: 280,
       flexShrink: 1,
-      backgroundColor: colors.surface,
+      backgroundColor: 'transparent',
     },
     state: {
       paddingHorizontal: 16,
@@ -324,7 +374,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       justifyContent: 'center',
       gap: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
+      borderTopColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(60, 60, 67, 0.12)',
     },
     listContent: {
       paddingBottom: 4,
@@ -333,40 +383,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderSubtle,
-      backgroundColor: colors.surface,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(60, 60, 67, 0.12)',
+      backgroundColor: 'transparent',
     },
     itemUnread: {
-      backgroundColor: colors.primaryLight,
+      backgroundColor: isDark ? 'rgba(45, 136, 255, 0.12)' : 'rgba(50, 121, 249, 0.06)',
     },
     itemPressed: {
-      backgroundColor: colors.surfaceSubtle,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
     },
-    iconBox: {
-      width: 28,
-      height: 28,
-      borderRadius: radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.border,
+    iconSlot: {
+      width: 20,
+      paddingTop: 2,
       alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 2,
-    },
-    iconBoxRobot: {
-      backgroundColor: colors.primaryLight,
-      borderColor: colors.primaryBorder,
-    },
-    iconBoxHazard: {
-      backgroundColor: colors.warningBg,
-      borderColor: colors.warningBorder,
-    },
-    iconBoxJob: {
-      backgroundColor: colors.successBg,
-      borderColor: colors.successBorder,
+      flexShrink: 0,
     },
     itemContent: {
       flex: 1,

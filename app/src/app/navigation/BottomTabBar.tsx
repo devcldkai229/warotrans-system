@@ -3,7 +3,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClipboardList, Home, Navigation } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
@@ -32,7 +32,7 @@ const FALLBACK_BOTTOM_INSET = 10;
 export function BottomTabBar() {
   const { activeTab, switchTab, activeJobCount, setDockHeight } = useNavigation();
   const insets = useSafeAreaInsets();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const bottomInset = insets.bottom || FALLBACK_BOTTOM_INSET;
 
   const handleTabPress = (tab: MainTab) => {
@@ -60,24 +60,24 @@ export function BottomTabBar() {
               accessibilityState={{ selected: isActive }}
               style={({ pressed }) => [
                 styles.tabBtn,
-                isActive && styles.tabBtnActive,
                 pressed && styles.tabBtnPressed,
               ]}
             >
               <View style={styles.iconSlot}>
                 <IconCmp
                   size={24}
-                  color={isActive ? colors.primaryText : colors.textMuted}
-                  strokeWidth={isActive ? 2.4 : 2.0}
+                  color={isActive ? colors.primary : colors.textMuted}
+                  strokeWidth={isActive ? 2.35 : 1.85}
                 />
                 {tab.value === 'jobs' && activeJobCount > 0 ? (
                   <View style={styles.badge}>
-                    <Text variant="caption" color="#78350f" style={styles.badgeText}>
+                    <Text variant="caption" color="#ffffff" style={styles.badgeText}>
                       {activeJobCount}
                     </Text>
                   </View>
                 ) : null}
               </View>
+              <View style={[styles.activeDot, !isActive && styles.activeDotHidden]} />
             </Pressable>
           );
         })}
@@ -123,11 +123,17 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       minWidth: 72,
       height: 44,
-      borderRadius: radii.full,
       paddingHorizontal: 18,
     },
-    tabBtnActive: {
-      backgroundColor: colors.primaryLight,
+    activeDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      marginTop: 4,
+      backgroundColor: colors.primary,
+    },
+    activeDotHidden: {
+      opacity: 0,
     },
     tabBtnPressed: {
       opacity: 0.7,
@@ -138,7 +144,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    /** Lighter warm amber badge chip with crisp surface border */
+    /** Alert count badge unified with header notifications. */
     badge: {
       position: 'absolute',
       top: -6,
@@ -149,7 +155,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: radii.full,
-      backgroundColor: '#fbbf24', // Amber 400: bright, light, warm golden
+      backgroundColor: colors.danger,
       borderWidth: 1.5,
       borderColor: colors.surface,
     },
@@ -157,7 +163,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: '800',
       fontSize: 11,
       lineHeight: 13,
-      color: '#78350f',
+      color: '#ffffff',
     },
     safeArea: {
       backgroundColor: colors.surface,

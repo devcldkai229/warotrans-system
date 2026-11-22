@@ -479,19 +479,19 @@ export function TransportHistoryScreen() {
                         isCancelled && styles.statusBadgeDanger,
                       ]}
                     >
-                      {isSubmitted && <Clock size={13} color="#2563eb" style={{ marginRight: 4 }} />}
-                      {isQueued && <View style={[styles.pulsingDot, { backgroundColor: '#7c3aed' }]} />}
+                      {isSubmitted && <Clock size={13} color={colors.primaryText} style={{ marginRight: 4 }} />}
+                      {isQueued && <View style={[styles.pulsingDot, { backgroundColor: colors.info }]} />}
                       {isInProgress && <View style={styles.pulsingDot} />}
-                      {isCompleted && <CheckCircle2 size={13} color="#16a34a" style={{ marginRight: 4 }} />}
-                      {isCancelled && <AlertTriangle size={13} color="#dc2626" style={{ marginRight: 4 }} />}
+                      {isCompleted && <CheckCircle2 size={13} color={colors.successText} style={{ marginRight: 4 }} />}
+                      {isCancelled && <AlertTriangle size={13} color={colors.dangerText} style={{ marginRight: 4 }} />}
                       <Text
                         style={[
                           styles.statusBadgeText,
-                          isSubmitted && { color: '#2563eb' },
-                          isQueued && { color: '#7c3aed' },
-                          isInProgress && { color: '#b45309' },
-                          isCompleted && { color: '#16a34a' },
-                          isCancelled && { color: '#dc2626' },
+                          isSubmitted && { color: colors.primaryText },
+                          isQueued && { color: colors.infoText },
+                          isInProgress && { color: colors.warningText },
+                          isCompleted && { color: colors.successText },
+                          isCancelled && { color: colors.dangerText },
                         ]}
                       >
                         {order.rawStatus || order.statusText}
@@ -545,7 +545,7 @@ export function TransportHistoryScreen() {
                   {/* Cancellation Reason Alert if Cancelled */}
                   {isCancelled && order.cancelReason && (
                     <View style={styles.cancelAlert}>
-                      <AlertTriangle size={14} color="#dc2626" style={{ marginRight: 8, marginTop: 1, flexShrink: 0 }} />
+                      <AlertTriangle size={14} color={colors.dangerText} style={{ marginRight: 8, marginTop: 1, flexShrink: 0 }} />
                       <Text style={styles.cancelAlertText}>
                         <Text style={{ fontWeight: '700' }}>Reason: </Text>
                         {order.cancelReason}
@@ -886,25 +886,25 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderRadius: 6,
   },
   statusBadgeSubmitted: {
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    backgroundColor: colors.primaryLight,
   },
   statusBadgeQueued: {
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    backgroundColor: colors.infoBg,
   },
   statusBadgeWarning: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    backgroundColor: colors.warningBg,
   },
   statusBadgeSuccess: {
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    backgroundColor: colors.successBg,
   },
   statusBadgeDanger: {
-    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    backgroundColor: colors.dangerBg,
   },
   pulsingDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#b45309',
+    backgroundColor: colors.warning,
     marginRight: 5,
   },
   statusBadgeText: {
@@ -1003,16 +1003,16 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   cancelAlert: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(220, 38, 38, 0.06)',
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.2)',
+    borderColor: colors.dangerBorder,
     borderRadius: radii.sm,
     padding: 10,
     marginBottom: 12,
   },
   cancelAlertText: {
     fontSize: 12,
-    color: '#dc2626',
+    color: colors.dangerText,
     flex: 1,
     lineHeight: 16,
     fontFamily: typography.fontSans,

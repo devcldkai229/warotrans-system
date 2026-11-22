@@ -3,7 +3,6 @@ import {
   CirclePause,
   Info,
   PackageSearch,
-  ShieldCheck,
   Wrench,
   X,
 } from 'lucide-react-native';
@@ -11,7 +10,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -68,7 +67,7 @@ export function SafetyActionSheet({
   onOpenMaintenance,
 }: SafetyActionSheetProps) {
   const insets = useSafeAreaInsets();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
 
   const actions: SafetyAction[] = [
     {
@@ -145,15 +144,10 @@ const handlePress = (action: SafetyAction) => {
         />
 
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
+          <View style={styles.grabber} />
           <View style={styles.header}>
-            <View style={styles.iconWell}>
-              <ShieldCheck size={20} color={colors.primary} strokeWidth={2} />
-            </View>
             <View style={styles.headerText}>
               <Text variant="title">Operational Safety</Text>
-              <Text variant="caption" color={colors.textSecondary}>
-                Exceptions and fleet holds
-              </Text>
             </View>
             <Pressable
               onPress={onClose}
@@ -179,15 +173,9 @@ const handlePress = (action: SafetyAction) => {
                   accessibilityState={{ selected: action.kind === 'toggle' ? isActive : undefined }}
                   style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                 >
-                  <View
-                    style={[
-                      styles.rowIcon,
-                      isActive && styles.rowIconActive,
-                      action.tone === 'danger' && !isActive && styles.rowIconDanger,
-                    ]}
-                  >
+                  <View style={styles.rowIconSlot}>
                     <IconCmp
-                      size={18}
+                      size={20}
                       color={
                         isActive
                           ? colors.warningText
@@ -263,22 +251,22 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       borderTopLeftRadius: radii.lg,
       borderTopRightRadius: radii.lg,
       paddingHorizontal: 16,
-      paddingTop: 16,
+      paddingTop: 10,
       ...shadows.lg,
+    },
+    grabber: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.borderStrong,
+      alignSelf: 'center',
+      marginBottom: 12,
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 16,
-    },
-    iconWell: {
-      width: 40,
-      height: 40,
-      borderRadius: radii.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.primaryLight,
+      marginBottom: 14,
     },
     headerText: {
       flex: 1,
@@ -312,23 +300,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     rowPressed: {
       backgroundColor: colors.surfaceMuted,
     },
-    rowIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+    rowIconSlot: {
+      width: 24,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    rowIconActive: {
-      backgroundColor: colors.warningBg,
-      borderColor: colors.warningBorder,
-    },
-    rowIconDanger: {
-      backgroundColor: colors.dangerBg,
-      borderColor: colors.dangerBorder,
+      flexShrink: 0,
     },
     rowText: {
       flex: 1,

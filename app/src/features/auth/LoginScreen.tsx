@@ -105,7 +105,7 @@ export function LoginScreen() {
               >
                 <Globe size={13} color={colors.primaryText} strokeWidth={2.2} />
                 <Text style={styles.themeCycleLabel}>
-                  {language === 'vi' ? 'VI · Tiếng Việt' : 'EN · English'}
+                  {language === 'vi' ? 'Tiếng Việt' : 'English'}
                 </Text>
               </Pressable>
 
@@ -136,8 +136,8 @@ export function LoginScreen() {
               <View style={styles.logoBadgeWrap}>
                 <BrandMark size={68} />
               </View>
-              <Text style={styles.brandTitle}>WAROTRANS</Text>
-              <Text style={styles.brandSubtitle}>{t('Autonomous Fleet Operator Console')}</Text>
+              <Text style={styles.brandTitle}>WaroTrans</Text>
+              <Text style={styles.brandSubtitle}>{t('Warehouse Operations')}</Text>
             </View>
 
             {/* Form Fields */}
@@ -285,8 +285,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
   },
   brandTitle: {
     fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+    fontWeight: '700',
+    letterSpacing: -0.4,
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
     textAlign: 'center',

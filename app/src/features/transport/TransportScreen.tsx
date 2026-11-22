@@ -118,11 +118,8 @@ export function TransportScreen() {
       >
         {/* Screen Title */}
         <View style={styles.screenHeader}>
-          <Text variant="caption" color={colors.textSecondary} style={styles.eyebrow}>
-            Logistics command
-          </Text>
           <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
-            Transport Hub
+            Transport
           </Text>
         </View>
 
@@ -136,15 +133,10 @@ export function TransportScreen() {
           accessibilityRole="button"
           accessibilityLabel="Find containers and stock"
         >
-          <View style={styles.lookupIconWell}>
-            <Search size={20} color={colors.primaryText} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
+          <Search size={20} color={colors.textPrimary} />
+          <View style={{ flex: 1 }}>
             <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
               Find Containers & Stock
-            </Text>
-            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-              Search a container, product or shelf to see where it is
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
@@ -159,15 +151,10 @@ export function TransportScreen() {
           accessibilityRole="button"
           accessibilityLabel="Create containers"
         >
-          <View style={styles.lookupIconWell}>
-            <PackagePlus size={20} color={colors.primaryText} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
+          <PackagePlus size={20} color={colors.textPrimary} />
+          <View style={{ flex: 1 }}>
             <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
               Create Containers
-            </Text>
-            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-              Scan a product and get container codes to stick on
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
@@ -338,9 +325,8 @@ export function TransportScreen() {
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   lookupCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primaryBorder, ...shadows.sm,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...shadows.sm,
   },
-  lookupIconWell: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -356,11 +342,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     paddingTop: 6,
     paddingBottom: 2,
     gap: 2,
-  },
-  eyebrow: {
-    fontWeight: '600',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
   },
   pageTitle: {
     fontWeight: '800',
@@ -582,14 +563,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     alignItems: 'center',
     gap: 12,
     flex: 1,
-  },
-  historyIconWell: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   historyTextCol: {
     flex: 1,

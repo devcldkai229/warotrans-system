@@ -46,14 +46,8 @@ export function EmptyState({
   return (
     <View style={[styles.container, compact && styles.containerCompact, style]}>
       {IconCmp ? (
-        <View
-          style={[
-            styles.iconWell,
-            compact && styles.iconWellCompact,
-            { backgroundColor: palette.well },
-          ]}
-        >
-          <IconCmp size={compact ? 22 : 28} color={palette.text} strokeWidth={1.8} />
+        <View style={[styles.iconSlot, compact && styles.iconSlotCompact]}>
+          <IconCmp size={compact ? 24 : 30} color={palette.text} strokeWidth={1.6} />
         </View>
       ) : null}
 
@@ -74,13 +68,13 @@ export function EmptyState({
   );
 }
 
-function getTonePalette(colors: ThemeColors): Record<SemanticTone, { well: string; text: string }> {
+function getTonePalette(colors: ThemeColors): Record<SemanticTone, { text: string }> {
   return {
-    neutral: { well: colors.surfaceSubtle, text: colors.textMuted },
-    info: { well: colors.infoBg, text: colors.info },
-    success: { well: colors.successBg, text: colors.success },
-    warning: { well: colors.warningBg, text: colors.warning },
-    danger: { well: colors.dangerBg, text: colors.danger },
+    neutral: { text: colors.textMuted },
+    info: { text: colors.info },
+    success: { text: colors.success },
+    warning: { text: colors.warning },
+    danger: { text: colors.danger },
   };
 }
 
@@ -95,18 +89,13 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     paddingHorizontal: 16,
   },
-  iconWell: {
-    width: 64,
-    height: 64,
-    borderRadius: 999,
+  iconSlot: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
-  iconWellCompact: {
-    width: 48,
-    height: 48,
     marginBottom: 12,
+  },
+  iconSlotCompact: {
+    marginBottom: 8,
   },
   message: {
     marginTop: 6,

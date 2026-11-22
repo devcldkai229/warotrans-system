@@ -69,9 +69,7 @@ export function WorkflowTemplateCard({
       accessibilityLabel={`Select workflow ${workflow.name}`}
     >
       <View style={styles.topRow}>
-        <View style={[styles.iconBox, isSafety && styles.iconBoxSafety]}>
-          {renderIcon()}
-        </View>
+        {renderIcon()}
         <ArrowUpRight
           size={16}
           color={isSafety ? colors.danger : colors.textMuted}
@@ -116,18 +114,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
-    flexShrink: 0,
-  },
-  iconBoxSafety: {
-    backgroundColor: colors.dangerBg,
   },
   name: {
     fontWeight: '700',
