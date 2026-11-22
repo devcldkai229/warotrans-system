@@ -64,7 +64,7 @@ import {
   MapTopStatusPill,
 } from './MapHud';
 import { MapLegendContent } from './MapLegendSheet';
-import { robotFootprintPx } from './mapArchitecture';
+import { detectPerimeterShelfWalls, robotFootprintPx } from './mapArchitecture';
 import { hitTestInfrastructure, type MapInspectTarget } from './mapHitTest';
 import {
   endpointJobRole,
@@ -93,6 +93,7 @@ import {
   baseToWorld,
   createMapFrame,
   screenToWorld,
+  shouldRotateMap,
   worldToBase,
   type MapFrame,
   type MapPoint,
@@ -293,27 +294,30 @@ export function MapViewport({
   const topOffset = contentInsets.top + (showHeader ? effectiveHeaderHeight + 8 : 12);
   const available = Math.max(0, bounds.height - topOffset - contentInsets.bottom - 36);
   const horizontal = !fullBleed && available < 270;
-  const frameInsets = useMemo(
-    () =>
-      fullBleed
-        ? compact
-          ? {
-              top: contentInsets.top + 46,
-              right: 32,
-              bottom: contentInsets.bottom + 40,
-              left: 32,
-            }
-          : {
-              top: contentInsets.top + 56,
-              right: 34,
-              bottom: contentInsets.bottom + 52,
-              left: 34,
-            }
-        : undefined,
-    [fullBleed, compact, contentInsets.top, contentInsets.bottom],
-  );
   const stageHeight = fullBleed ? (bounds.height || 680) : Math.max(0, available - (horizontal ? 56 : 0));
   const stageWidth = fullBleed ? (bounds.width || 390) : Math.max(0, bounds.width - (horizontal ? 24 : 80));
+  const shelfWalls = useMemo(
+    () =>
+      detectPerimeterShelfWalls(
+        map,
+        shouldRotateMap(map.imageWidthPixels, map.imageHeightPixels, stageWidth, stageHeight),
+      ),
+    [map, stageWidth, stageHeight],
+  );
+  const frameInsets = useMemo(() => {
+    if (!fullBleed) return undefined;
+    // Reserve recessed 0.35 m shelf clearance only along perimeter walls that actually host wall shelves.
+    const sideShelfPad = compact
+      ? Math.max(32, Math.ceil(stageWidth * 0.084))
+      : Math.max(35, Math.ceil(stageWidth * 0.088));
+    const sideEdgePad = 8;
+    return {
+      top: contentInsets.top + (compact ? 54 : 56),
+      right: shelfWalls.right ? sideShelfPad : sideEdgePad,
+      bottom: contentInsets.bottom + 56,
+      left: shelfWalls.left ? sideShelfPad : sideEdgePad,
+    };
+  }, [fullBleed, compact, contentInsets.top, contentInsets.bottom, stageWidth, shelfWalls]);
   const frame = useMemo(
     () => createMapFrame(map, stageWidth, stageHeight, frameInsets),
     [map, stageWidth, stageHeight, frameInsets],
@@ -847,11 +851,11 @@ function MapCanvas({
     }
   };
 
-  const compactHud = horizontal || (fullBleed && frame.height - topInset - bottomInset < 230);
+  const showFollow = !onPickEndpoint && !compact;
   const hudTop = fullBleed ? topInset + 10 : top;
   const scaleBottom = fullBleed ? bottomInset + 10 : undefined;
   const scaleTop = fullBleed ? undefined : top + (horizontal ? 56 : 0) + frame.height + 6;
-  const inspectBottom = fullBleed ? bottomInset + 10 : 12;
+  const inspectBottom = fullBleed ? bottomInset + 62 : 64;
 
   return (
     <>
@@ -1121,7 +1125,13 @@ function MapCanvas({
       </View>
 
       {/* Top-Left: Live / Map Version Status Pill */}
-      <View style={[styles.topLeftHud, { top: hudTop }]} pointerEvents="box-none">
+      <View
+        style={[
+          styles.topLeftHud,
+          { top: hudTop + 7, right: showFollow ? 142 : 103 },
+        ]}
+        pointerEvents="box-none"
+      >
         <MapTopStatusPill
           mapCode={map.code}
           versionNo={map.versionNo}
@@ -1133,17 +1143,13 @@ function MapCanvas({
 
       {/* Top-Right: Tool Cluster (Layers, Map Legend, Follow) */}
       <View
-        style={
-          compactHud
-            ? { position: 'absolute', right: 12, top: hudTop, zIndex: 12 }
-            : { position: 'absolute', right: 12, top: hudTop, zIndex: 12 }
-        }
+        style={{ position: 'absolute', right: 12, top: hudTop, zIndex: 12 }}
         pointerEvents="box-none"
       >
         <MapToolCluster
-          horizontal={compactHud}
+          horizontal={true}
           legendOpen={sheet === 'legend'}
-          showFollow={!onPickEndpoint && !compact}
+          showFollow={showFollow}
           following={following}
           canFollow={!!state?.canFollow && active}
           onLayers={() => {
@@ -1174,7 +1180,7 @@ function MapCanvas({
         pointerEvents="box-none"
       >
         <MapCameraCluster
-          horizontal={compactHud}
+          horizontal={true}
           zoom={camera.settledZoom}
           onFit={() => {
             triggerHaptic('tap');
@@ -1194,7 +1200,7 @@ function MapCanvas({
             styles.inspectCard,
             {
               bottom: inspectBottom,
-              right: compact ? 66 : 74,
+              right: 12,
             },
           ]}
         >
@@ -1272,7 +1278,7 @@ function MapCanvas({
           style={[
             styles.footer,
             scaleBottom !== undefined ? { bottom: scaleBottom } : { top: scaleTop },
-            { right: compact ? 68 : 74 },
+            { right: 142 },
           ]}
         >
           <MapOrientationBox

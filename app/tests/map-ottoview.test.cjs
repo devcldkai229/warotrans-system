@@ -640,3 +640,76 @@ test('mapTrails filters points by map code, splits telemetry gaps, and builds re
   assert.equal(isJobTrailLive('COMPLETED'), false);
   assert.equal(isJobTrailLive('CANCELLED'), false);
 });
+
+test('detectPerimeterShelfWalls expands 1:1 map framing when opposite wall has no recessed shelves', () => {
+  const models = require('../src/shared/maps/rosMapModels.json');
+  const load = createLoader({ './rosMapModels.json': models });
+  const { createMapFrame, shouldRotateMap, worldToBase } = load('src/shared/maps/mapTransform.ts');
+  const { computeStationArchitecture, detectPerimeterShelfWalls } = load(
+    'src/shared/maps/mapArchitecture.ts',
+  );
+  const snapshot = require('../../samples/maps/MAP-ONE-V013/snapshot.json');
+  const mv = snapshot.mapVersion;
+
+  const map = {
+    ...BASE_MAP,
+    id: mv.id,
+    code: mv.code,
+    versionNo: mv.version_no,
+    name: mv.name,
+    imageWidthPixels: mv.image_width_pixels,
+    imageHeightPixels: mv.image_height_pixels,
+    resolution: mv.resolution,
+    originX: mv.origin_x,
+    originY: mv.origin_y,
+    originYaw: mv.origin_yaw,
+    frameId: mv.frame_id,
+    endpoints: snapshot.endpoints.map(e => ({
+      id: e.id,
+      mapVersionId: e.map_version_id,
+      code: e.code,
+      name: e.name,
+      endpointType: e.endpoint_type,
+      x: e.x,
+      y: e.y,
+      yaw: e.yaw,
+      isEnabled: e.is_enabled,
+    })),
+  };
+
+  const rotated = shouldRotateMap(map.imageWidthPixels, map.imageHeightPixels, 390, 680);
+  assert.equal(rotated, false);
+
+  const walls = detectPerimeterShelfWalls(map, rotated);
+  assert.deepEqual({ ...walls }, { top: true, bottom: true, left: true, right: false });
+
+  const emptyWalls = detectPerimeterShelfWalls({ ...map, endpoints: [] }, rotated);
+  assert.deepEqual({ ...emptyWalls }, { top: false, bottom: false, left: false, right: false });
+
+  const sideShelfPad = Math.max(35, Math.ceil(390 * 0.088));
+  const frame = createMapFrame(map, 390, 680, {
+    top: 56,
+    right: walls.right ? sideShelfPad : 8,
+    bottom: 56,
+    left: walls.left ? sideShelfPad : 8,
+  });
+  assert.ok(frame);
+  assert.equal(frame.mapWidth, 347);
+  const pxPerMetre = frame.scale / map.resolution;
+  assert.ok(pxPerMetre > 80);
+
+  const items = map.endpoints.flatMap(ep => {
+    const p = worldToBase(ep, map, frame);
+    return p ? [{ ...p, endpoint: ep }] : [];
+  });
+  const arch = computeStationArchitecture(map, frame, items);
+  assert.equal(arch.shelfBays.length, 4);
+
+  for (const bay of arch.shelfBays) {
+    const isHoriz = bay.wall === 'top' || bay.wall === 'bottom';
+    const lengthPx = isHoriz ? bay.width : bay.height;
+    const depthPx = isHoriz ? bay.height : bay.width;
+    assert.ok(Math.abs(lengthPx / depthPx - 0.70 / 0.35) < 1e-3);
+    assert.ok(bay.x >= 2 && bay.y >= 2);
+  }
+});

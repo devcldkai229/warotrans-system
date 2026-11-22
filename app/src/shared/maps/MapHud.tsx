@@ -56,12 +56,14 @@ function ClusterButton({
   onPress,
   disabled = false,
   selected = false,
+  compact = false,
 }: {
   label: string;
   children: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
   selected?: boolean;
+  compact?: boolean;
 }) {
   const styles = useThemedStyles(createStyles);
   return (
@@ -74,6 +76,7 @@ function ClusterButton({
       hitSlop={4}
       style={({ pressed }) => [
         styles.clusterBtn,
+        compact && styles.clusterBtnHorizontal,
         selected && styles.clusterBtnSelected,
         pressed && styles.pressedScale,
         disabled && styles.disabled,
@@ -193,16 +196,17 @@ export function MapToolCluster({
 }) {
   const colors = useThemeColors();
   const styles = useThemedStyles(createStyles);
+  const iconSize = horizontal ? 16 : 17;
 
   return (
     <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
-      <ClusterButton label="Map layers and locations" onPress={onLayers}>
-        <Layers size={17} color={colors.textPrimary} strokeWidth={1.85} />
+      <ClusterButton label="Map layers and locations" compact={horizontal} onPress={onLayers}>
+        <Layers size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
       <View style={horizontal ? styles.dividerV : styles.dividerH} />
-      <ClusterButton label="Map legend" selected={legendOpen} onPress={onLegend}>
+      <ClusterButton label="Map legend" compact={horizontal} selected={legendOpen} onPress={onLegend}>
         <BookOpen
-          size={17}
+          size={iconSize}
           color={legendOpen ? colors.primaryText : colors.textPrimary}
           strokeWidth={1.85}
         />
@@ -212,12 +216,13 @@ export function MapToolCluster({
           <View style={horizontal ? styles.dividerV : styles.dividerH} />
           <ClusterButton
             label={following ? 'Stop following robot' : 'Follow selected robot'}
+            compact={horizontal}
             disabled={!canFollow && !following}
             selected={following}
             onPress={onFollow}
           >
             <LocateFixed
-              size={17}
+              size={iconSize}
               color={following ? colors.primaryText : colors.textPrimary}
               strokeWidth={1.85}
             />
@@ -241,19 +246,20 @@ export function MapCameraCluster({
 }) {
   const colors = useThemeColors();
   const styles = useThemedStyles(createStyles);
+  const iconSize = horizontal ? 16 : 17;
 
   return (
     <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
-      <ClusterButton label="Zoom in" disabled={zoom >= 8} onPress={() => onZoom(2)}>
-        <Plus size={17} color={colors.textPrimary} strokeWidth={1.85} />
+      <ClusterButton label="Zoom in" compact={horizontal} disabled={zoom >= 8} onPress={() => onZoom(2)}>
+        <Plus size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
       <View style={horizontal ? styles.dividerV : styles.dividerH} />
-      <ClusterButton label="Zoom out" disabled={zoom <= 1} onPress={() => onZoom(0.5)}>
-        <Minus size={17} color={colors.textPrimary} strokeWidth={1.85} />
+      <ClusterButton label="Zoom out" compact={horizontal} disabled={zoom <= 1} onPress={() => onZoom(0.5)}>
+        <Minus size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
       <View style={horizontal ? styles.dividerV : styles.dividerH} />
-      <ClusterButton label="Fit map" onPress={onFit}>
-        <Focus size={17} color={colors.textPrimary} strokeWidth={1.85} />
+      <ClusterButton label="Fit map" compact={horizontal} onPress={onFit}>
+        <Focus size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
     </View>
   );
@@ -405,12 +411,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     topLeftStack: {
       gap: 6,
       alignItems: 'flex-start',
-      maxWidth: 230,
+      maxWidth: '100%',
     },
     statusPill: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      maxWidth: '100%',
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 999,
@@ -462,6 +469,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     },
     clusterRow: {
       flexDirection: 'row',
+      borderRadius: 21,
     },
     clusterBtn: {
       width: 40,
@@ -469,6 +477,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    clusterBtnHorizontal: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
     },
     clusterBtnSelected: {
       backgroundColor: colors.primaryLight,
@@ -481,7 +494,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     },
     dividerV: {
       width: 1,
-      height: 22,
+      height: 18,
       backgroundColor: colors.mapHudBorder,
       marginHorizontal: 1,
     },

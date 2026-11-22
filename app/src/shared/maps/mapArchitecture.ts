@@ -1,5 +1,5 @@
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
-import type { MapGeometry } from '../utils/mapCoordinates';
+import { hasMapCalibration, worldToMapPercent, type MapGeometry } from '../utils/mapCoordinates';
 import { mapHeading } from './mapModel';
 import {
   DOCK_BAY_LENGTH_METERS,
@@ -20,6 +20,13 @@ export interface RobotFootprintSize {
 }
 
 export type PerimeterWall = 'top' | 'bottom' | 'left' | 'right';
+
+export interface PerimeterShelfWalls {
+  top: boolean;
+  bottom: boolean;
+  left: boolean;
+  right: boolean;
+}
 
 export interface DockBayGeometry {
   id: string;
@@ -77,6 +84,78 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+const PERIMETER_WALL_META: Record<PerimeterWall, { nx: number; ny: number }> = {
+  top: { nx: 0, ny: -1 },
+  bottom: { nx: 0, ny: 1 },
+  left: { nx: -1, ny: 0 },
+  right: { nx: 1, ny: 0 },
+};
+
+const PERIMETER_WALLS: readonly PerimeterWall[] = ['top', 'bottom', 'left', 'right'];
+
+function selectShelfPerimeterWall(
+  distances: Record<PerimeterWall, number>,
+  headingDeg: number,
+): PerimeterWall | null {
+  const rad = (headingDeg * Math.PI) / 180;
+  const hx = Math.sin(rad);
+  const hy = -Math.cos(rad);
+
+  let bestWall: PerimeterWall | null = null;
+  let bestScore = Infinity;
+  for (const wall of PERIMETER_WALLS) {
+    const distMeters = distances[wall];
+    if (!Number.isFinite(distMeters) || distMeters > MAX_WALL_DISTANCE_METERS) continue;
+    const { nx, ny } = PERIMETER_WALL_META[wall];
+    const score = distMeters - 0.18 * (hx * nx + hy * ny);
+    if (score < bestScore) {
+      bestScore = score;
+      bestWall = wall;
+    }
+  }
+  return bestWall;
+}
+
+/**
+ * Determine which outer map perimeter walls host recessed `0.35 m x 0.70 m` wall-mounted shelves
+ * so the viewport only reserves extra exterior margin where recessed shelves actually protrude.
+ */
+export function detectPerimeterShelfWalls(
+  map: MapVersionDetailDto,
+  rotated: boolean,
+): PerimeterShelfWalls {
+  const walls: PerimeterShelfWalls = { top: false, bottom: false, left: false, right: false };
+  if (!hasMapCalibration(map)) return walls;
+
+  const worldW = map.imageWidthPixels * map.resolution;
+  const worldH = map.imageHeightPixels * map.resolution;
+  const displayW = rotated ? worldH : worldW;
+  const displayH = rotated ? worldW : worldH;
+
+  for (const ep of map.endpoints) {
+    if (!ep.isEnabled || ep.mapVersionId !== map.id) continue;
+    if (endpointVisualKind(ep.endpointType, ep.code, ep.name) !== 'SHELF') continue;
+    const p = worldToMapPercent(ep.x, ep.y, map);
+    if (!p) continue;
+
+    const u = rotated ? 1 - p.y / 100 : p.x / 100;
+    const v = rotated ? p.x / 100 : p.y / 100;
+    const headingDeg = mapHeading(ep.yaw, map.originYaw, rotated);
+    const wall = selectShelfPerimeterWall(
+      {
+        top: Math.abs(v) * displayH,
+        bottom: Math.abs(1 - v) * displayH,
+        left: Math.abs(u) * displayW,
+        right: Math.abs(1 - u) * displayW,
+      },
+      headingDeg,
+    );
+    if (wall) walls[wall] = true;
+  }
+
+  return walls;
+}
+
 /**
  * Derive world-scaled floor docking bays (`[ ]`) and recessed wall-mounted shelf bays from real
  * endpoint poses relative to the map's outer perimeter walls.
@@ -118,86 +197,51 @@ export function computeStationArchitecture(
 
     if (!includeWallShelves || kind !== 'SHELF') continue;
 
-    const candidates: {
-      wall: PerimeterWall;
-      distMeters: number;
-      nx: number;
-      ny: number;
-      availDepth: number;
-    }[] = [
+    const wall = selectShelfPerimeterWall(
       {
-        wall: 'top',
-        distMeters: Math.abs(item.y - frame.top) / pxPerMetre,
-        nx: 0,
-        ny: -1,
-        availDepth: frame.top - 2,
+        top: Math.abs(item.y - frame.top) / pxPerMetre,
+        bottom: Math.abs(wallBottom - item.y) / pxPerMetre,
+        left: Math.abs(item.x - frame.left) / pxPerMetre,
+        right: Math.abs(wallRight - item.x) / pxPerMetre,
       },
-      {
-        wall: 'bottom',
-        distMeters: Math.abs(wallBottom - item.y) / pxPerMetre,
-        nx: 0,
-        ny: 1,
-        availDepth: frame.height - wallBottom - 2,
-      },
-      {
-        wall: 'left',
-        distMeters: Math.abs(item.x - frame.left) / pxPerMetre,
-        nx: -1,
-        ny: 0,
-        availDepth: frame.left - 2,
-      },
-      {
-        wall: 'right',
-        distMeters: Math.abs(wallRight - item.x) / pxPerMetre,
-        nx: 1,
-        ny: 0,
-        availDepth: frame.width - wallRight - 2,
-      },
-    ];
+      headingDeg,
+    );
+    if (!wall) continue;
 
-    const rad = (headingDeg * Math.PI) / 180;
-    const hx = Math.sin(rad);
-    const hy = -Math.cos(rad);
+    const { nx, ny } = PERIMETER_WALL_META[wall];
+    const availDepthByWall: Record<PerimeterWall, number> = {
+      top: frame.top - 2,
+      bottom: frame.height - wallBottom - 2,
+      left: frame.left - 2,
+      right: frame.width - wallRight - 2,
+    };
 
-    let bestWall: (typeof candidates)[number] | null = null;
-    let bestScore = Infinity;
-    for (const c of candidates) {
-      if (c.distMeters > MAX_WALL_DISTANCE_METERS) continue;
-      const score = c.distMeters - 0.18 * (hx * c.nx + hy * c.ny);
-      if (score < bestScore) {
-        bestScore = score;
-        bestWall = c;
-      }
-    }
-    if (!bestWall) continue;
-
-    const isHoriz = bestWall.wall === 'top' || bestWall.wall === 'bottom';
+    const isHoriz = wall === 'top' || wall === 'bottom';
     const span = Math.min(
       SHELF_BAY_LENGTH_METERS * pxPerMetre,
       (isHoriz ? frame.mapWidth : frame.mapHeight) - 8,
     );
     const desiredDepth = SHELF_BAY_DEPTH_METERS * pxPerMetre;
-    const depth = Math.min(desiredDepth, bestWall.availDepth);
+    const depth = Math.min(desiredDepth, availDepthByWall[wall]);
     if (depth < 6 || span < 10) continue;
 
     const bayHalfOffset = (DOCK_BAY_LENGTH_METERS * 0.5) * pxPerMetre;
-    const startX = item.x + bestWall.nx * bayHalfOffset;
-    const startY = item.y + bestWall.ny * bayHalfOffset;
+    const startX = item.x + nx * bayHalfOffset;
+    const startY = item.y + ny * bayHalfOffset;
 
     if (isHoriz) {
       const cx = clamp(item.x, frame.left + span / 2 + 4, wallRight - span / 2 - 4);
       const x = cx - span / 2;
-      const y = bestWall.wall === 'top' ? frame.top - depth : wallBottom;
-      const wallY = bestWall.wall === 'top' ? frame.top : wallBottom;
+      const y = wall === 'top' ? frame.top - depth : wallBottom;
+      const wallY = wall === 'top' ? frame.top : wallBottom;
       const opening = { x1: x, y1: wallY, x2: x + span, y2: wallY };
       const connX = clamp(item.x, opening.x1, opening.x2);
-      const needsConnector =
-        bestWall.wall === 'top' ? startY > wallY + 3 : startY < wallY - 3;
+      const needsConnector = wall === 'top' ? startY > wallY + 3 : startY < wallY - 3;
       shelfBays.push({
         id: ep.id,
         code: ep.code,
         name: ep.name,
-        wall: bestWall.wall,
+        wall,
         x,
         y,
         width: span,
@@ -209,17 +253,16 @@ export function computeStationArchitecture(
     } else {
       const cy = clamp(item.y, frame.top + span / 2 + 4, wallBottom - span / 2 - 4);
       const y = cy - span / 2;
-      const x = bestWall.wall === 'left' ? frame.left - depth : wallRight;
-      const wallX = bestWall.wall === 'left' ? frame.left : wallRight;
+      const x = wall === 'left' ? frame.left - depth : wallRight;
+      const wallX = wall === 'left' ? frame.left : wallRight;
       const opening = { x1: wallX, y1: y, x2: wallX, y2: y + span };
       const connY = clamp(item.y, opening.y1, opening.y2);
-      const needsConnector =
-        bestWall.wall === 'left' ? startX > wallX + 3 : startX < wallX - 3;
+      const needsConnector = wall === 'left' ? startX > wallX + 3 : startX < wallX - 3;
       shelfBays.push({
         id: ep.id,
         code: ep.code,
         name: ep.name,
-        wall: bestWall.wall,
+        wall,
         x,
         y,
         width: depth,
