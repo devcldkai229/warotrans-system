@@ -178,7 +178,7 @@ export const BaseMapLayer = memo(function BaseMapLayer({
           width={frame.mapWidth}
           height={frame.mapHeight}
           fill="none"
-          stroke={isDark ? 'rgba(148, 163, 184, 0.18)' : colors.borderStrong}
+          stroke={isDark ? 'rgba(204, 212, 222, 0.28)' : colors.borderStrong}
           strokeWidth={(isDark ? 1 : 1.2) / safeZoom}
         />
       </Svg>
@@ -188,6 +188,6 @@ export const BaseMapLayer = memo(function BaseMapLayer({
 
 const styles = StyleSheet.create({
   darkRasterFilter: {
-    filter: 'invert(0.76) contrast(1.08) brightness(0.80)',
+    filter: 'invert(0.73) contrast(1.12) brightness(1.02)',
   },
 });

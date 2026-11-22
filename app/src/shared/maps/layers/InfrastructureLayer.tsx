@@ -126,7 +126,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                       fill={color}
                       fillOpacity={fillOpacity}
                       stroke={strokeColor}
-                      strokeOpacity={isSelected ? 0.94 : isDark ? 0.56 : 0.60}
+                      strokeOpacity={isSelected ? 0.96 : isDark ? 0.72 : 0.60}
                       strokeWidth={(isSelected ? 2 : isDark ? 1.05 : 1.1) * hair}
                       strokeDasharray={isKeepOut || isSelected ? undefined : `${4 * hair} ${3 * hair}`}
                       strokeLinejoin="round"
@@ -182,7 +182,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(side)}
                         fill="none"
                         stroke={edgeColor}
-                        strokeOpacity={isDark ? 0.34 : 0.34}
+                        strokeOpacity={isDark ? 0.44 : 0.34}
                         strokeWidth={0.85 * hair}
                       />
                     ))}
@@ -191,7 +191,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         points={toPoints(glyphs.divider)}
                         fill="none"
                         stroke={edgeColor}
-                        strokeOpacity={isDark ? 0.36 : 0.42}
+                        strokeOpacity={isDark ? 0.42 : 0.42}
                         strokeWidth={0.85 * hair}
                         strokeDasharray={`${4 * hair} ${3.5 * hair}`}
                       />
@@ -209,7 +209,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({
                         key={index}
                         d={LANE_ARROW_PATH}
                         fill={arrowColor}
-                        fillOpacity={isDark ? 0.85 : 0.72}
+                        fillOpacity={isDark ? 0.72 : 0.72}
                         transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${arrowScale})`}
                       />
                     ))}

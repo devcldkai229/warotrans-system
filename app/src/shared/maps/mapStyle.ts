@@ -48,19 +48,19 @@ export const JOB_HIGHLIGHT_COLOR = {
 } as const;
 
 export function laneBandColor(isDark: boolean): string {
-  return isDark ? '#1a74e2' : LANE_BLUE;
+  return isDark ? '#1976b8' : LANE_BLUE;
 }
 
 export function laneEdgeColor(isDark: boolean): string {
-  return isDark ? '#38bdf8' : LANE_BLUE;
+  return isDark ? '#38a9e8' : LANE_BLUE;
 }
 
 export function laneArrowColor(isDark: boolean): string {
-  return isDark ? '#e0f2fe' : '#1d4ed8';
+  return isDark ? '#b8d8ec' : '#1d4ed8';
 }
 
 export function laneBandOpacity(isDark: boolean): number {
-  return isDark ? 0.14 : 0.13;
+  return isDark ? 0.26 : 0.13;
 }
 
 export function trailColor(isDark: boolean): string {
@@ -74,16 +74,17 @@ export function jobRouteColor(isDark: boolean): string {
 export function zoneFillOpacity(type: string, isDark: boolean): number {
   switch (type) {
     case 'KEEP_OUT':
-      return isDark ? 0.12 : 0.16;
-    case 'SINGLE_OCCUPANCY':
-      return isDark ? 0.09 : 0.14;
-    case 'JUNCTION':
-      return isDark ? 0.08 : 0.11;
+      return isDark ? 0.18 : 0.16;
     case 'SPEED':
+      return isDark ? 0.17 : 0.12;
+    case 'SINGLE_OCCUPANCY':
+      return isDark ? 0.14 : 0.14;
     case 'NO_STOP':
-      return isDark ? 0.09 : 0.12;
+      return isDark ? 0.13 : 0.12;
+    case 'JUNCTION':
+      return isDark ? 0.12 : 0.11;
     default:
-      return isDark ? 0.09 : 0.12;
+      return isDark ? 0.13 : 0.12;
   }
 }
 
@@ -93,13 +94,13 @@ export function zoneStrokeColor(type: string, isDark: boolean): string {
     case 'KEEP_OUT':
       return '#e06c75';
     case 'SPEED':
-      return '#d4b14b';
+      return '#d8c84a';
     case 'NO_STOP':
-      return '#6ba3be';
+      return '#68b8d6';
     case 'SINGLE_OCCUPANCY':
-      return '#a78bfa';
+      return '#9b8ce8';
     case 'JUNCTION':
-      return '#8b95b5';
+      return '#c4cad4';
     default:
       return zoneColorOf(type);
   }

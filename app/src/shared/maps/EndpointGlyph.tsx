@@ -103,9 +103,9 @@ export const EndpointTile = memo(function EndpointTile({
   const tileBorderColor = hasAccentBorder
     ? accentColor
     : isDark
-    ? 'rgba(226, 232, 240, 0.48)'
+    ? 'rgba(226, 232, 240, 0.54)'
     : 'rgba(31, 41, 55, 0.26)';
-  const tileBackground = selected ? accentColor : isDark ? '#1e2430' : '#ffffff';
+  const tileBackground = selected ? accentColor : isDark ? '#242830' : '#ffffff';
 
   return (
     <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>

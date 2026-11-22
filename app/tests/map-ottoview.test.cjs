@@ -534,20 +534,20 @@ test('dark-mode OTTO map style helpers provide calm desaturated steel lanes and 
   assert.equal(ZONE_COLOR.JUNCTION, '#5c6bc0');
 
   assert.equal(laneBandColor(false), LANE_BLUE);
-  assert.equal(laneBandColor(true), '#1a74e2');
+  assert.equal(laneBandColor(true), '#1976b8');
   assert.equal(laneEdgeColor(false), LANE_BLUE);
-  assert.equal(laneEdgeColor(true), '#38bdf8');
+  assert.equal(laneEdgeColor(true), '#38a9e8');
   assert.equal(laneArrowColor(false), '#1d4ed8');
-  assert.equal(laneArrowColor(true), '#e0f2fe');
+  assert.equal(laneArrowColor(true), '#b8d8ec');
   assert.equal(laneBandOpacity(false), 0.13);
-  assert.equal(laneBandOpacity(true), 0.14);
+  assert.equal(laneBandOpacity(true), 0.26);
 
   assert.equal(zoneStrokeColor('KEEP_OUT', false), ZONE_COLOR.KEEP_OUT);
   assert.equal(zoneStrokeColor('KEEP_OUT', true), '#e06c75');
-  assert.equal(zoneStrokeColor('SPEED', true), '#d4b14b');
-  assert.equal(zoneStrokeColor('NO_STOP', true), '#6ba3be');
-  assert.equal(zoneStrokeColor('SINGLE_OCCUPANCY', true), '#a78bfa');
-  assert.equal(zoneStrokeColor('JUNCTION', true), '#8b95b5');
+  assert.equal(zoneStrokeColor('SPEED', true), '#d8c84a');
+  assert.equal(zoneStrokeColor('NO_STOP', true), '#68b8d6');
+  assert.equal(zoneStrokeColor('SINGLE_OCCUPANCY', true), '#9b8ce8');
+  assert.equal(zoneStrokeColor('JUNCTION', true), '#c4cad4');
 });
 
 test('screenToWorld and baseToWorld produce accurate metric orientation-box readouts across 1x and 4x zoom', () => {
