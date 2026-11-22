@@ -26,7 +26,7 @@ import { canReadVouchers } from '../inventory/stockVoucherData';
 import { JOB_STATUS_PRESENTATION } from '../jobs/jobData';
 import { requestStatusLabel } from './dispatchData';
 import { ThemeColors } from '../../shared/theme/colors';
-import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
+import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -103,7 +103,6 @@ export function TransportScreen() {
   }, [recent.data]);
 
   const bottomInset = dockReservedSpace(dockHeight);
-  const topInset = useTopInset();
 
   return (
     <View style={styles.container}>
@@ -111,21 +110,11 @@ export function TransportScreen() {
         style={styles.scrollArea}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: topInset + 14, paddingBottom: bottomInset + 20 },
+          { paddingTop: 14, paddingBottom: bottomInset + 20 },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Screen Title */}
-        <View style={styles.screenHeader}>
-          <Text variant="caption" color={colors.textSecondary} style={styles.eyebrow}>
-            Logistics command
-          </Text>
-          <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
-            Transport Hub
-          </Text>
-        </View>
-
         {/* Stock lookup first: where a container, product or shelf is right now. */}
         <Pressable
           onPress={() => {
@@ -136,15 +125,10 @@ export function TransportScreen() {
           accessibilityRole="button"
           accessibilityLabel="Find containers and stock"
         >
-          <View style={styles.lookupIconWell}>
-            <Search size={20} color={colors.primaryText} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
+          <Search size={20} color={colors.textPrimary} />
+          <View style={{ flex: 1 }}>
             <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
               Find Containers & Stock
-            </Text>
-            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-              Search a container, product or shelf to see where it is
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
@@ -159,15 +143,10 @@ export function TransportScreen() {
           accessibilityRole="button"
           accessibilityLabel="Create containers"
         >
-          <View style={styles.lookupIconWell}>
-            <PackagePlus size={20} color={colors.primaryText} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
+          <PackagePlus size={20} color={colors.textPrimary} />
+          <View style={{ flex: 1 }}>
             <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
               Create Containers
-            </Text>
-            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-              Scan a product and get container codes to stick on
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
@@ -194,9 +173,7 @@ export function TransportScreen() {
               accessibilityLabel="New transport request"
             >
               <View style={styles.heroBtnTopRow}>
-                <View style={styles.primaryIconWell}>
-                  <Plus size={18} color="#ffffff" strokeWidth={2.6} />
-                </View>
+                <Plus size={20} color="#ffffff" strokeWidth={2.4} />
                 <ArrowRight size={16} color="rgba(255, 255, 255, 0.45)" />
               </View>
 
@@ -223,9 +200,7 @@ export function TransportScreen() {
               disabled={!canReadVouchers(session)}
             >
               <View style={styles.heroBtnTopRow}>
-                <View style={styles.secondaryIconWell}>
-                  <FileText size={18} color={colors.textPrimary} strokeWidth={2.2} />
-                </View>
+                <FileText size={20} color={colors.textPrimary} strokeWidth={2.1} />
                 <ArrowRight size={16} color={colors.textMuted} />
               </View>
 
@@ -317,7 +292,7 @@ export function TransportScreen() {
                         numberOfLines={1}
                         style={[styles.boldText, { flexShrink: 0 }]}
                       >
-                        {dispatch.containerCount} Containers
+                        {dispatch.containerCount} {dispatch.containerCount === 1 ? 'Container' : 'Containers'}
                       </Text>
                       <Text variant="caption" color={colors.textMuted}>·</Text>
                       <Text variant="caption" color={colors.textPrimary} numberOfLines={1} style={[styles.boldMono, { flexShrink: 1 }]}>
@@ -342,9 +317,8 @@ export function TransportScreen() {
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   lookupCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primaryBorder, ...shadows.sm,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...shadows.sm,
   },
-  lookupIconWell: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -355,19 +329,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   scrollContent: {
     paddingHorizontal: 16,
     gap: 18,
-  },
-  screenHeader: {
-    paddingTop: 6,
-    paddingBottom: 2,
-    gap: 2,
-  },
-  eyebrow: {
-    fontWeight: '600',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  pageTitle: {
-    fontWeight: '800',
   },
   section: {
     gap: 8,
@@ -410,24 +371,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  primaryIconWell: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryIconWell: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   heroBtnContent: {
     gap: 2,
@@ -604,14 +547,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     alignItems: 'center',
     gap: 12,
     flex: 1,
-  },
-  historyIconWell: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   historyTextCol: {
     flex: 1,

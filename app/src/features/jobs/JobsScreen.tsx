@@ -6,7 +6,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
-import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
+import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import {
   EmptyState,
@@ -296,8 +296,6 @@ export function JobsScreen() {
     navigate('job_detail', { jobId: job.id });
   };
 
-  const topInset = useTopInset();
-
   const activeWorkZoneCode = workZoneQuery.data?.code ?? null;
   const activeWorkZoneLabel = activeWorkZoneCode
     ? (places.areas.find(a => a.code.toUpperCase() === activeWorkZoneCode.toUpperCase())?.name ?? activeWorkZoneCode)
@@ -325,13 +323,7 @@ export function JobsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        <View style={styles.screenHeader}>
-          <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
-            Job Execution Center
-          </Text>
-        </View>
-
+      <View style={styles.header}>
         <SegmentedControl
           options={options}
           value={scope}
@@ -601,17 +593,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 12,
     gap: 12,
-  },
-  screenHeader: {
-    paddingTop: 2,
-    paddingBottom: 2,
-  },
-  pageTitle: {
-    fontWeight: '800',
-    letterSpacing: -0.4,
   },
   scopeControl: {
     marginTop: 2,

@@ -74,9 +74,7 @@ export function Button({
   const iconNode = loading ? (
     <ActivityIndicator size="small" color={tone.text} />
   ) : IconCmp ? (
-    <View style={variant === 'primary' ? styles.primaryIconWell : undefined}>
-      <IconCmp size={variant === 'primary' ? iconSize - 2 : iconSize} color={tone.text} strokeWidth={2.4} />
-    </View>
+    <IconCmp size={iconSize} color={tone.text} strokeWidth={2.2} />
   ) : null;
 
   return (
@@ -219,13 +217,5 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.88,
     transform: [{ scale: 0.98 }],
-  },
-  primaryIconWell: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

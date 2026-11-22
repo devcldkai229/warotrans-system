@@ -71,15 +71,13 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   label: {
-    fontFamily: typography.fontMono,
+    fontFamily: typography.fontSans,
     fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '600',
   },
   labelSm: {
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '600',
     fontFamily: typography.fontSans,
   },
 });

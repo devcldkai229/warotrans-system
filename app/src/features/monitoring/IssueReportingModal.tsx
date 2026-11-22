@@ -211,7 +211,7 @@ export function IssueReportingModal({
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           {/* Safety Warning */}
           <View style={styles.safetyBox}>
-            <ShieldAlert size={20} color="#dc2626" style={{ marginTop: 2 }} />
+            <ShieldAlert size={20} color={colors.danger} style={{ marginTop: 2 }} />
             <View style={styles.safetyTextWrap}>
               <Text style={styles.safetyBold}>Safety protocol active</Text>
               <Text style={styles.safetyDesc}>
@@ -489,7 +489,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.25)',
+    borderColor: colors.dangerBorder,
     padding: 14,
     ...shadows.panel,
   },
@@ -499,7 +499,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   safetyBold: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#dc2626',
+    color: colors.dangerText,
     fontFamily: typography.fontSans,
   },
   safetyDesc: {

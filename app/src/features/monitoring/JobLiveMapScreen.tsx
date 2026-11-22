@@ -130,7 +130,20 @@ export function JobLiveMapScreen() {
           onManualDrive={sessionCan(session, PERMISSIONS.robotManualDrive)
             ? (robotId) => navigate('manual_drive', { robotId })
             : undefined}
-          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 12, bottom: dockZoneBottom }} />
+          jobContext={liveJob && (!liveJob.mapVersionId || liveJob.mapVersionId === activeMap?.id)
+            ? {
+                jobId: job.data?.id ?? jobId,
+                status: job.data?.status ?? liveJob.status,
+                robotId:
+                  typeof job.data?.contextValues?.assignedRobotId === 'string'
+                    ? job.data.contextValues.assignedRobotId
+                    : telemetry?.id ?? null,
+                pickupCode: liveJob.sourceEndpointCode,
+                dropoffCode: liveJob.destinationEndpointCode,
+                robotCode: liveJob.robot,
+              }
+            : undefined}
+          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 0, bottom: dockZoneBottom }} />
         {mapError && <View style={styles.toast}><Text style={styles.toastText}>{mapError}</Text></View>}
 
         {/* Telemetry Bottom Sheet */}
@@ -201,7 +214,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   },
   toast: {
     position: 'absolute',
-    top: 14,
+    top: 56,
     alignSelf: 'center',
     backgroundColor: colors.darkAction,
     paddingHorizontal: 16,

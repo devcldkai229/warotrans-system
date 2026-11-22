@@ -262,14 +262,14 @@ export function InventoryLookupScreen() {
               <ScanLine size={14} color={colors.primaryText} />
               <Text style={styles.shelfCheckText}>{t('Check shelf')}</Text>
             </Pressable>
-            {shelfCheck ? <Text style={[styles.shelfCheckResult, { color: shelfCheck.ok ? '#059669' : colors.danger }]} numberOfLines={2}>
+            {shelfCheck ? <Text style={[styles.shelfCheckResult, { color: shelfCheck.ok ? colors.successText : colors.danger }]} numberOfLines={2}>
               {shelfCheck.ok ? t('Matches {shelf}', { shelf: shelfName(shelfCheck.scanned) })
                 : t('Scanned {scanned}, recorded {recorded}', { scanned: shelfName(shelfCheck.scanned), recorded: verifiedContainer.currentStorageLocationCode ? shelfName(verifiedContainer.currentStorageLocationCode) : t('Not on a shelf') })}
             </Text> : null}
           </View>
           <View style={styles.verifiedCardHeader}>
             <View style={styles.verifiedBadgeRow}>
-              <CheckCircle2 size={18} color="#059669" />
+              <CheckCircle2 size={18} color={colors.success} />
               <Text style={styles.verifiedTitle}>Verified Container Details</Text>
             </View>
             <View style={styles.verifiedStatusBadge}>
@@ -286,7 +286,7 @@ export function InventoryLookupScreen() {
               accessibilityRole="button"
               accessibilityLabel="Dismiss verified card"
             >
-              <X size={15} color="#059669" />
+              <X size={15} color={colors.success} />
             </Pressable>
           </View>
 
@@ -345,7 +345,7 @@ export function InventoryLookupScreen() {
           ) : null}
 
           {verifiedContainer.status === 'STORED' && verifiedContainer.currentStorageLocationId ? <Button
-            label="↗ Move To Another Shelf"
+            label="Move To Another Shelf"
             icon={<ArrowUpRight size={14} color="#ffffff" />}
             variant="primary"
             size="sm"
@@ -1004,12 +1004,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     fontFamily: typography.fontMono,
   },
   stockLabel: {
-    fontSize: 9.5,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '600',
     color: colors.primaryText,
     fontFamily: typography.fontSans,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
   },
   startpointsList: {
     gap: 6,

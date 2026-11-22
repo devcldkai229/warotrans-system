@@ -42,9 +42,9 @@ export function BrandMark({ size = 36, style }: BrandMarkProps) {
 const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =>
   StyleSheet.create({
     badge: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: isDark ? '#e6ebf2' : '#FFFFFF',
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : colors.border,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : colors.border,
       borderCurve: 'continuous',
       alignItems: 'center',
       justifyContent: 'center',

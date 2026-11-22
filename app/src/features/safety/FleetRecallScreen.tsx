@@ -251,9 +251,7 @@ export function FleetRecallScreen() {
         {/* Global Emergency Stop / Recall All Banner */}
         <View style={styles.emergencyCard}>
           <View style={styles.emergencyTopRow}>
-            <View style={styles.emergencyBadge}>
-              <AlertOctagon size={24} color="#ffffff" strokeWidth={2.4} />
-            </View>
+            <AlertOctagon size={20} color={colors.danger} strokeWidth={2.2} style={{ marginTop: 2 }} />
             <View style={styles.emergencyTextWrap}>
               <Text variant="headline" style={styles.emergencyTitle}>
                 Facility Emergency Recall
@@ -265,7 +263,7 @@ export function FleetRecallScreen() {
           </View>
 
           <Button
-            label={isRecallingAll ? 'Dispatching Global Recall...' : 'RECALL ALL FLEET ROBOTS'}
+            label={isRecallingAll ? 'Dispatching Global Recall...' : 'Recall All Fleet Robots'}
             variant="danger"
             size="lg"
             loading={isRecallingAll}
@@ -287,7 +285,6 @@ export function FleetRecallScreen() {
               }
             }}
             icon={<ShieldAlert size={20} color="#ffffff" strokeWidth={2.4} />}
-            style={styles.recallAllBtn}
           />
         </View>
 
@@ -303,7 +300,7 @@ export function FleetRecallScreen() {
           <View style={styles.connIndicator}>
             <View style={[styles.pulseDot, isConnected ? styles.pulseDotOnline : styles.pulseDotOffline]} />
             <Text variant="caption" color={isConnected ? colors.successText : colors.textSecondary}>
-              {isConnected ? 'SignalR Live' : 'Polling Fallback'}
+              {isConnected ? 'Live' : 'Polling'}
             </Text>
           </View>
         </View>
@@ -335,12 +332,12 @@ export function FleetRecallScreen() {
                     <View style={styles.statusGroup}>
                       <View style={[styles.onlineTag, isOnline ? styles.onlineTagActive : styles.onlineTagInactive]}>
                         {isOnline ? (
-                          <Wifi size={12} color="#166534" />
+                          <Wifi size={12} color={colors.successText} />
                         ) : (
-                          <WifiOff size={12} color="#991b1b" />
+                          <WifiOff size={12} color={colors.dangerText} />
                         )}
                         <Text style={[styles.onlineTagText, isOnline ? styles.onlineTextActive : styles.onlineTextInactive]}>
-                          {isOnline ? 'ONLINE' : 'OFFLINE'}
+                          {isOnline ? 'Online' : 'Offline'}
                         </Text>
                       </View>
                       <StatusPill status={robot.status} label={robot.recalledAt ? 'Cancel Requested · Awaiting ACK' : robot.status} size="sm" dot />
@@ -429,7 +426,7 @@ export function FleetRecallScreen() {
                 <View style={styles.auditRowTop}>
                   <Text style={styles.auditRobotCode}>{log.robotCode}</Text>
                   <View style={styles.auditStatusBadge}>
-                    <CheckCircle2 size={12} color="#16a34a" />
+                    <CheckCircle2 size={12} color={colors.success} />
                     <Text style={styles.auditStatusText}>202 CANCEL SENT</Text>
                   </View>
                 </View>
@@ -473,48 +470,32 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   },
   /* Emergency Card */
   emergencyCard: {
-    backgroundColor: '#7f1d1d',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1.5,
-    borderColor: '#991b1b',
-    ...shadows.md,
+    backgroundColor: colors.dangerBg,
+    borderRadius: radii.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
   },
   emergencyTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 14,
-    marginBottom: 16,
-  },
-  emergencyBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#991b1b',
-    borderWidth: 1.5,
-    borderColor: '#f87171',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    gap: 12,
+    marginBottom: 14,
   },
   emergencyTextWrap: {
     flex: 1,
     gap: 4,
   },
   emergencyTitle: {
-    color: '#ffffff',
-    fontWeight: '900',
-    fontSize: 17,
-    letterSpacing: 0.4,
+    color: colors.dangerText,
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: -0.2,
   },
   emergencySubtitle: {
-    color: '#fecaca',
+    color: colors.textSecondary,
     lineHeight: 18,
-    fontSize: 12,
-  },
-  recallAllBtn: {
-    backgroundColor: '#dc2626',
-    borderBottomColor: '#7f1d1d',
+    fontSize: 13,
   },
   /* Section Header */
   sectionHeaderRow: {
@@ -543,10 +524,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderRadius: 4,
   },
   pulseDotOnline: {
-    backgroundColor: '#16a34a',
+    backgroundColor: colors.success,
   },
   pulseDotOffline: {
-    backgroundColor: '#eab308',
+    backgroundColor: colors.warning,
   },
   /* Loading Box */
   loadingBox: {
@@ -581,10 +562,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   },
   robotCode: {
     fontSize: 18,
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   robotName: {
     fontSize: 11,
@@ -648,7 +629,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     color: colors.textPrimary,
   },
   batteryLow: {
-    color: '#dc2626',
+    color: colors.dangerText,
   },
   commandBanner: {
     backgroundColor: colors.surfaceSubtle,
@@ -721,7 +702,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   auditStatusText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#16a34a',
+    color: colors.successText,
   },
   auditReason: {
     fontSize: 11,

@@ -55,7 +55,7 @@ export function HomeScreen() {
   const { session } = useAuth();
   const { navigate, dockHeight } = useNavigation();
   const styles = useThemedStyles(createStyles);
-  const [peekSheetHeight, setPeekSheetHeight] = useState(0);
+  const [peekSheetHeight, setPeekSheetHeight] = useState(86);
   const fleetQuery = useMapFleet(session?.id || '');
   // robot.localize: tell a robot where it stands after power-on; the snapshot refresh shows LOCALIZED when it converged.
   const onLocalizeRobot = sessionCan(session, PERMISSIONS.robotLocalize)
@@ -102,7 +102,7 @@ export function HomeScreen() {
   const isWaitingHandover = Boolean(activeJob.hasWaitingHandover);
   const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
   const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
-  const activePositionLabel = isWaitingHandover ? 'Waiting at Station' : isQueuedOrCreated ? 'Awaiting Robot Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
+  const activePositionLabel = isWaitingHandover ? 'Waiting at Station' : isQueuedOrCreated ? 'Awaiting Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
   const collapsedBtnTitle = isWaitingHandover ? 'Verify' : isQueuedOrCreated ? 'Start' : 'Open';
   const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Mission Detail';
 
@@ -136,6 +136,18 @@ export function HomeScreen() {
         onOpenJobs={() => navigate('jobs')}
         fleet={onlineFleet}
         updateMode={fleetQuery.updateMode}
+        jobContext={activeJob.id ? {
+          jobId: activeJob.id,
+          status: activeJob.status,
+          robotId:
+            onlineFleet.find(
+              r => r.code === activeJob.robot || r.id === activeJob.robot,
+            )?.id ?? null,
+          pickupCode: activeJob.sourceEndpointCode,
+          dropoffCode: activeJob.destinationEndpointCode,
+          robotCode: activeJob.robot,
+        } : undefined}
+        jobMapVersionId={activeJob.id ? activeJob.mapVersionId : undefined}
         onLocalizeRobot={onLocalizeRobot}
         onManualDrive={onManualDrive}
         selectedRobotId={selectedRobotId}
@@ -151,7 +163,11 @@ export function HomeScreen() {
 
       {/* 2. Floating Next Handover Task Card (Peek Sheet) */}
       <View
-        onLayout={event => setPeekSheetHeight(event.nativeEvent.layout.height)}
+        onLayout={event => {
+          if (!isSheetExpanded || !activeJob.id) {
+            setPeekSheetHeight(event.nativeEvent.layout.height);
+          }
+        }}
         style={[
           styles.peekSheetContainer,
           { bottom: dockHeight + 10 },
@@ -228,13 +244,13 @@ export function HomeScreen() {
                   accessibilityLabel={isFleetExpanded ? 'Collapse fleet details' : 'Expand fleet details'}
                   style={({ pressed }) => [styles.fleetToggleBtn, pressed && styles.pressed]}
                 >
-                  <Text variant="caption" color={colors.primaryText} style={styles.fleetToggleText}>
+                  <Text variant="caption" color={colors.textPrimary} style={styles.fleetToggleText}>
                     {isFleetExpanded ? 'Hide Fleet' : `Fleet (${fleetCountLabel})`}
                   </Text>
                   {isFleetExpanded ? (
-                    <ChevronDown size={14} color={colors.primaryText} />
+                    <ChevronDown size={14} color={colors.textPrimary} />
                   ) : (
-                    <ChevronUp size={14} color={colors.primaryText} />
+                    <ChevronUp size={14} color={colors.textPrimary} />
                   )}
                 </Pressable>
 
@@ -273,17 +289,19 @@ export function HomeScreen() {
 
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Assigned</Text>
-                <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
+                <Text variant="body" color={colors.textSecondary} numberOfLines={1} style={styles.detailValue}>
                   <Text style={styles.boldMono}>{activeJob.robot || 'Unassigned'}</Text> · {activePositionLabel}
                 </Text>
               </View>
 
-              <ProgressMeter
-                value={activeJob.progressPercent ?? 0}
-                tone="warning"
-                style={styles.meter}
-                accessibilityLabel={`Job progress ${activeJob.progressPercent ?? 0} percent`}
-              />
+              {!isQueuedOrCreated || (activeJob.progressPercent ?? 0) > 0 ? (
+                <ProgressMeter
+                  value={activeJob.progressPercent ?? 0}
+                  tone="warning"
+                  style={styles.meter}
+                  accessibilityLabel={`Job progress ${activeJob.progressPercent ?? 0} percent`}
+                />
+              ) : null}
             </View>
 
             {/* Primary Action Button */}
@@ -300,60 +318,86 @@ export function HomeScreen() {
             {/* Optional Expanded Fleet Details */}
             {isFleetExpanded && (
               <View style={styles.expandedFleetSection}>
-                <View style={styles.fleetHeaderWithAction}>
-                  <Text variant="label" color={colors.textSecondary} style={styles.fleetSectionTitle}>
-                    Fleet On This Map
+                {(operating.isPending || operating.error || !fleetStatusCurrent) ? (
+                  <Text variant="caption" color={colors.textSecondary}>
+                    {operating.isPending
+                      ? 'Loading Fleet Context…'
+                      : operating.error
+                      ? 'Fleet context could not be refreshed.'
+                      : `${robots.length} Registered · ${fleetUpdateMode === 'paused' ? 'Updates Paused' : 'Live Status Unavailable'}`}
                   </Text>
-                  <Pressable
-                    onPress={() => {
-                      triggerHaptic('tap');
-                      navigate('fleet_recall');
-                    }}
-                    style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open command cancellation console"
-                  >
-                    <ShieldAlert size={13} color={colors.dangerText} />
-                    <Text style={styles.fleetRecallLinkText}>
-                      Command Cancellation
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <Text variant="caption" color={colors.textSecondary}>
-                  {operating.isPending ? 'Loading Fleet Context…' : operating.error ? 'Fleet context could not be refreshed.'
-                    : !fleetStatusCurrent ? `${robots.length} Registered · ${fleetUpdateMode === 'paused' ? 'Updates Paused' : 'Live Status Unavailable'}`
-                    : `${activeRobotCount} Online & Enabled · ${robots.length} Registered`}
-                </Text>
-                {!operating.isPending && !operating.error && !robots.length && <Text variant="caption">No robots are registered on this map.</Text>}
+                ) : null}
+                {!operating.isPending && !operating.error && !robots.length ? (
+                  <Text variant="caption">No robots are registered on this map.</Text>
+                ) : null}
                 <View style={styles.fleetRow}>
-                  {robots.map((r) => (
-                    <View key={r.id} style={styles.fleetItemCard}>
-                      <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName} numberOfLines={1}>
-                        {r.id}
-                      </Text>
-                      <View style={styles.statusDotRow}>
-                        <View
-                          style={[
-                            styles.statusDot,
-                            { backgroundColor: r.tone === 'danger' ? colors.dangerText : r.tone === 'warning' ? colors.warningText
-                              : r.tone === 'success' ? colors.successText : r.tone === 'info' ? colors.primaryText : colors.textMuted },
-                          ]}
-                        />
-                        <Text variant="caption" color={colors.textSecondary} style={styles.statusLabel}>
-                          {r.statusLabel}
-                        </Text>
-                      </View>
-                      <View style={styles.fleetTelemetryRow}>
-                        <Text variant="caption" color={colors.textSecondary}>{r.lastReported ? 'Last Speed' : 'Speed'}: {r.speed}</Text>
-                        <View style={styles.batteryRow}>
-                          <BatteryMedium size={13} color={r.battery != null && r.battery < 20 ? colors.dangerText : colors.successText} />
-                          <Text variant="caption" color={colors.textSecondary}>{r.battery == null ? '—' : `${r.battery}%`}</Text>
+                  {robots.map((r) => {
+                    const isSelected = selectedRobotId === r.id;
+                    return (
+                      <Pressable
+                        key={r.id}
+                        onPress={() => {
+                          triggerHaptic('tap');
+                          setSelectedRobotId(prev => (prev === r.id ? '' : r.id));
+                        }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`Select robot ${r.id}`}
+                        style={({ pressed }) => [
+                          styles.fleetItemCard,
+                          isSelected && styles.fleetItemCardSelected,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View style={styles.fleetCardTop}>
+                          <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName} numberOfLines={1}>
+                            {r.id}
+                          </Text>
+                          <View style={styles.batteryRow}>
+                            <BatteryMedium
+                              size={13}
+                              color={r.battery != null && r.battery < 20 ? colors.dangerText : colors.successText}
+                            />
+                            <Text variant="caption" color={colors.textSecondary} style={styles.fleetSpeedText}>
+                              {r.battery == null ? '--' : `${r.battery}%`}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                    </View>
-                  ))}
+                        <View style={styles.fleetCardBottom}>
+                          <View style={styles.statusDotRow}>
+                            <View
+                              style={[
+                                styles.statusDot,
+                                { backgroundColor: r.tone === 'danger' ? colors.dangerText : r.tone === 'warning' ? colors.warningText
+                                  : r.tone === 'success' ? colors.successText : r.tone === 'info' ? colors.primaryText : colors.textMuted },
+                              ]}
+                            />
+                            <Text variant="caption" color={colors.textSecondary} style={styles.statusLabel} numberOfLines={1}>
+                              {r.statusLabel}
+                            </Text>
+                          </View>
+                          <Text variant="caption" color={colors.textMuted} style={styles.fleetSpeedText} numberOfLines={1}>
+                            {r.speed}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
                 </View>
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    navigate('fleet_recall');
+                  }}
+                  style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel active robot commands"
+                >
+                  <ShieldAlert size={14} color={colors.dangerText} />
+                  <Text style={styles.fleetRecallLinkText}>
+                    Cancel Commands
+                  </Text>
+                </Pressable>
               </View>
             )}
           </>
@@ -384,7 +428,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderColor: colors.border,
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 14,
+    paddingBottom: 12,
     gap: 10,
     zIndex: 70,
     ...shadows.lg,
@@ -454,6 +498,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     height: 30,
     borderRadius: 15,
     backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -461,7 +507,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -476,16 +521,17 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   jobCode: {
     fontWeight: '700',
     flexShrink: 0,
-    marginBottom: 8,
   },
   fleetToggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.full,
+    height: 30,
+    paddingHorizontal: 10,
+    borderRadius: 15,
     backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   fleetToggleText: {
     fontWeight: '600',
@@ -527,7 +573,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     marginTop: 4,
   },
   actionBtn: {
-    minHeight: 48,
+    minHeight: 46,
   },
   expandedFleetSection: {
     marginTop: 4,
@@ -536,29 +582,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderTopColor: colors.border,
     gap: 8,
   },
-  fleetHeaderWithAction: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   fleetRecallLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     backgroundColor: colors.dangerBg,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
   },
   fleetRecallLinkText: {
-    fontSize: 10.5,
-    fontWeight: '800',
+    fontSize: 12.5,
+    fontWeight: '700',
     color: colors.dangerText,
-  },
-  fleetSectionTitle: {
-    fontWeight: '600',
   },
   fleetRow: {
     flexDirection: 'row',
@@ -571,19 +611,39 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     minWidth: 0,
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.sm,
-    padding: 9,
-    gap: 4,
-    minHeight: 76,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 6,
+    minHeight: 56,
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: colors.border,
   },
+  fleetItemCardSelected: {
+    borderColor: colors.textPrimary,
+    backgroundColor: colors.surface,
+  },
+  fleetCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  fleetCardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
   fleetRobotName: {
+    flexShrink: 1,
     fontWeight: '700',
     fontFamily: typography.fontMono,
     fontSize: 13,
   },
   statusDotRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -603,17 +663,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     backgroundColor: '#64748b',
   },
   statusLabel: {
-    fontSize: 12,
+    fontSize: 11.5,
     flexShrink: 1,
     fontWeight: '600',
   },
-  fleetTelemetryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 4,
-    marginTop: 2,
+  fleetSpeedText: {
+    fontSize: 11,
+    fontFamily: typography.fontMono,
+    fontVariant: ['tabular-nums'],
   },
   batteryRow: {
     flexDirection: 'row',

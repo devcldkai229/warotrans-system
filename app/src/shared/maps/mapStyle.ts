@@ -31,6 +31,81 @@ export const ZONE_LABEL: Record<string, string> = {
   JUNCTION: 'Junction',
 };
 
+export const ZONE_DESCRIPTION: Record<string, string> = {
+  KEEP_OUT: 'Robots must not enter this area',
+  SPEED: 'Reduced robot speed area',
+  NO_STOP: 'Keep clear: robots pass through without stopping',
+  SINGLE_OCCUPANCY: 'Only one robot allowed inside at a time',
+  JUNCTION: 'Shared traffic intersection',
+};
+
+/** OTTO electric cyan first, matching web console plan swath palette. */
+export const PLAN_COLORS = ['#00d2ff', '#ec5b9a', '#2dc7b4', '#a66cff', '#f7b928', '#45bd62'] as const;
+
+export const JOB_HIGHLIGHT_COLOR = {
+  pickup: '#10b981',
+  dropoff: '#f59e0b',
+} as const;
+
+export function laneBandColor(isDark: boolean): string {
+  return isDark ? '#1976b8' : LANE_BLUE;
+}
+
+export function laneEdgeColor(isDark: boolean): string {
+  return isDark ? '#38a9e8' : LANE_BLUE;
+}
+
+export function laneArrowColor(isDark: boolean): string {
+  return isDark ? '#b8d8ec' : '#1d4ed8';
+}
+
+export function laneBandOpacity(isDark: boolean): number {
+  return isDark ? 0.26 : 0.13;
+}
+
+export function trailColor(isDark: boolean): string {
+  return isDark ? '#2dc7b4' : '#0d9488';
+}
+
+export function jobRouteColor(isDark: boolean): string {
+  return isDark ? '#e2e8f0' : '#1e293b';
+}
+
+export function zoneFillOpacity(type: string, isDark: boolean): number {
+  switch (type) {
+    case 'KEEP_OUT':
+      return isDark ? 0.18 : 0.16;
+    case 'SPEED':
+      return isDark ? 0.17 : 0.12;
+    case 'SINGLE_OCCUPANCY':
+      return isDark ? 0.14 : 0.14;
+    case 'NO_STOP':
+      return isDark ? 0.13 : 0.12;
+    case 'JUNCTION':
+      return isDark ? 0.12 : 0.11;
+    default:
+      return isDark ? 0.13 : 0.12;
+  }
+}
+
+export function zoneStrokeColor(type: string, isDark: boolean): string {
+  if (!isDark) return zoneColorOf(type);
+  switch (type) {
+    case 'KEEP_OUT':
+      return '#e06c75';
+    case 'SPEED':
+      return '#d8c84a';
+    case 'NO_STOP':
+      return '#68b8d6';
+    case 'SINGLE_OCCUPANCY':
+      return '#9b8ce8';
+    case 'JUNCTION':
+      return '#c4cad4';
+    default:
+      return zoneColorOf(type);
+  }
+}
+
 /** WAYPOINT black, CHARGER green, PARK deep orange. */
 export const ENDPOINT_COLOR: Record<string, string> = {
   WAYPOINT: '#121317',
@@ -70,4 +145,64 @@ export function endpointColorOf(type: string, isDark = false): string {
   const kind = endpointKind(type);
   // Black waypoints would vanish on the dark floor: they turn light there, like the web's ink token.
   return kind === 'WAYPOINT' && isDark ? '#e6e8ec' : ENDPOINT_COLOR[kind];
+}
+
+/** Nav2 robot footprint dimensions (metres, aligned with backend TrafficFootprintOptions). */
+export const ROBOT_LENGTH_METERS = 0.32;
+export const ROBOT_WIDTH_METERS = 0.26;
+export const DOCK_BAY_LENGTH_METERS = 0.40;
+export const DOCK_BAY_WIDTH_METERS = 0.34;
+export const SHELF_BAY_DEPTH_METERS = 0.35;
+export const SHELF_BAY_LENGTH_METERS = 0.70;
+
+export type EndpointVisualKind =
+  | 'WAYPOINT'
+  | 'SHELF'
+  | 'INBOUND'
+  | 'OUTBOUND'
+  | 'CHARGER'
+  | 'PARK'
+  | 'INSPECTION'
+  | 'WAIT';
+
+/** Classify endpoint operational role from DB type, code, and display name. */
+export function endpointVisualKind(
+  type: string,
+  code?: string,
+  name?: string,
+): EndpointVisualKind {
+  const kind = endpointKind(type);
+  const hint = `${code ?? ''} ${name ?? ''}`;
+  if (kind === 'CHARGER' || /charg/i.test(hint)) return 'CHARGER';
+  if (kind === 'PARK' || /park/i.test(hint)) return 'PARK';
+  if (/inbound|receiv/i.test(hint)) return 'INBOUND';
+  if (/outbound|ship|dispatch|dock/i.test(hint)) return 'OUTBOUND';
+  if (/shelf|rack|bay|bin/i.test(hint)) return 'SHELF';
+  if (/inspect|qc|quality|check/i.test(hint)) return 'INSPECTION';
+  if (/wait|queue|buffer|stag/i.test(hint)) return 'WAIT';
+  return 'WAYPOINT';
+}
+
+/** Achromatic OTTO neutrals for static shelves/waypoints, with semantic accents for Charger, Inbound, and Outbound. */
+export function visualKindColor(
+  visualKind: EndpointVisualKind,
+  type: string,
+  isDark: boolean,
+): string {
+  switch (visualKind) {
+    case 'CHARGER':
+    case 'INBOUND':
+      return isDark ? '#34d399' : '#059669';
+    case 'OUTBOUND':
+      return isDark ? '#fbbf24' : '#d97706';
+    case 'SHELF':
+    case 'PARK':
+    case 'INSPECTION':
+      return isDark ? '#e6ecf5' : '#1f2937';
+    case 'WAIT':
+      return isDark ? '#b6c2d2' : '#64748b';
+    case 'WAYPOINT':
+    default:
+      return endpointColorOf(type, isDark);
+  }
 }

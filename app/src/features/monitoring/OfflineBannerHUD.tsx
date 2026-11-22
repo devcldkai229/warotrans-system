@@ -31,7 +31,7 @@ export function OfflineBannerHUD() {
     <SubScreenHeader label="Network Resiliency" title="Connection Status" onBack={goBack} />
     <View style={styles.banner}>
       <View style={styles.bannerLeft}>
-        <View style={styles.bannerIconBox}><WifiOff size={18} color={colors.warningText} /></View>
+        <WifiOff size={18} color={colors.warningText} />
         <View style={{ flex: 1 }}>
           <Text style={styles.bannerTitle}>Offline Actions Unavailable</Text>
           <Text style={styles.bannerSubtitle}>Unsent actions are not saved on this device or replayed automatically.</Text>
@@ -63,9 +63,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    backgroundColor: colors.warningBg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(245, 158, 11, 0.25)',
+    borderBottomColor: colors.warningBorder,
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -75,18 +75,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     gap: 12,
     flex: 1,
   },
-  bannerIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.sm,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   bannerTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#b45309',
+    color: colors.warningText,
     fontFamily: typography.fontSans,
   },
   bannerSubtitle: {
@@ -98,7 +90,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   retryPill: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: colors.warningBorder,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -106,7 +98,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   retryText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#b45309',
+    color: colors.warningText,
     fontFamily: typography.fontMono,
   },
   scrollContent: {

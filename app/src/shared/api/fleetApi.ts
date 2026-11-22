@@ -177,3 +177,92 @@ export function cancelRobotCommand(id: string, reason?: string, targetCommandId?
   return apiFetch<{ commandId: string; targetCommandId: string; robotId: string; status: string }>(
     `/api/fleet/robots/${id}/commands/cancel`, { method: 'POST', body: JSON.stringify({ targetCommandId: targetCommandId ?? null, reason }) });
 }
+
+export interface TrafficRobotView {
+  robotId: string;
+  phase: string;
+  x?: number | null;
+  y?: number | null;
+  localizationOk: boolean;
+  occupiedResourceIds: string[];
+  authority?: {
+    authorityId: string;
+    edgeIds: number[];
+    graphHash: string;
+    seq: number;
+    epoch: number;
+    planRevision?: number;
+    semanticMapFingerprint?: string | null;
+    resourceIds?: string[];
+  } | null;
+  planRevision?: number;
+  proposedPath?: { x: number; y: number; yaw: number }[];
+  grantedPathPoints?: number;
+  waitingReason: string;
+  quarantineReason?: string | null;
+  jobStepId?: string | null;
+}
+
+export interface TrafficResourceView {
+  resourceId: string;
+  kind: string;
+  capacity: number;
+  holders: string[];
+  waiters: string[];
+  queueLength: number;
+}
+
+export interface TrafficSnapshot {
+  epoch: number;
+  stateVersion: number;
+  phase: string;
+  robots: TrafficRobotView[];
+  resources: TrafficResourceView[];
+  waits: { robotId: string; resourceId: string; reason: string; blockingOwner?: string | null }[];
+  recentEvents: string[];
+}
+
+export function getTrafficSnapshot(signal?: AbortSignal): Promise<TrafficSnapshot> {
+  return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot', { signal });
+}
+
+export interface RobotPosePoint {
+  at: string;
+  x: number;
+  y: number;
+  yaw: number;
+  linearVelocity?: number | null;
+  angularVelocity?: number | null;
+  mapVersionCode: string | null;
+  jobId?: string | null;
+  commandId?: string | null;
+}
+
+export interface RobotPoseHistoryResponse {
+  robotId: string;
+  from: string | null;
+  to: string | null;
+  jobId: string | null;
+  total: number;
+  downsampled: boolean;
+  distanceMeters: number;
+  keptSince: string;
+  points: RobotPosePoint[];
+}
+
+export function getRobotPoseHistory(
+  robotId: string,
+  params: { from?: string; to?: string; jobId?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<RobotPoseHistoryResponse> {
+  const query = new URLSearchParams();
+  if (params.from) query.set('from', params.from);
+  if (params.to) query.set('to', params.to);
+  if (params.jobId) query.set('jobId', params.jobId);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  const qs = query.toString();
+  return apiFetch<RobotPoseHistoryResponse>(
+    `/api/fleet/robots/${encodeURIComponent(robotId)}/pose-history${qs ? `?${qs}` : ''}`,
+    { signal },
+  );
+}

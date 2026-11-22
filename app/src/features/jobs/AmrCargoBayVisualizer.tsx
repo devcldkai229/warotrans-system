@@ -51,9 +51,7 @@ export function AmrCargoBayVisualizer({
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <View style={styles.iconWell}>
-            <Layers size={16} color={colors.primary} />
-          </View>
+          <Layers size={18} color={colors.textSecondary} />
           <View style={styles.titleTextBlock}>
             <Text variant="headline" style={styles.titleText}>
               {activeRobot} Manifest
@@ -201,14 +199,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   titleTextBlock: {
     flex: 1,
-  },
-  iconWell: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.md,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   titleText: {
     color: colors.textPrimary,

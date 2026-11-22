@@ -811,7 +811,7 @@ function PlacePickerSheet({ places, suggested, end, bulk, map, onPick, onClose }
       </> : <View style={styles.mapPick}>
         <Text variant="caption" color="textSecondary">Tap a station on the map to choose it.</Text>
         <View style={{ flex: 1, minHeight: 380 }}>
-          <MapViewport map={map} robots={[]} selectedRobot="" onSelectRobot={() => {}} showHeader={false}
+          <MapViewport map={map} robots={[]} selectedRobot="" onSelectRobot={() => {}} showHeader={false} fullBleed={true} compact={true}
             onPickEndpoint={endpoint => { const place = placeForEndpoint(places, endpoint.id); if (place) onPick(place); }} />
         </View>
         <View style={styles.bulkRow}><MapIcon size={14} color={colors.textMuted} /><Text variant="caption" color="textMuted">Chargers and parking spots cannot be chosen.</Text></View>

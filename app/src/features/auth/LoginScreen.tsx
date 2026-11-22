@@ -23,7 +23,7 @@ import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { useLanguage } from '../../shared/i18n/LanguageContext';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useTheme, useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -31,11 +31,12 @@ import { typography } from '../../shared/theme/typography';
 import { useToast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useAuth } from './authContext';
+import { LoginBackdrop } from './LoginBackdrop';
 
 export function LoginScreen() {
   const { loginAsync } = useAuth();
   const { success: showToastSuccess } = useToast();
-  const { mode, cycleMode } = useTheme();
+  const { mode, cycleMode, colors, isDark } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
   const styles = useThemedStyles(createStyles);
   const topInset = useTopInset();
@@ -86,6 +87,7 @@ export function LoginScreen() {
 
   return (
     <View style={styles.outerWrapper}>
+      <LoginBackdrop isDark={isDark} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -105,7 +107,7 @@ export function LoginScreen() {
               >
                 <Globe size={13} color={colors.primaryText} strokeWidth={2.2} />
                 <Text style={styles.themeCycleLabel}>
-                  {language === 'vi' ? 'VI · Tiếng Việt' : 'EN · English'}
+                  {language === 'vi' ? 'Tiếng Việt' : 'English'}
                 </Text>
               </Pressable>
 
@@ -136,8 +138,8 @@ export function LoginScreen() {
               <View style={styles.logoBadgeWrap}>
                 <BrandMark size={68} />
               </View>
-              <Text style={styles.brandTitle}>WAROTRANS</Text>
-              <Text style={styles.brandSubtitle}>{t('Autonomous Fleet Operator Console')}</Text>
+              <Text style={styles.brandTitle}>WaroTrans</Text>
+              <Text style={styles.brandSubtitle}>{t('Warehouse Operations')}</Text>
             </View>
 
             {/* Form Fields */}
@@ -222,11 +224,11 @@ export function LoginScreen() {
   );
 }
 
-const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     outerWrapper: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: isDark ? '#0f1218' : '#ffffff',
     },
     scrollContent: {
       flexGrow: 1,
@@ -237,7 +239,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
       paddingHorizontal: 24,
       paddingTop: 0,
       paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
       justifyContent: 'space-between',
       maxWidth: 480,
       width: '100%',
@@ -261,7 +263,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
       height: 32,
       paddingHorizontal: 10,
       borderRadius: 999,
-      backgroundColor: colors.surface,
+      backgroundColor: isDark ? 'rgba(30, 34, 42, 0.72)' : 'rgba(255, 255, 255, 0.78)',
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -285,8 +287,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
   },
   brandTitle: {
     fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+    fontWeight: '700',
+    letterSpacing: -0.4,
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
     textAlign: 'center',

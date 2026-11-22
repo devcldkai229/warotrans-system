@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Bell, ScanLine } from 'lucide-react-native';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
@@ -17,6 +17,7 @@ import { useAuth } from '../../features/auth/authContext';
 import { useNavigation } from '../navigation/NavigationContext';
 
 interface AppHeaderProps {
+  title?: string;
   operatorName?: string;
   operatorRole?: string;
   initials?: string;
@@ -44,6 +45,7 @@ function initialsOf(name: string): string {
  *   - Right: Quick Search (40px) + Notification Bell with Badge (40px) + Operator Avatar (40px).
  */
 export function AppHeader({
+  title,
   operatorName = 'Alex Tran',
   operatorRole = 'Staff',
   initials,
@@ -51,7 +53,7 @@ export function AppHeader({
   initialOpen,
 }: AppHeaderProps) {
   const topInset = useTopInset();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const { unreadCount } = useRealtime();
   const { session } = useAuth();
   const { navigate } = useNavigation();
@@ -63,9 +65,15 @@ export function AppHeader({
   return (
     <View style={[styles.header, { paddingTop: topInset + 4 }]}>
       <View style={styles.row}>
-        {/* Left: Brand Mark (40px) */}
+        {/* Left: Screen Title (on secondary tabs) or Brand Mark (on Home) */}
         <View style={styles.leftGroup}>
-          <BrandMark size={40} />
+          {title ? (
+            <Text variant="display" color={colors.textPrimary} numberOfLines={1} style={styles.title}>
+              {title}
+            </Text>
+          ) : (
+            <BrandMark size={40} />
+          )}
         </View>
 
         {/* Right: Notification Bell + Operator Avatar */}
@@ -77,9 +85,9 @@ export function AppHeader({
             }}
             accessibilityRole="button"
             accessibilityLabel="Scan a code"
-            style={({ pressed }) => [styles.iconBtn, styles.scanBtn, pressed && styles.iconBtnPressed]}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <ScanLine size={18} color="#ffffff" strokeWidth={2.4} />
+            <ScanLine size={18} color={colors.textPrimary} strokeWidth={2.1} />
           </Pressable>
 
           <Pressable
@@ -91,7 +99,7 @@ export function AppHeader({
             accessibilityLabel={`Notifications, ${unreadCount} unread`}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <Bell size={18} color={colors.textPrimary} strokeWidth={2.2} />
+            <Bell size={18} color={colors.textPrimary} strokeWidth={2.1} />
             {unreadCount > 0 && (
               <View style={styles.notifBadge}>
                 <Text style={styles.notifBadgeText}>{unreadCount}</Text>
@@ -140,7 +148,6 @@ export function AppHeader({
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
-    scanBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
     header: {
       backgroundColor: colors.surface,
       borderBottomWidth: 1,
@@ -162,6 +169,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 10,
       flex: 1,
       minWidth: 0,
+    },
+    title: {
+      fontSize: 22,
+      lineHeight: 28,
+      fontWeight: '700',
+      letterSpacing: -0.4,
     },
     rightGroup: {
       flexDirection: 'row',

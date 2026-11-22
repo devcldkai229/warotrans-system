@@ -27,6 +27,7 @@ export const PERMISSIONS = {
   /** LOCALIZE at a known endpoint; never makes the robot move. */
   robotLocalize: 'robot.localize',
   robotManualDrive: 'robot.manual.drive',
+  trafficRead: 'traffic.read',
   notificationRead: 'notification.read',
   issueRead: 'issue.read',
   issueCreate: 'issue.create',

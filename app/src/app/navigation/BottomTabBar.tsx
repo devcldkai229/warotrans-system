@@ -1,9 +1,8 @@
 import React from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClipboardList, Home, Navigation } from 'lucide-react-native';
-import type { LucideIcon } from 'lucide-react-native';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import { Path, Rect, Svg } from 'react-native-svg';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
@@ -24,15 +23,125 @@ const FALLBACK_BOTTOM_INSET = 10;
  *   2. Jobs      — Task Execution Center (My Tasks, Fleet Queue, History)
  *   3. Transport — Dispatch & Transport Requests
  *
- * Designed with Google Workspace / Calm Operations precision:
- *   - Icon-only: no text labels underneath for maximum elegance and touch focus.
- *   - Active state: soft rounded-full pill highlight (`primaryLight`).
+ * Designed with Calm Operations monochrome precision:
+ *   - Icon-only: outline when inactive, solid filled when active.
  *   - Touch targets: >= 64pt width x 48pt height.
  */
+function TabGlyph({
+  tab,
+  active,
+  ink,
+  cutout,
+}: {
+  tab: MainTab;
+  active: boolean;
+  ink: string;
+  cutout: string;
+}) {
+  if (tab === 'home') {
+    const housePath =
+      'M3 10.5a2 2 0 0 1 .71-1.53l7-5.85a2 2 0 0 1 2.58 0l7 5.85A2 2 0 0 1 21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8.5Z';
+    return (
+      <Svg width={24} height={24} viewBox="0 0 24 24">
+        {active ? (
+          <>
+            <Path
+              d={housePath}
+              fill={ink}
+              stroke={ink}
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+            />
+            <Path d="M9.2 21.8V14.2a1 1 0 0 1 1-1h3.6a1 1 0 0 1 1 1v7.6Z" fill={cutout} />
+          </>
+        ) : (
+          <>
+            <Path
+              d={housePath}
+              fill="none"
+              stroke={ink}
+              strokeWidth={1.9}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Path
+              d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7"
+              fill="none"
+              stroke={ink}
+              strokeWidth={1.9}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        )}
+      </Svg>
+    );
+  }
+
+  if (tab === 'jobs') {
+    return (
+      <Svg width={24} height={24} viewBox="0 0 24 24">
+        {active ? (
+          <>
+            <Rect x={3.75} y={4} width={16.5} height={18} rx={2.5} fill={ink} />
+            <Rect
+              x={7.75}
+              y={1.8}
+              width={8.5}
+              height={4.4}
+              rx={1.6}
+              fill={ink}
+              stroke={cutout}
+              strokeWidth={1.5}
+            />
+            <Path
+              d="M8.2 11.5h.01M11.5 11.5h4.5M8.2 16h.01M11.5 16h4.5"
+              stroke={cutout}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+          </>
+        ) : (
+          <>
+            <Rect x={8} y={2} width={8} height={4} rx={1.2} fill="none" stroke={ink} strokeWidth={1.9} />
+            <Path
+              d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+              fill="none"
+              stroke={ink}
+              strokeWidth={1.9}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Path
+              d="M8.2 11.5h.01M11.5 11.5h4.5M8.2 16h.01M11.5 16h4.5"
+              stroke={ink}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+          </>
+        )}
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Path
+        d="M3 11.2 21 3l-8.2 18-2.2-7.6L3 11.2Z"
+        fill={active ? ink : 'none'}
+        stroke={ink}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function BottomTabBar() {
   const { activeTab, switchTab, activeJobCount, setDockHeight } = useNavigation();
   const insets = useSafeAreaInsets();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const bottomInset = insets.bottom || FALLBACK_BOTTOM_INSET;
 
   const handleTabPress = (tab: MainTab) => {
@@ -49,7 +158,6 @@ export function BottomTabBar() {
       <View style={[styles.row, { height: TAB_ROW_HEIGHT }]}>
         {TABS.map((tab) => {
           const isActive = tab.value === activeTab;
-          const IconCmp = tab.icon;
 
           return (
             <Pressable
@@ -60,19 +168,19 @@ export function BottomTabBar() {
               accessibilityState={{ selected: isActive }}
               style={({ pressed }) => [
                 styles.tabBtn,
-                isActive && styles.tabBtnActive,
                 pressed && styles.tabBtnPressed,
               ]}
             >
               <View style={styles.iconSlot}>
-                <IconCmp
-                  size={24}
-                  color={isActive ? colors.primaryText : colors.textMuted}
-                  strokeWidth={isActive ? 2.4 : 2.0}
+                <TabGlyph
+                  tab={tab.value}
+                  active={isActive}
+                  ink={colors.textPrimary}
+                  cutout={colors.surface}
                 />
                 {tab.value === 'jobs' && activeJobCount > 0 ? (
                   <View style={styles.badge}>
-                    <Text variant="caption" color="#78350f" style={styles.badgeText}>
+                    <Text variant="caption" color="#ffffff" style={styles.badgeText}>
                       {activeJobCount}
                     </Text>
                   </View>
@@ -92,11 +200,10 @@ export function BottomTabBar() {
 const TABS: ReadonlyArray<{
   label: string;
   value: MainTab;
-  icon: LucideIcon;
 }> = [
-  { label: 'Home', value: 'home', icon: Home },
-  { label: 'Jobs', value: 'jobs', icon: ClipboardList },
-  { label: 'Transport', value: 'transport', icon: Navigation },
+  { label: 'Home', value: 'home' },
+  { label: 'Jobs', value: 'jobs' },
+  { label: 'Transport', value: 'transport' },
 ];
 
 const createStyles = (colors: ThemeColors) =>
@@ -123,11 +230,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       minWidth: 72,
       height: 44,
-      borderRadius: radii.full,
       paddingHorizontal: 18,
-    },
-    tabBtnActive: {
-      backgroundColor: colors.primaryLight,
     },
     tabBtnPressed: {
       opacity: 0.7,
@@ -138,7 +241,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    /** Lighter warm amber badge chip with crisp surface border */
+    /** Alert count badge unified with header notifications. */
     badge: {
       position: 'absolute',
       top: -6,
@@ -149,7 +252,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: radii.full,
-      backgroundColor: '#fbbf24', // Amber 400: bright, light, warm golden
+      backgroundColor: colors.danger,
       borderWidth: 1.5,
       borderColor: colors.surface,
     },
@@ -157,7 +260,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: '800',
       fontSize: 11,
       lineHeight: 13,
-      color: '#78350f',
+      color: '#ffffff',
     },
     safeArea: {
       backgroundColor: colors.surface,

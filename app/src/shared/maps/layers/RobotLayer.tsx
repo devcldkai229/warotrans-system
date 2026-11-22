@@ -1,63 +1,306 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
-import type { RobotResponse } from '../../types/contracts';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { ThemeColors } from '../../theme/colors';
-import { useThemeColors, useThemedStyles } from '../../theme/ThemeContext';
+import { ThemeShadows } from '../../theme/shadows';
+import { useTheme, useThemedStyles } from '../../theme/ThemeContext';
+import type { RobotResponse } from '../../types/contracts';
 import { Text } from '../../ui';
-import { MapAnchor } from '../MapAnchor';
-import { mapHeading } from '../mapModel';
-import { mapRobotState, type MapUpdateMode } from '../mapTelemetry';
-import { worldToBase, type MapFrame } from '../mapTransform';
 import type { MapCameraController } from '../hooks/useMapCamera';
+import { MapAnchor } from '../MapAnchor';
+import { robotFootprintPx } from '../mapArchitecture';
+import { mapHeading } from '../mapModel';
 import { ROBOT_COLOR } from '../mapStyle';
+import { mapRobotState, type MapUpdateMode } from '../mapTelemetry';
+import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
 
-const SIZE = 26;
-const BOX = 44;
+const TAG_WIDTH = 104;
 
-interface Props {map:MapVersionDetailDto;frame:MapFrame;robots:RobotResponse[];camera:MapCameraController;selected:string;now:number;updateMode?:MapUpdateMode;onSelect:(code:string)=>void}
-
-/**
- * A robot is a small status-coloured disc with a notch pointing where it faces, a soft halo, and its code in a small
- * tag underneath: it marks the spot without covering the lanes and stations around it (web: WarehouseMap robots).
- * The hit area stays 44 pt for the finger.
- */
-export function RobotLayer({map,frame,robots,camera,selected,now,updateMode='polling',onSelect}:Props) {
-  const colors = useThemeColors();
-  const styles = useThemedStyles(createStyles);
-  return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">{robots.filter(robot=>robot.currentMapVersionId===map.id&&robot.isOnline).map(robot=>{
-    const state=mapRobotState(robot,map,now,updateMode),point=worldToBase({x:robot.poseX,y:robot.poseY},map,frame);
-    if(!state.showPose||!point)return null;
-    const tone=state.lastReported?colors.textMuted:ROBOT_COLOR[robot.status]??colors.primary;
-    const isSelected=selected===robot.code;
-    const heading=mapHeading(robot.poseYaw,map.originYaw,frame.rotated);
-    return <MapAnchor key={robot.id} point={point} camera={camera} width={BOX} height={BOX + 14}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Robot ${robot.code}, ${robot.status}, ${state.label}`} accessibilityState={{selected:isSelected}}
-        onPress={()=>{if(Date.now()-camera.lastGestureAt>200)onSelect(robot.code);}} style={styles.hit}>
-        <View style={{width:BOX,height:BOX,alignItems:'center',justifyContent:'center'}}>
-          <Svg width={BOX} height={BOX} viewBox={`${-BOX/2} ${-BOX/2} ${BOX} ${BOX}`}>
-            <Circle r={isSelected?20:17} fill={tone} opacity={0.18} />
-            {isSelected ? <Circle r={20} fill="none" stroke={tone} strokeWidth={1.5} strokeDasharray="4 3" /> : null}
-            {/* heading notch, drawn pointing up and turned with the robot */}
-            <Path d="M0 -19 L5 -12 L-5 -12 Z" fill={tone} transform={`rotate(${heading})`} />
-            <Circle r={SIZE/2} fill={tone} stroke="#ffffff" strokeWidth={2} strokeDasharray={state.lastReported?'3 3':undefined} />
-            {/* a tiny robot face so it reads as a robot, not a station */}
-            <Path d="M-6 -3 h12 a2 2 0 0 1 2 2 v6 a2 2 0 0 1 -2 2 h-12 a2 2 0 0 1 -2 -2 v-6 a2 2 0 0 1 2 -2 Z M0 -3 v-4" fill="none" stroke="#ffffff" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-            <Circle cx={-3} cy={1.5} r={1.2} fill="#ffffff" />
-            <Circle cx={3} cy={1.5} r={1.2} fill="#ffffff" />
-          </Svg>
-        </View>
-        <View style={[styles.tag,isSelected&&{backgroundColor:tone,borderColor:tone}]}>
-          <Text variant="caption" fontWeight="700" numberOfLines={1} style={[styles.tagText,isSelected&&{color:'#ffffff'}]}>{robot.code}</Text>
-        </View>
-      </Pressable>
-    </MapAnchor>;
-  })}</View>;
+interface Props {
+  map: MapVersionDetailDto;
+  frame: MapFrame;
+  robots: RobotResponse[];
+  camera: MapCameraController;
+  selected: string;
+  now: number;
+  updateMode?: MapUpdateMode;
+  onSelect: (code: string) => void;
 }
 
-const createStyles=(colors:ThemeColors)=>StyleSheet.create({
-  hit:{flex:1,alignItems:'center'},
-  tag:{marginTop:-6,paddingHorizontal:5,paddingVertical:1,borderRadius:6,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
-  tagText:{fontSize:10,lineHeight:13},
+interface RobotInteractiveOverlayProps {
+  robot: RobotResponse;
+  point: MapPoint;
+  halfLength: number;
+  tone: string;
+  isSelected: boolean;
+  stateLabel: string;
+  camera: MapCameraController;
+  hitSize: number;
+  onSelect: (code: string) => void;
+}
+
+const RobotInteractiveOverlay = memo(function RobotInteractiveOverlay({
+  robot,
+  point,
+  halfLength,
+  tone,
+  isSelected,
+  stateLabel,
+  camera,
+  hitSize,
+  onSelect,
+}: RobotInteractiveOverlayProps) {
+  const styles = useThemedStyles(createStyles);
+  const { zoom, x: camX, y: camY } = camera;
+  const pointX = point.x;
+  const pointY = point.y;
+
+  const tagPos = useAnimatedStyle(
+    () => ({
+      transform: [
+        { translateX: pointX * zoom.get() + camX.get() - TAG_WIDTH / 2 },
+        { translateY: pointY * zoom.get() + camY.get() + (halfLength + 2) * zoom.get() + 6 },
+      ],
+    }),
+    [pointX, pointY, halfLength, zoom, camX, camY],
+  );
+
+  return (
+    <>
+      <MapAnchor point={point} camera={camera} width={hitSize} height={hitSize}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Robot ${robot.code}, ${robot.status}, ${stateLabel}`}
+          accessibilityState={{ selected: isSelected }}
+          onPress={() => {
+            if (Date.now() - camera.lastGestureAt > 200) onSelect(robot.code);
+          }}
+          style={({ pressed }) => [styles.hit, pressed && styles.hitPressed]}
+        />
+      </MapAnchor>
+
+      <Animated.View pointerEvents="none" style={[styles.tagAnchor, tagPos]}>
+        <View
+          style={[
+            styles.tag,
+            styles.tagDefault,
+            isSelected && { backgroundColor: tone, borderColor: tone },
+          ]}
+        >
+          <View
+            style={[
+              styles.tagDot,
+              { backgroundColor: isSelected ? '#ffffff' : tone },
+            ]}
+          />
+          <Text
+            variant="caption"
+            fontWeight="700"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.2}
+            style={[styles.tagText, isSelected && styles.tagTextSelected]}
+          >
+            {robot.code}
+          </Text>
+        </View>
+      </Animated.View>
+    </>
+  );
 });
+
+/**
+ * OTTO-inspired top-down AMR sprite rendered in real-world scale (`0.26m × 0.32m`) inside the
+ * zoomed camera scene, paired with a screen-sized tap target and crisp tracking code pill.
+ */
+export function RobotLayer({
+  map,
+  frame,
+  robots,
+  camera,
+  selected,
+  now,
+  updateMode = 'polling',
+  onSelect,
+}: Props) {
+  const { colors, isDark } = useTheme();
+  const footprint = useMemo(() => robotFootprintPx(map, frame), [map, frame]);
+
+  const entries = useMemo(
+    () =>
+      robots
+        .filter(robot => robot.currentMapVersionId === map.id && robot.isOnline)
+        .flatMap(robot => {
+          const state = mapRobotState(robot, map, now, updateMode);
+          const point = worldToBase({ x: robot.poseX, y: robot.poseY }, map, frame);
+          if (!state.showPose || !point) return [];
+          const tone = state.lastReported
+            ? colors.textMuted
+            : ROBOT_COLOR[robot.status] ?? colors.primary;
+          return [
+            {
+              robot,
+              point,
+              state,
+              tone,
+              isSelected: selected === robot.code,
+              isError: robot.status === 'ERROR',
+              heading: mapHeading(robot.poseYaw, map.originYaw, frame.rotated),
+            },
+          ];
+        }),
+    [robots, map, frame, now, updateMode, selected, colors.textMuted, colors.primary],
+  );
+
+  if (entries.length === 0) return null;
+
+  const w = footprint.width;
+  const l = footprint.length;
+  const hw = w / 2;
+  const hl = l / 2;
+  const noseH = Math.max(3, l * 0.24);
+  const noseW = Math.max(2.6, w * 0.24);
+  const strokeUnit = 1 / Math.sqrt(Math.max(1, camera.settledZoom));
+  const hitSize = Math.min(96, Math.max(48, Math.round(l * camera.settledZoom)));
+
+  const chassisFill = isDark ? '#ffffff' : '#1e293b';
+  const chassisStroke = isDark ? '#0b0f17' : '#ffffff';
+  const deckFill = isDark ? '#dbe2ec' : '#334155';
+  const deckStroke = isDark ? '#94a3b8' : '#475569';
+
+  return (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { transformOrigin: '0px 0px' }, camera.sceneStyle]}
+      >
+        <Svg
+          width={frame.width}
+          height={frame.height}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+          accessibilityLabel="Live robots"
+        >
+          {entries.map(({ robot, point, tone, isSelected, isError, state, heading }) => (
+            <G key={`chassis-${robot.id}`} transform={`translate(${point.x} ${point.y})`}>
+              <Circle
+                r={l * (isSelected ? 0.68 : 0.58)}
+                fill={isError ? ROBOT_COLOR.ERROR : tone}
+                opacity={isSelected ? (isDark ? 0.28 : 0.2) : isDark ? 0.18 : 0.12}
+              />
+              {isSelected ? (
+                <Circle
+                  r={l * 0.68}
+                  fill="none"
+                  stroke={tone}
+                  strokeWidth={1.35 * strokeUnit}
+                  strokeDasharray={`${3 * strokeUnit} ${2.2 * strokeUnit}`}
+                />
+              ) : isError ? (
+                <Circle
+                  r={l * 0.65}
+                  fill="none"
+                  stroke={ROBOT_COLOR.ERROR}
+                  strokeWidth={1.35 * strokeUnit}
+                />
+              ) : null}
+              <G transform={`rotate(${heading})`}>
+                <Path
+                  d={`M0 ${-hl - noseH} L${noseW} ${-hl - 0.5} L${-noseW} ${-hl - 0.5} Z`}
+                  fill={tone}
+                />
+                <Rect
+                  x={-hw}
+                  y={-hl}
+                  width={w}
+                  height={l}
+                  rx={w * 0.24}
+                  fill={chassisFill}
+                  stroke={state.lastReported ? tone : chassisStroke}
+                  strokeWidth={1.35 * strokeUnit}
+                  strokeDasharray={
+                    state.lastReported ? `${2.5 * strokeUnit} ${1.8 * strokeUnit}` : undefined
+                  }
+                />
+                <Rect
+                  x={-hw * 0.82}
+                  y={-hl + l * 0.04}
+                  width={w * 0.82}
+                  height={l * 0.18}
+                  rx={l * 0.07}
+                  fill={tone}
+                />
+                <Rect
+                  x={-w * 0.3}
+                  y={-l * 0.16}
+                  width={w * 0.6}
+                  height={l * 0.46}
+                  rx={w * 0.12}
+                  fill={deckFill}
+                  stroke={deckStroke}
+                  strokeWidth={0.75 * strokeUnit}
+                />
+                <Rect
+                  x={-w * 0.15}
+                  y={l * 0.03}
+                  width={w * 0.3}
+                  height={l * 0.1}
+                  rx={l * 0.04}
+                  fill={tone}
+                  opacity={0.45}
+                />
+              </G>
+            </G>
+          ))}
+        </Svg>
+      </Animated.View>
+
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        {entries.map(({ robot, point, tone, isSelected, state }) => (
+          <RobotInteractiveOverlay
+            key={robot.id}
+            robot={robot}
+            point={point}
+            halfLength={hl}
+            tone={tone}
+            isSelected={isSelected}
+            stateLabel={state.label}
+            camera={camera}
+            hitSize={hitSize}
+            onSelect={onSelect}
+          />
+        ))}
+      </View>
+    </>
+  );
+}
+
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
+  StyleSheet.create({
+    hit: { flex: 1, borderRadius: 24 },
+    hitPressed: { opacity: 0.78, transform: [{ scale: 0.96 }] },
+    tagAnchor: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      width: TAG_WIDTH,
+      alignItems: 'center',
+    },
+    tag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 5,
+      borderWidth: 1,
+    },
+    tagDefault: {
+      backgroundColor: colors.mapLabelBg,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : colors.mapHudBorder,
+    },
+    tagDot: { width: 4.5, height: 4.5, borderRadius: 2.25 },
+    tagText: { fontSize: 9.5, lineHeight: 12, color: colors.textPrimary },
+    tagTextSelected: { color: '#ffffff' },
+  });
