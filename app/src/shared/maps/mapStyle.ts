@@ -60,7 +60,7 @@ export function laneArrowColor(isDark: boolean): string {
 }
 
 export function laneBandOpacity(isDark: boolean): number {
-  return isDark ? 0.28 : 0.13;
+  return isDark ? 0.14 : 0.13;
 }
 
 export function trailColor(isDark: boolean): string {
@@ -74,16 +74,16 @@ export function jobRouteColor(isDark: boolean): string {
 export function zoneFillOpacity(type: string, isDark: boolean): number {
   switch (type) {
     case 'KEEP_OUT':
-      return isDark ? 0.20 : 0.16;
+      return isDark ? 0.12 : 0.16;
     case 'SINGLE_OCCUPANCY':
-      return isDark ? 0.19 : 0.14;
+      return isDark ? 0.09 : 0.14;
     case 'JUNCTION':
-      return isDark ? 0.15 : 0.11;
+      return isDark ? 0.08 : 0.11;
     case 'SPEED':
     case 'NO_STOP':
-      return isDark ? 0.18 : 0.12;
+      return isDark ? 0.09 : 0.12;
     default:
-      return isDark ? 0.17 : 0.12;
+      return isDark ? 0.09 : 0.12;
   }
 }
 
@@ -197,9 +197,9 @@ export function visualKindColor(
     case 'SHELF':
     case 'PARK':
     case 'INSPECTION':
-      return isDark ? '#d8dee9' : '#1f2937';
+      return isDark ? '#e6ecf5' : '#1f2937';
     case 'WAIT':
-      return isDark ? '#94a3b8' : '#64748b';
+      return isDark ? '#b6c2d2' : '#64748b';
     case 'WAYPOINT':
     default:
       return endpointColorOf(type, isDark);

@@ -388,7 +388,7 @@ test('endpointVisualKind classifies all 8 OTTO functional station types includin
   assert.equal(visualKindColor('INBOUND', 'WAYPOINT', true), '#34d399');
   assert.equal(visualKindColor('OUTBOUND', 'WAYPOINT', false), '#d97706');
   assert.equal(visualKindColor('OUTBOUND', 'WAYPOINT', true), '#fbbf24');
-  assert.equal(visualKindColor('SHELF', 'WAYPOINT', true), '#d8dee9');
+  assert.equal(visualKindColor('SHELF', 'WAYPOINT', true), '#e6ecf5');
   assert.equal(visualKindColor('SHELF', 'WAYPOINT', false), '#1f2937');
   assert.equal(visualKindColor('PARK', 'WAYPOINT', false), '#1f2937');
 });
@@ -540,7 +540,7 @@ test('dark-mode OTTO map style helpers provide calm desaturated steel lanes and 
   assert.equal(laneArrowColor(false), '#1d4ed8');
   assert.equal(laneArrowColor(true), '#e0f2fe');
   assert.equal(laneBandOpacity(false), 0.13);
-  assert.equal(laneBandOpacity(true), 0.28);
+  assert.equal(laneBandOpacity(true), 0.14);
 
   assert.equal(zoneStrokeColor('KEEP_OUT', false), ZONE_COLOR.KEEP_OUT);
   assert.equal(zoneStrokeColor('KEEP_OUT', true), '#e06c75');

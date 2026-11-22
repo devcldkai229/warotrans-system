@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Platform, StyleSheet, View, type ImageStyle } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { useTheme } from '../../theme/ThemeContext';
@@ -73,14 +73,19 @@ export const BaseMapLayer = memo(function BaseMapLayer({
               onLoad={onImageLoad}
               onError={onImageError}
               resizeMode="stretch"
-              style={{
-                position: 'absolute',
-                width: map.imageWidthPixels * frame.scale,
-                height: map.imageHeightPixels * frame.scale,
-                left: (frame.mapWidth - map.imageWidthPixels * frame.scale) / 2,
-                top: (frame.mapHeight - map.imageHeightPixels * frame.scale) / 2,
-                transform: [{ rotate: frame.rotated ? '90deg' : '0deg' }],
-              }}
+              style={[
+                {
+                  position: 'absolute',
+                  width: map.imageWidthPixels * frame.scale,
+                  height: map.imageHeightPixels * frame.scale,
+                  left: (frame.mapWidth - map.imageWidthPixels * frame.scale) / 2,
+                  top: (frame.mapHeight - map.imageHeightPixels * frame.scale) / 2,
+                  transform: [{ rotate: frame.rotated ? '90deg' : '0deg' }],
+                },
+                Platform.OS === 'web'
+                  ? ({ imageRendering: 'pixelated' } as unknown as ImageStyle)
+                  : null,
+              ]}
             />
           </View>
         ) : null}
@@ -173,7 +178,7 @@ export const BaseMapLayer = memo(function BaseMapLayer({
           width={frame.mapWidth}
           height={frame.mapHeight}
           fill="none"
-          stroke={isDark ? 'rgba(255, 255, 255, 0.22)' : colors.borderStrong}
+          stroke={isDark ? 'rgba(148, 163, 184, 0.18)' : colors.borderStrong}
           strokeWidth={(isDark ? 1 : 1.2) / safeZoom}
         />
       </Svg>
@@ -183,6 +188,6 @@ export const BaseMapLayer = memo(function BaseMapLayer({
 
 const styles = StyleSheet.create({
   darkRasterFilter: {
-    filter: 'invert(0.78) contrast(1.10) brightness(1.02)',
+    filter: 'invert(0.80) contrast(1.14) brightness(0.58)',
   },
 });

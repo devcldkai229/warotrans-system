@@ -39,8 +39,8 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
   if (dockBays.length === 0 && shelfBays.length === 0) return null;
 
   const strokeUnit = 1 / Math.sqrt(Math.max(1, zoom));
-  const rackColor = isDark ? '#a1aab8' : '#475569';
-  const rackFill = isDark ? 'rgba(255, 255, 255, 0.065)' : 'rgba(30, 41, 59, 0.055)';
+  const rackColor = isDark ? '#8b97a8' : '#475569';
+  const rackFill = isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(30, 41, 59, 0.055)';
   const openingColor = isDark ? '#e2e8f0' : '#1e293b';
 
   return (
@@ -78,7 +78,7 @@ export const StationArchitectureLayer = memo(function StationArchitectureLayer({
               d={bracketsPath}
               fill="none"
               stroke={color}
-              strokeOpacity={isDark ? 0.46 : 0.38}
+              strokeOpacity={isDark ? 0.56 : 0.38}
               strokeWidth={1.1 * strokeUnit}
               strokeLinecap="round"
               strokeLinejoin="round"
