@@ -13,7 +13,6 @@ import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
 import {
   AlertTriangle,
   BatteryMedium,
-  BookOpen,
   Bot,
   ChevronDown,
   ChevronLeft,
@@ -65,7 +64,7 @@ import {
 } from './MapHud';
 import { MapLegendContent } from './MapLegendSheet';
 import { detectPerimeterShelfWalls, robotFootprintPx } from './mapArchitecture';
-import { hitTestInfrastructure, type MapInspectTarget } from './mapHitTest';
+import { hitTestInfrastructure, polygonCentroid, type MapInspectTarget } from './mapHitTest';
 import {
   endpointJobRole,
   endpointPriority,
@@ -127,71 +126,17 @@ interface LayerItemConfig {
   key: LayerKey;
   label: string;
   icon: React.ComponentType<{ size: number; color: string }>;
-  bg: string;
-  tint: string;
 }
 
-function getLayerItems(
-  colors: ThemeColors,
-  isDark: boolean,
-): LayerItemConfig[] {
-  const items: LayerItemConfig[] = [
-    {
-      key: 'stations',
-      label: 'Stations & Docks',
-      icon: MapPin,
-      bg: colors.primaryLight,
-      tint: colors.primaryText,
-    },
-    {
-      key: 'labels',
-      label: 'Labels & Identifiers',
-      icon: Tag,
-      bg: colors.surfaceMuted,
-      tint: colors.textSecondary,
-    },
-    {
-      key: 'zones',
-      label: 'Operational Zones',
-      icon: Layers,
-      bg: isDark ? 'rgba(139, 92, 246, 0.22)' : '#ede9fe',
-      tint: isDark ? '#c4b5fd' : '#7c3aed',
-    },
-    {
-      key: 'lanes',
-      label: 'Lane Directions',
-      icon: Navigation,
-      bg: colors.infoBg,
-      tint: colors.infoText,
-    },
-    {
-      key: 'paths',
-      label: 'Job Route & Paths',
-      icon: Route,
-      bg: isDark ? 'rgba(0, 210, 255, 0.16)' : '#e0f2fe',
-      tint: isDark ? '#00d2ff' : '#0284c7',
-    },
-  ];
-
-  items.push(
-    {
-      key: 'grid',
-      label: '1m Metric Grid',
-      icon: Grid3X3,
-      bg: colors.surfaceMuted,
-      tint: colors.textSecondary,
-    },
-    {
-      key: 'scan',
-      label: 'SLAM Occupancy Scan',
-      icon: Scan,
-      bg: colors.warningBg,
-      tint: colors.warningText,
-    },
-  );
-
-  return items;
-}
+const LAYER_ITEMS: readonly LayerItemConfig[] = [
+  { key: 'stations', label: 'Stations & Docks', icon: MapPin },
+  { key: 'labels', label: 'Labels & Identifiers', icon: Tag },
+  { key: 'zones', label: 'Operational Zones', icon: Layers },
+  { key: 'lanes', label: 'Lane Directions', icon: Navigation },
+  { key: 'paths', label: 'Job Route & Paths', icon: Route },
+  { key: 'grid', label: '1m Metric Grid', icon: Grid3X3 },
+  { key: 'scan', label: 'SLAM Occupancy Scan', icon: Scan },
+];
 
 const PRESET_OPTIONS = [
   { label: 'Operations', value: 'operations' },
@@ -384,10 +329,6 @@ function MapCanvas({
   const styles = useThemedStyles(createStyles);
   const { session } = useAuth();
   const canReadTraffic = !onPickEndpoint && sessionCan(session, PERMISSIONS.trafficRead);
-  const layerItems = useMemo(
-    () => getLayerItems(colors, isDark),
-    [colors, isDark],
-  );
   const { now, active, reducedMotion } = useMapEnvironment();
   const [following, setFollowing] = useState(false);
   const stopFollowing = useCallback(() => setFollowing(false), []);
@@ -1309,15 +1250,7 @@ function MapCanvas({
               >
                 <ChevronLeft size={18} color={colors.textPrimary} />
               </Pressable>
-            ) : (
-              <View style={styles.iconWell}>
-                {sheet === 'legend' ? (
-                  <BookOpen size={18} color={colors.primary} strokeWidth={2.2} />
-                ) : (
-                  <Layers size={18} color={colors.primary} strokeWidth={2.2} />
-                )}
-              </View>
-            )}
+            ) : null}
             <View style={styles.sheetHeaderTitleGroup}>
               <Text variant="title" numberOfLines={1}>
                 {sheet === 'layers'
@@ -1351,17 +1284,7 @@ function MapCanvas({
           {/* Scrollable Content */}
           <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetContent}>
             {sheet === 'legend' ? (
-              <>
-                <MapLegendContent map={map} isDark={isDark} showLivePaths={canReadTraffic} />
-                <Button
-                  title="Done"
-                  variant="secondary"
-                  size="md"
-                  fullWidth
-                  onPress={close}
-                  style={styles.doneBtn}
-                />
-              </>
+              <MapLegendContent map={map} isDark={isDark} showLivePaths={canReadTraffic} />
             ) : sheet === 'layers' ? (
               <>
                 {/* 1. Quick Presets */}
@@ -1384,8 +1307,8 @@ function MapCanvas({
                     DISPLAY LAYERS
                   </Text>
                   <View style={styles.groupedCard}>
-                    {layerItems.map((item, idx) => {
-                      const isLast = idx === layerItems.length - 1;
+                    {LAYER_ITEMS.map((item, idx) => {
+                      const isLast = idx === LAYER_ITEMS.length - 1;
                       const isActive = layers[item.key];
                       const Icon = item.icon;
                       return (
@@ -1400,8 +1323,8 @@ function MapCanvas({
                             accessibilityState={{ checked: isActive }}
                             accessibilityLabel={`Toggle ${item.label}`}
                           >
-                            <View style={[styles.layerIconBox, { backgroundColor: item.bg }]}>
-                              <Icon size={16} color={item.tint} />
+                            <View style={[styles.layerIconBox, isActive && styles.layerIconBoxActive]}>
+                              <Icon size={16} color={isActive ? colors.textPrimary : colors.textMuted} />
                             </View>
                             <View style={styles.layerInfo}>
                               <Text variant="bodyMedium" fontWeight="600">
@@ -1424,59 +1347,16 @@ function MapCanvas({
                   </View>
                 </View>
 
-                {/* 3. Operational Zones Legend */}
-                <View style={styles.sectionBlock}>
-                  <View style={styles.sectionRow}>
-                    <Text variant="caption" color="textSecondary" style={styles.sectionHeaderTitle}>
-                      OPERATIONAL ZONES
+                {!layers.zones ? (
+                  <View style={styles.noticeBox}>
+                    <AlertTriangle size={15} color={colors.warning} />
+                    <Text variant="caption" color="warningText">
+                      Zones layer is currently hidden on the map.
                     </Text>
-                    {layers.zones ? (
-                      <View style={styles.countBadge}>
-                        <Text variant="caption" color="textSecondary">
-                          {activeZones.length}
-                        </Text>
-                      </View>
-                    ) : null}
                   </View>
-                  {layers.zones ? (
-                    activeZones.length === 0 ? (
-                      <Text variant="caption" color="textMuted">
-                        No zones configured for this map.
-                      </Text>
-                    ) : (
-                      <View style={styles.zonesLegendCard}>
-                        <View style={styles.zonesWrap}>
-                          {activeZones.map(z => (
-                            <View key={z.id} style={styles.zoneChip}>
-                              <View
-                                style={[styles.zoneDot, { backgroundColor: zoneColor(z.zoneType) }]}
-                              />
-                              <Text
-                                variant="caption"
-                                fontWeight="600"
-                                style={{ fontFamily: typography.fontMono }}
-                              >
-                                {z.code}
-                              </Text>
-                              <Text variant="caption" color="textSecondary">
-                                · {zoneLabel(z.zoneType)}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    )
-                  ) : (
-                    <View style={styles.noticeBox}>
-                      <AlertTriangle size={15} color={colors.warning} />
-                      <Text variant="caption" color="warningText">
-                        Zones layer is currently hidden on the map.
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                ) : null}
 
-                {/* 4. Collapsible Map Directory (AMR & Stations) */}
+                {/* 3. Collapsible Map Directory (AMR, Stations & Zones) */}
                 <View style={styles.sectionBlock}>
                   <Pressable
                     onPress={() => {
@@ -1489,14 +1369,23 @@ function MapCanvas({
                   >
                     <View style={styles.directoryToggleLeft}>
                       <View style={styles.directoryIconWell}>
-                        <MapPin size={16} color={colors.primary} />
+                        <MapPin size={16} color={colors.textPrimary} />
                       </View>
                       <View style={styles.directoryToggleText}>
                         <Text variant="bodyMedium" fontWeight="600">
                           Locations & Fleet Directory
                         </Text>
                         <Text variant="caption" color="textSecondary">
-                          {mapRobots.length} AMR · {enabledEndpoints.length} Stations
+                          {activeZones.length > 0
+                            ? t('{robots} AMR · {stations} Stations · {zones} Zones', {
+                                robots: mapRobots.length,
+                                stations: enabledEndpoints.length,
+                                zones: activeZones.length,
+                              })
+                            : t('{robots} AMR · {stations} Stations', {
+                                robots: mapRobots.length,
+                                stations: enabledEndpoints.length,
+                              })}
                         </Text>
                       </View>
                     </View>
@@ -1686,19 +1575,82 @@ function MapCanvas({
                           );
                         })}
                       </View>
+
+                      {/* Operational Zones */}
+                      {activeZones.length > 0 ? (
+                        <>
+                          <Text
+                            variant="caption"
+                            color="textSecondary"
+                            style={[styles.subSectionTitle, { marginTop: 12 }]}
+                          >
+                            OPERATIONAL ZONES ({activeZones.length})
+                          </Text>
+                          <View style={styles.groupedCard}>
+                            {activeZones.map((z, idx) => {
+                              const isLast = idx === activeZones.length - 1;
+                              return (
+                                <View key={z.id}>
+                                  <Pressable
+                                    onPress={() => {
+                                      triggerHaptic('tap');
+                                      let anchor: MapPoint | null = null;
+                                      if (
+                                        z.geometry?.type === 'Polygon' &&
+                                        z.geometry.coordinates?.[0]?.length
+                                      ) {
+                                        const outer = z.geometry.coordinates[0]
+                                          .map(pt => worldToBase({ x: pt[0], y: pt[1] }, map, frame))
+                                          .filter((pt): pt is MapPoint => pt !== null);
+                                        if (outer.length >= 3) {
+                                          anchor = polygonCentroid(outer);
+                                        }
+                                      }
+                                      setLayers(prev => (prev.zones ? prev : { ...prev, zones: true }));
+                                      if (anchor) {
+                                        stopFollowing();
+                                        camera.center(anchor);
+                                        setInspected({ kind: 'zone', zone: z, anchor });
+                                      }
+                                      close();
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.zoneDirRow,
+                                      pressed && styles.rowPressed,
+                                    ]}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={z.name || z.code}
+                                  >
+                                    <View style={styles.zoneDirLeft}>
+                                      <View
+                                        style={[
+                                          styles.zoneDot,
+                                          { backgroundColor: zoneColor(z.zoneType) },
+                                        ]}
+                                      />
+                                      <Text
+                                        variant="bodyMedium"
+                                        fontWeight="600"
+                                        numberOfLines={1}
+                                        style={styles.zoneDirName}
+                                      >
+                                        {z.name || z.code}
+                                      </Text>
+                                    </View>
+                                    <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                                      {zoneLabel(z.zoneType)}
+                                    </Text>
+                                  </Pressable>
+                                  {!isLast && <View style={styles.zoneDivider} />}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        </>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>
-
-                {/* 5. Done Button */}
-                <Button
-                  title="Done"
-                  variant="secondary"
-                  size="md"
-                  fullWidth
-                  onPress={close}
-                  style={styles.doneBtn}
-                />
               </>
             ) : sheet === 'endpoint' && endpoint ? (
               /* Station Detail View */
@@ -2160,14 +2112,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderBottomColor: colors.border,
       gap: 12,
     },
-    iconWell: {
-      width: 38,
-      height: 38,
-      borderRadius: radii.md,
-      backgroundColor: colors.primaryLight,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     sheetHeaderTitleGroup: {
       flex: 1,
       minWidth: 0,
@@ -2199,11 +2143,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     sectionBlock: {
       gap: 8,
     },
-    sectionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
     sectionHeaderTitle: {
       fontWeight: '700',
       letterSpacing: 0.6,
@@ -2216,14 +2155,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       fontSize: 11,
       color: colors.textSecondary,
       marginBottom: 4,
-    },
-    countBadge: {
-      backgroundColor: colors.surfaceSubtle,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: radii.pill,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
 
     // Grouped Card
@@ -2246,11 +2177,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       backgroundColor: colors.surfaceMuted,
     },
     layerIconBox: {
-      width: 32,
-      height: 32,
+      width: 30,
+      height: 30,
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    layerIconBoxActive: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(18, 19, 23, 0.06)',
     },
     layerInfo: {
       flex: 1,
@@ -2260,7 +2194,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     insetDivider: {
       height: 1,
       backgroundColor: colors.border,
-      marginLeft: 58,
+      marginLeft: 56,
     },
 
     // Tactile Switch
@@ -2272,7 +2206,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       justifyContent: 'center',
     },
     switchTrackActive: {
-      backgroundColor: colors.primary,
+      backgroundColor: isDark ? '#e4e6eb' : '#1c1c1e',
     },
     switchTrackInactive: {
       backgroundColor: isDark ? colors.borderStrong : '#dcdfe4',
@@ -2290,39 +2224,40 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     switchThumbActive: {
       alignSelf: 'flex-end',
+      backgroundColor: isDark ? '#18191a' : '#ffffff',
     },
     switchThumbInactive: {
       alignSelf: 'flex-start',
     },
 
-    // Operational Zones Legend
-    zonesLegendCard: {
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 12,
-    },
-    zonesWrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    zoneChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: colors.surface,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: radii.sm,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
+    // Operational Zones in Directory
     zoneDot: {
       width: 8,
       height: 8,
       borderRadius: 4,
+    },
+    zoneDirRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      gap: 10,
+    },
+    zoneDirLeft: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    zoneDirName: {
+      flex: 1,
+    },
+    zoneDivider: {
+      height: 1,
+      backgroundColor: colors.border,
+      marginLeft: 32,
     },
     noticeBox: {
       flexDirection: 'row',
@@ -2474,11 +2409,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-
-    // Done Button
-    doneBtn: {
-      marginTop: 4,
     },
 
     // Detail Views

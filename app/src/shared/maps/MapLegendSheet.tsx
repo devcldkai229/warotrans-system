@@ -368,6 +368,63 @@ export function MapLegendContent({
     ...CORE_ZONE_TYPES.filter(t => !presentZoneTypes.has(t)),
   ];
 
+  const stationCells = [
+    ...STATION_LEGEND_ITEMS.map(item => ({
+      key: item.key,
+      label: item.label,
+      glyph: (
+        <EndpointTile
+          type={item.type}
+          code={item.code}
+          headingDeg={0}
+          selected={false}
+          isDark={isDark}
+          surface={colors.surfaceSubtle}
+        />
+      ),
+    })),
+    {
+      key: 'PICKUP',
+      label: 'Pickup',
+      glyph: (
+        <View
+          style={[
+            styles.roleRing,
+            {
+              borderColor: JOB_HIGHLIGHT_COLOR.pickup,
+              backgroundColor: `${JOB_HIGHLIGHT_COLOR.pickup}1f`,
+            },
+          ]}
+        />
+      ),
+    },
+    {
+      key: 'DESTINATION',
+      label: 'Destination',
+      glyph: (
+        <View
+          style={[
+            styles.roleRing,
+            {
+              borderColor: JOB_HIGHLIGHT_COLOR.dropoff,
+              backgroundColor: `${JOB_HIGHLIGHT_COLOR.dropoff}1f`,
+            },
+          ]}
+        />
+      ),
+    },
+    {
+      key: 'RECESSED_SHELF',
+      label: 'Recessed Shelf',
+      glyph: <MiniArchitectureSwatch kind="recessed-shelf" isDark={isDark} />,
+    },
+    {
+      key: 'DOCK_BAY',
+      label: 'Docking Bay',
+      glyph: <MiniArchitectureSwatch kind="dock-bay" isDark={isDark} />,
+    },
+  ];
+
   return (
     <View style={styles.root}>
       {/* 1. Robots (AMR) */}
@@ -375,15 +432,30 @@ export function MapLegendContent({
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
           ROBOTS (AMR)
         </Text>
-        <View style={styles.grid}>
-          {ROBOT_LEGEND_ITEMS.map(item => (
-            <View key={item.key} style={styles.gridItem}>
-              <MiniAmrGlyph tone={item.color} isDark={isDark} stale={item.stale} />
-              <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-                {item.label}
-              </Text>
-            </View>
-          ))}
+        <View style={styles.listCard}>
+          <View style={styles.flatGrid}>
+            {ROBOT_LEGEND_ITEMS.map((item, idx) => (
+              <View
+                key={item.key}
+                style={[
+                  styles.gridCell,
+                  idx >= 2 && styles.gridCellRowDivider,
+                  idx % 2 === 1 && styles.gridCellRightCol,
+                ]}
+              >
+                <MiniAmrGlyph tone={item.color} isDark={isDark} stale={item.stale} />
+                <Text
+                  variant="caption"
+                  fontWeight="600"
+                  color="textPrimary"
+                  numberOfLines={1}
+                  style={styles.flexText}
+                >
+                  {item.label}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </View>
 
@@ -392,71 +464,29 @@ export function MapLegendContent({
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
           STATIONS & DOCKS
         </Text>
-        <View style={styles.grid}>
-          {STATION_LEGEND_ITEMS.map(item => (
-            <View key={item.key} style={styles.gridItem}>
-              <View style={styles.miniTileBox}>
-                <EndpointTile
-                  type={item.type}
-                  code={item.code}
-                  headingDeg={0}
-                  selected={false}
-                  isDark={isDark}
-                  surface={colors.surface}
-                />
+        <View style={styles.listCard}>
+          <View style={styles.flatGrid}>
+            {stationCells.map((cell, idx) => (
+              <View
+                key={cell.key}
+                style={[
+                  styles.gridCell,
+                  idx >= 2 && styles.gridCellRowDivider,
+                  idx % 2 === 1 && styles.gridCellRightCol,
+                ]}
+              >
+                <View style={styles.miniTileBox}>{cell.glyph}</View>
+                <Text
+                  variant="caption"
+                  fontWeight="600"
+                  color="textPrimary"
+                  numberOfLines={1}
+                  style={styles.flexText}
+                >
+                  {cell.label}
+                </Text>
               </View>
-              <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-                {item.label}
-              </Text>
-            </View>
-          ))}
-          <View style={styles.gridItem}>
-            <View style={styles.miniTileBox}>
-              <View
-                style={[
-                  styles.roleRing,
-                  {
-                    borderColor: JOB_HIGHLIGHT_COLOR.pickup,
-                    backgroundColor: `${JOB_HIGHLIGHT_COLOR.pickup}1f`,
-                  },
-                ]}
-              />
-            </View>
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-              Pickup
-            </Text>
-          </View>
-          <View style={styles.gridItem}>
-            <View style={styles.miniTileBox}>
-              <View
-                style={[
-                  styles.roleRing,
-                  {
-                    borderColor: JOB_HIGHLIGHT_COLOR.dropoff,
-                    backgroundColor: `${JOB_HIGHLIGHT_COLOR.dropoff}1f`,
-                  },
-                ]}
-              />
-            </View>
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-              Destination
-            </Text>
-          </View>
-          <View style={styles.gridItem}>
-            <View style={styles.miniTileBox}>
-              <MiniArchitectureSwatch kind="recessed-shelf" isDark={isDark} />
-            </View>
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-              Recessed Shelf Bay
-            </Text>
-          </View>
-          <View style={styles.gridItem}>
-            <View style={styles.miniTileBox}>
-              <MiniArchitectureSwatch kind="dock-bay" isDark={isDark} />
-            </View>
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-              Docking Bay
-            </Text>
+            ))}
           </View>
         </View>
       </View>
@@ -469,28 +499,28 @@ export function MapLegendContent({
         <View style={styles.listCard}>
           <View style={styles.listRow}>
             <MiniLaneSwatch kind="one-way" isDark={isDark} />
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+            <Text variant="caption" fontWeight="600" color="textPrimary" numberOfLines={1} style={styles.flexText}>
               One-way lane
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.listRow}>
             <MiniLaneSwatch kind="two-way" isDark={isDark} />
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+            <Text variant="caption" fontWeight="600" color="textPrimary" numberOfLines={1} style={styles.flexText}>
               Two-way lane
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.listRow}>
             <MiniLaneSwatch kind="job-route" isDark={isDark} />
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-              Job Route (Pickup to Destination)
+            <Text variant="caption" fontWeight="600" color="textPrimary" numberOfLines={1} style={styles.flexText}>
+              Job Route
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.listRow}>
             <MiniLaneSwatch kind="trail" isDark={isDark} />
-            <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+            <Text variant="caption" fontWeight="600" color="textPrimary" numberOfLines={1} style={styles.flexText}>
               Travelled Trail
             </Text>
           </View>
@@ -499,14 +529,14 @@ export function MapLegendContent({
               <View style={styles.divider} />
               <View style={styles.listRow}>
                 <MiniLaneSwatch kind="nav2-granted" isDark={isDark} />
-                <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
-                  Live Nav2 Path (Authorized)
+                <Text variant="caption" fontWeight="600" color="textPrimary" numberOfLines={1} style={styles.flexText}>
+                  Live Nav2 Path
                 </Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.listRow}>
                 <MiniLaneSwatch kind="nav2-waiting" isDark={isDark} />
-                <Text variant="caption" fontWeight="600" color="textPrimary" style={styles.flexText}>
+                <Text variant="caption" fontWeight="600" color="textPrimary" numberOfLines={1} style={styles.flexText}>
                   Waiting for Traffic
                 </Text>
               </View>
@@ -560,22 +590,25 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 11,
       color: colors.textSecondary,
     },
-    grid: {
+    flatGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
     },
-    gridItem: {
+    gridCell: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      width: '48%',
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: radii.md,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      width: '50%',
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    gridCellRowDivider: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    gridCellRightCol: {
+      borderLeftWidth: 1,
+      borderLeftColor: colors.border,
     },
     miniTileBox: {
       width: 28,
