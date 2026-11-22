@@ -371,8 +371,12 @@ test('endpointVisualKind classifies all 8 OTTO functional station types includin
   assert.equal(endpointVisualKind('WAYPOINT', 'EP-WAIT', 'Wait'), 'WAIT');
   assert.equal(endpointVisualKind('WAYPOINT', 'WP-09', 'Aisle Point'), 'WAYPOINT');
 
-  assert.equal(visualKindColor('CHARGER', 'CHARGER', false), '#15803d');
-  assert.equal(visualKindColor('CHARGER', 'CHARGER', true), '#4ade80');
+  assert.equal(visualKindColor('CHARGER', 'CHARGER', false), '#059669');
+  assert.equal(visualKindColor('CHARGER', 'CHARGER', true), '#34d399');
+  assert.equal(visualKindColor('INBOUND', 'WAYPOINT', false), '#059669');
+  assert.equal(visualKindColor('INBOUND', 'WAYPOINT', true), '#34d399');
+  assert.equal(visualKindColor('OUTBOUND', 'WAYPOINT', false), '#d97706');
+  assert.equal(visualKindColor('OUTBOUND', 'WAYPOINT', true), '#fbbf24');
   assert.equal(visualKindColor('SHELF', 'WAYPOINT', true), '#d8dee9');
   assert.equal(visualKindColor('SHELF', 'WAYPOINT', false), '#1f2937');
   assert.equal(visualKindColor('PARK', 'WAYPOINT', false), '#1f2937');
@@ -518,14 +522,14 @@ test('dark-mode OTTO map style helpers provide calm desaturated steel lanes and 
   assert.equal(LANE_BLUE, '#3279f9');
   assert.equal(ZONE_COLOR.JUNCTION, '#5c6bc0');
 
-  assert.equal(laneBandColor(false), '#4b6f96');
-  assert.equal(laneBandColor(true), '#255885');
-  assert.equal(laneEdgeColor(false), '#5b7fa6');
-  assert.equal(laneEdgeColor(true), '#527da3');
-  assert.equal(laneArrowColor(false), '#3b5878');
-  assert.equal(laneArrowColor(true), '#cbd5e1');
-  assert.equal(laneBandOpacity(false), 0.12);
-  assert.equal(laneBandOpacity(true), 0.30);
+  assert.equal(laneBandColor(false), LANE_BLUE);
+  assert.equal(laneBandColor(true), '#1a74e2');
+  assert.equal(laneEdgeColor(false), LANE_BLUE);
+  assert.equal(laneEdgeColor(true), '#38bdf8');
+  assert.equal(laneArrowColor(false), '#1d4ed8');
+  assert.equal(laneArrowColor(true), '#e0f2fe');
+  assert.equal(laneBandOpacity(false), 0.13);
+  assert.equal(laneBandOpacity(true), 0.28);
 
   assert.equal(zoneStrokeColor('KEEP_OUT', false), ZONE_COLOR.KEEP_OUT);
   assert.equal(zoneStrokeColor('KEEP_OUT', true), '#e06c75');

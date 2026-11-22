@@ -94,13 +94,17 @@ export const EndpointTile = memo(function EndpointTile({
     ? 'M14.5 0 L10.5 -2.6 L10.5 2.6 Z'
     : 'M15.5 0 L11.5 -2.6 L11.5 2.6 Z';
 
-  const isCharger = visualKind === 'CHARGER';
-  const tileBorderColor =
-    selected || jobRole || isCharger
-      ? accentColor
-      : isDark
-      ? 'rgba(226, 232, 240, 0.32)'
-      : 'rgba(31, 41, 55, 0.26)';
+  const hasAccentBorder =
+    selected ||
+    Boolean(jobRole) ||
+    visualKind === 'CHARGER' ||
+    visualKind === 'INBOUND' ||
+    visualKind === 'OUTBOUND';
+  const tileBorderColor = hasAccentBorder
+    ? accentColor
+    : isDark
+    ? 'rgba(226, 232, 240, 0.32)'
+    : 'rgba(31, 41, 55, 0.26)';
   const tileBackground = selected ? accentColor : isDark ? '#151922' : '#ffffff';
 
   return (

@@ -48,19 +48,19 @@ export const JOB_HIGHLIGHT_COLOR = {
 } as const;
 
 export function laneBandColor(isDark: boolean): string {
-  return isDark ? '#255885' : '#4b6f96';
+  return isDark ? '#1a74e2' : LANE_BLUE;
 }
 
 export function laneEdgeColor(isDark: boolean): string {
-  return isDark ? '#527da3' : '#5b7fa6';
+  return isDark ? '#38bdf8' : LANE_BLUE;
 }
 
 export function laneArrowColor(isDark: boolean): string {
-  return isDark ? '#cbd5e1' : '#3b5878';
+  return isDark ? '#e0f2fe' : '#1d4ed8';
 }
 
 export function laneBandOpacity(isDark: boolean): number {
-  return isDark ? 0.30 : 0.12;
+  return isDark ? 0.28 : 0.13;
 }
 
 export function zoneFillOpacity(type: string, isDark: boolean): number {
@@ -174,7 +174,7 @@ export function endpointVisualKind(
   return 'WAYPOINT';
 }
 
-/** Achromatic OTTO architectural neutrals (graphite/silver across stations, emerald reserved for Charger). */
+/** Achromatic OTTO neutrals for static shelves/waypoints, with semantic accents for Charger, Inbound, and Outbound. */
 export function visualKindColor(
   visualKind: EndpointVisualKind,
   type: string,
@@ -182,10 +182,11 @@ export function visualKindColor(
 ): string {
   switch (visualKind) {
     case 'CHARGER':
-      return isDark ? '#4ade80' : '#15803d';
-    case 'SHELF':
     case 'INBOUND':
+      return isDark ? '#34d399' : '#059669';
     case 'OUTBOUND':
+      return isDark ? '#fbbf24' : '#d97706';
+    case 'SHELF':
     case 'PARK':
     case 'INSPECTION':
       return isDark ? '#d8dee9' : '#1f2937';
