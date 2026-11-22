@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Navigation.Contracts;
+using WaroTrans.Navigation.Enums;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Services;
@@ -55,6 +56,9 @@ public sealed partial class JobExecutionEngine
     /// 0.10 m cells. At 0.6 m a robot at MAP-ONE EP-PARKING-A still blocked the turn into shelf row A.
     /// </summary>
     public const double PathClearanceMeters = 0.8;
+
+    /// <summary>A robot waiting for its goal this far from the other robot's way (path, or body) may stay where it is.</summary>
+    public const double OffWayMeters = 0.5;
 
     private static string GoalZone(string endpointCode) => GoalQueuePrefix + endpointCode;
 
@@ -206,6 +210,30 @@ public sealed partial class JobExecutionEngine
             return null;
         }
 
+        // Off the other robot's way: its planned path (or, before it planned, its straight line to the goal) and itself.
+        double FromWay(double x, double y)
+        {
+            if (other is null)
+            {
+                return double.MaxValue;
+            }
+
+            var d = Dist(x, y, other.PoseX, other.PoseY);
+            return otherPath.Count > 0
+                ? Math.Min(d, otherPath.Min(p => Dist(x, y, p.X, p.Y)))
+                : Math.Min(d, SegmentDistance(x, y, other.PoseX, other.PoseY, goal.X, goal.Y));
+        }
+
+        // Standing on any endpoint (a shelf bay too) off its way: wait right there. It is re-checked every tick, and a
+        // farther place only made the robot wander across the floor (MAP-ONE-V013, 2026-11-22: SHELF-C-1, then all the
+        // way to SHELF-A-1 through ZONE-SINGLE-CENTER, while the other robot waited for it).
+        if (standingAt is not null && standingAt.EndpointType != EndpointType.CHARGER && standingAt.Id != goal.Id
+            && Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y) >= GoalPullOutRadiusMeters
+            && FromWay(robot.PoseX, robot.PoseY) >= OffWayMeters)
+        {
+            return null;
+        }
+
         var robots = (await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken))
             .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
             .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == job.MapVersionId)
@@ -238,6 +266,21 @@ public sealed partial class JobExecutionEngine
                         && Clear(e.X, e.Y))
             .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y) + Dist(e.X, e.Y, goal.X, goal.Y))
             .FirstOrDefault();
+        if (place is null && FromWay(robot.PoseX, robot.PoseY) < OffWayMeters)
+        {
+            // No parking place / wait point is clear, and where it stands is in the other robot's way: waiting there locks
+            // both (2026-11-22: RBT-002 at EP-PARKING-B on the only corridor RBT-001 had to take to EP-INBOUND). The
+            // nearest free endpoint off that way.
+            place = endpoints
+                .Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && e.Id != goal.Id && !targets.Contains(e.Id)
+                            && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) > 0.3
+                            && Dist(e.X, e.Y, goal.X, goal.Y) >= GoalPullOutRadiusMeters
+                            && FromWay(e.X, e.Y) >= OffWayMeters
+                            && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance)))
+                .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y))
+                .FirstOrDefault();
+        }
+
         return place is null ? null : await navigation.GetEndpointPoseAsync(place.Id, cancellationToken);
     }
 
