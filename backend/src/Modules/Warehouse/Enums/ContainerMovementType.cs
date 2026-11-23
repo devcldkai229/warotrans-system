@@ -9,5 +9,11 @@ public enum ContainerMovementType
     ISSUED,
 
     /// <summary>A person said where a Container that lost its place really is.</summary>
-    RECOVERED
+    RECOVERED,
+
+    /// <summary>Held while an issue about it is open (or flagged to be held once delivered).</summary>
+    HELD,
+
+    /// <summary>Its issue was resolved: back in use, its quantity corrected, or written off.</summary>
+    RELEASED
 }

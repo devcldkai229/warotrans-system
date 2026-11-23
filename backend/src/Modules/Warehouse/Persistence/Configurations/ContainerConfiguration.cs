@@ -22,6 +22,9 @@ public sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
         builder.Property(x => x.SupplierPackageBarcode).HasMaxLength(128);
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
+        builder.Property(x => x.HoldReasonCode).HasMaxLength(40);
+        builder.Ignore(x => x.HeldForProblem);
+        builder.HasIndex(x => x.HoldIssueId).HasFilter("hold_issue_id IS NOT NULL");
 
         builder.HasIndex(x => x.Barcode).IsUnique();
         builder.Property(x => x.ContentsQuantity).HasPrecision(18, 3);

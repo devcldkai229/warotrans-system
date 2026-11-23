@@ -1,4 +1,6 @@
 using FluentValidation;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Operations.Documents;
 using WaroTrans.Operations.Enums;
 
@@ -23,7 +25,15 @@ public sealed record CreateIssueRequest(
 /// <param name="ExpectedVersion">The version the caller looked at; a newer one answers 409 issue_version_conflict.</param>
 public sealed record AssignIssueRequest(Guid? AssigneeId, int ExpectedVersion);
 
-public sealed record TransitionIssueRequest(string Status, int ExpectedVersion, string? Resolution = null, string? ScannedBarcode = null);
+/// <param name="ContainerOutcome">Resolving an issue that holds a container: what becomes of it (<see cref="ContainerHoldOutcomes"/>).</param>
+/// <param name="ContentsQuantity">The counted quantity, with <see cref="ContainerHoldOutcomes.AdjustQuantity"/>.</param>
+public sealed record TransitionIssueRequest(
+    string Status,
+    int ExpectedVersion,
+    string? Resolution = null,
+    string? ScannedBarcode = null,
+    string? ContainerOutcome = null,
+    decimal? ContentsQuantity = null);
 
 public sealed record ResolveOwnHandoverIssueRequest(int ExpectedVersion, string ScannedBarcode, string Resolution);
 
@@ -59,9 +69,15 @@ public sealed record IssueDto(
     string? Resolution,
     IReadOnlyList<string> AllowedTransitions,
     string? ProblemCode,
-    HazardLocation? Hazard)
+    HazardLocation? Hazard,
+    bool BlocksHandover = false,
+    IReadOnlyList<string>? Defects = null,
+    bool RemovedFromJob = false,
+    ContainerHoldSnapshot? ContainerHold = null,
+    IReadOnlyList<string>? ContainerOutcomes = null,
+    string? ContainerOutcome = null)
 {
-    public static IssueDto From(IssueReport i, IReadOnlyList<string> transitions) => new(
+    public static IssueDto From(IssueReport i, IReadOnlyList<string> transitions, ContainerHoldSnapshot? hold = null) => new(
         i.Id,
         i.Code,
         i.IssueType.ToString(),
@@ -85,10 +101,41 @@ public sealed record IssueDto(
         i.Resolution,
         transitions,
         i.ProblemCode,
-        i.Hazard);
+        i.Hazard,
+        // A container taken off its Job has no handover left to block.
+        HandoverProblemCodes.Blocking.Contains(i.ProblemCode) && IssueLifecycle.IsOpen(i.Status)
+            && !(i.Metadata.TryGetValue("removedFromJob", out var gone) && gone.IsBoolean && gone.AsBoolean),
+        i.Metadata.TryGetValue("defects", out var defects) && defects.IsBsonArray
+            ? defects.AsBsonArray.Select(d => d.AsString).ToList()
+            : i.ProblemCode is null ? [] : [i.ProblemCode],
+        i.Metadata.TryGetValue("removedFromJob", out var removed) && removed.IsBoolean && removed.AsBoolean,
+        hold,
+        // What resolving it may do with the container it holds: chosen by the problem.
+        i.IssueType == Enums.IssueType.CONTAINER ? ContainerProblemCodes.OutcomesFor(i.ProblemCode) : [],
+        i.ContainerOutcome);
 }
 
-public sealed record ListIssuesResponse(long Total, IReadOnlyList<IssueDto> Items);
+/// <param name="CountsByType">Issues per type under every other filter (status, severity, reported range), for the type tabs.
+/// Every type is present, with 0 when it has none.</param>
+public sealed record ListIssuesResponse(long Total, IReadOnlyList<IssueDto> Items, IReadOnlyDictionary<string, long>? CountsByType = null);
+
+/// <summary>Rules of the issue list filters that do not need the database.</summary>
+public static class IssueListFilters
+{
+    /// <summary>The reported range is [from, to): <paramref name="to"/> itself is not included.</summary>
+    public static void EnsureReportedRange(DateTimeOffset? from, DateTimeOffset? to)
+    {
+        if (from is { } start && to is { } end && end <= start)
+            throw new DomainValidationException("The end of the reported range must be after its start.", "issue_reported_range_invalid");
+    }
+
+    /// <summary>One entry per <see cref="IssueType"/>, in enum order, 0 for a type without issues.</summary>
+    public static IReadOnlyDictionary<string, long> CountsByType(IEnumerable<KeyValuePair<IssueType, long>> counts)
+    {
+        var found = counts.GroupBy(c => c.Key).ToDictionary(g => g.Key, g => g.Sum(c => c.Value));
+        return Enum.GetValues<IssueType>().ToDictionary(type => type.ToString(), type => found.GetValueOrDefault(type));
+    }
+}
 
 /// <summary>Allowed status changes. RESOLVED can be reopened; CLOSED is final.</summary>
 public static class IssueLifecycle
@@ -105,6 +152,9 @@ public static class IssueLifecycle
     public static IReadOnlyList<IssueStatus> NextOf(IssueStatus status) => Next.GetValueOrDefault(status, []);
 
     public static bool CanMove(IssueStatus from, IssueStatus to) => NextOf(from).Contains(to);
+
+    /// <summary>Still to be dealt with: OPEN, ACKNOWLEDGED or IN_PROGRESS.</summary>
+    public static bool IsOpen(IssueStatus status) => status is IssueStatus.OPEN or IssueStatus.ACKNOWLEDGED or IssueStatus.IN_PROGRESS;
 }
 
 public static class EvidenceKinds
@@ -112,13 +162,11 @@ public static class EvidenceKinds
     public static readonly string[] All = ["PHOTO", "VIDEO", "NOTE", "LINK", "FILE"];
 }
 
+/// <summary>The container problem codes (<see cref="ContainerProblemCodes"/>) as the issue rules use them.</summary>
 internal static class HandoverProblemCodes
 {
-    public const string WrongContainer = "WRONG_CONTAINER";
-    public const string MissingContainer = "MISSING_CONTAINER";
-    public static readonly string[] Blocking = [WrongContainer, MissingContainer];
-    public static readonly string[] All =
-        [WrongContainer, MissingContainer, "BARCODE_UNREADABLE", "CONTAINER_DAMAGED", "QUANTITY_MISMATCH"];
+    public static readonly string[] Blocking = ContainerProblemCodes.Blocking.ToArray();
+    public static readonly string[] All = ContainerProblemCodes.All.ToArray();
 }
 
 internal sealed class EvidenceInputValidator : AbstractValidator<EvidenceInput>
@@ -193,6 +241,9 @@ internal sealed class TransitionIssueValidator : AbstractValidator<TransitionIss
             .When(x => x.Status == nameof(IssueStatus.RESOLVED))
             .WithMessage("Resolving an issue needs a resolution.");
         RuleFor(x => x.ScannedBarcode).MaximumLength(200);
+        RuleFor(x => x.ContainerOutcome).Must(o => ContainerHoldOutcomes.All.Contains(o!))
+            .When(x => x.ContainerOutcome is not null).WithMessage("Unknown container outcome.");
+        RuleFor(x => x.ContentsQuantity).GreaterThan(0).When(x => x.ContentsQuantity is not null);
     }
 }
 

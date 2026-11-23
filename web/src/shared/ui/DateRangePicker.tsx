@@ -43,13 +43,18 @@ interface DateRangePickerProps {
   today: string
   onChange: (choice: RangeChoice) => void
   align?: 'start' | 'end'
+  /**
+   * Offers "any time" above the presets (a list filter, where no range is a valid choice). While `selected`, the
+   * button names it instead of the days; `range` is then only where the custom fields start.
+   */
+  anyTime?: { label: string; selected: boolean; onSelect: () => void }
 }
 
 /**
  * One button that says which days are shown ("Last 30 days · 14/10 – 12/11/2026") and opens the presets plus two
  * date fields for any other span. Escape or a click elsewhere closes it without changing anything.
  */
-export function DateRangePicker({ preset, range, today, onChange, align = 'end' }: DateRangePickerProps) {
+export function DateRangePicker({ preset, range, today, onChange, align = 'end', anyTime }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<DayRange>(range)
   const root = useRef<HTMLDivElement>(null)
@@ -90,8 +95,14 @@ export function DateRangePicker({ preset, range, today, onChange, align = 'end' 
     <div ref={root} className="relative">
       <Button ref={trigger} variant="tonal" aria-haspopup="dialog" aria-expanded={open} onClick={toggle}>
         <Icon name="calendar" size={16} className="text-ink-2" />
-        {preset ? <span>{PRESET_LABEL[preset]}</span> : null}
-        <span className={cx('tabular-nums', preset && 'font-normal text-ink-2')}>{formatRange(range)}</span>
+        {anyTime?.selected ? (
+          <span>{anyTime.label}</span>
+        ) : (
+          <>
+            {preset ? <span>{PRESET_LABEL[preset]}</span> : null}
+            <span className={cx('tabular-nums', preset && 'font-normal text-ink-2')}>{formatRange(range)}</span>
+          </>
+        )}
         <Icon name="chevronDown" size={14} className="text-muted" />
       </Button>
 
@@ -105,8 +116,27 @@ export function DateRangePicker({ preset, range, today, onChange, align = 'end' 
           )}
         >
           <ul className="flex flex-col">
+            {anyTime ? (
+              <li>
+                <button
+                  type="button"
+                  aria-pressed={anyTime.selected}
+                  className={cx(
+                    'flex h-8 w-full items-center rounded-sm px-3 text-left text-sm transition-colors duration-200',
+                    anyTime.selected ? 'bg-container-high font-medium text-primary' : 'text-ink-2 hover:bg-container-high hover:text-ink',
+                  )}
+                  onClick={() => {
+                    anyTime.onSelect()
+                    setOpen(false)
+                    trigger.current?.focus()
+                  }}
+                >
+                  {anyTime.label}
+                </button>
+              </li>
+            ) : null}
             {SHOWN_PRESETS.map((value) => {
-              const selected = value === preset
+              const selected = value === preset && !anyTime?.selected
               return (
                 <li key={value}>
                   <button

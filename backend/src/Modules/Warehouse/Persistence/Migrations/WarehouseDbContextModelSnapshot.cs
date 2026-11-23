@@ -92,6 +92,23 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("current_storage_location_id");
 
+                    b.Property<DateTimeOffset?>("HeldAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("held_at");
+
+                    b.Property<Guid?>("HoldEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hold_endpoint_id");
+
+                    b.Property<Guid?>("HoldIssueId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hold_issue_id");
+
+                    b.Property<string>("HoldReasonCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("hold_reason_code");
+
                     b.Property<Guid?>("InboundStockVoucherId")
                         .HasColumnType("uuid")
                         .HasColumnName("inbound_stock_voucher_id");
@@ -152,6 +169,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
                     b.HasIndex("CurrentStorageLocationId")
                         .HasDatabaseName("i_x_containers_current_storage_location_id");
+
+                    b.HasIndex("HoldIssueId")
+                        .HasDatabaseName("i_x_containers_hold_issue_id")
+                        .HasFilter("hold_issue_id IS NOT NULL");
 
                     b.HasIndex("InboundStockVoucherId")
                         .HasDatabaseName("i_x_containers_inbound_stock_voucher_id");

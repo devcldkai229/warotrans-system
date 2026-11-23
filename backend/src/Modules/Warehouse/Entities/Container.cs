@@ -31,6 +31,25 @@ public sealed class Container
     public Guid? CurrentStorageLocationId { get; set; }
     public short? CurrentLevelNo { get; set; }
 
+    /// <summary>
+    /// Why it is held: a container problem code while an issue about it is open (HOLD, or still carried and held once
+    /// delivered), <see cref="OffShelfHoldReason"/> when it was set down where no shelf is, null otherwise.
+    /// </summary>
+    public string? HoldReasonCode { get; set; }
+
+    /// <summary>The issue that holds it: only that issue's resolution releases it.</summary>
+    public Guid? HoldIssueId { get; set; }
+
+    public DateTimeOffset? HeldAt { get; set; }
+
+    /// <summary>Where a held container stands when it is on no shelf: the gate or the inspection point it was set down at.</summary>
+    public Guid? HoldEndpointId { get; set; }
+
+    public const string OffShelfHoldReason = "OFF_SHELF";
+
+    /// <summary>Held for a problem with the container itself (not merely set down off a shelf).</summary>
+    public bool HeldForProblem => HoldReasonCode is not null && HoldReasonCode != OffShelfHoldReason;
+
     /// <summary>FL-03: measured, null until someone enters it.</summary>
     public decimal? WeightKg { get; set; }
     public double? LengthM { get; set; }

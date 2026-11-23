@@ -262,13 +262,92 @@ public sealed class JobExecutionEngineTests
         await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
 
-        await EngineWith(reporter).FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C2, "wrong label");
+        var holds = new RecordingHolds();
+        await EngineWith(reporter, holds).FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C2, "label torn", default, _staff,
+            ContainerProblemCodes.BarcodeUnreadable);
 
         var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
         Assert.Equal(JobStatus.COMPLETED, job.Status);
         Assert.Equal(JobContainerStatus.DELIVERED, job.JobContainers.Single(c => c.ContainerId == C1).Status);
-        Assert.Equal(JobContainerStatus.FAILED, job.JobContainers.Single(c => c.ContainerId == C2).Status);
-        Assert.Equal(C2, Assert.Single(reporter.SystemDrafts).ContainerId);
+        var failed = job.JobContainers.Single(c => c.ContainerId == C2);
+        Assert.Equal(JobContainerStatus.FAILED, failed.Status);
+        Assert.Equal(ContainerProblemCodes.BarcodeUnreadable, failed.FailureCode);
+
+        // A CONTAINER issue with its code and reporter; it was on the robot, so it is set down at E and held there.
+        var draft = Assert.Single(reporter.ContainerDrafts);
+        Assert.Equal(C2, draft.ContainerId);
+        Assert.Equal(_staff, draft.ReportedBy);
+        Assert.Equal(ContainerProblemCodes.BarcodeUnreadable, draft.ProblemCode);
+        Assert.True(draft.RemovedFromJob);
+        Assert.Contains("set down at this stop", draft.Description);
+        Assert.Empty(reporter.SystemDrafts);
+        var hold = Assert.Single(holds.Holds);
+        Assert.Equal((C2, ContainerHoldMode.NOW, reporter.IssueId, (Guid?)E), (hold.ContainerId, hold.Mode, hold.IssueId, hold.AtEndpointId));
+    }
+
+    [Fact]
+    public async Task A_container_failing_before_pickup_is_held_where_it_is_under_a_container_issue()
+    {
+        var jobId = await ProvisionAsync();
+        var reporter = new RecordingIssueReporter();
+        var holds = new RecordingHolds();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        await EngineWith(reporter, holds).FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C1, "cracked", default, _staff,
+            ContainerProblemCodes.ContainerDamaged);
+
+        var draft = Assert.Single(reporter.ContainerDrafts);
+        Assert.Equal((C1, ContainerProblemCodes.ContainerDamaged), (draft.ContainerId, draft.ProblemCode));
+        Assert.Contains("not picked up", draft.Description);
+        var hold = Assert.Single(holds.Holds);
+        Assert.Equal((C1, ContainerProblemCodes.ContainerDamaged, (Guid?)A), (hold.ContainerId, hold.ReasonCode, hold.AtEndpointId));
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(ContainerProblemCodes.ContainerDamaged, job.JobContainers.Single(c => c.ContainerId == C1).FailureCode);
+    }
+
+    [Fact]
+    public async Task A_failure_without_a_code_is_other_as_older_clients_send_a_reason_only()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        await Engine().FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C1, "something");
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(ContainerProblemCodes.Other, job.JobContainers.Single(c => c.ContainerId == C1).FailureCode);
+    }
+
+    [Theory]
+    [InlineData("QUANTITY_MISMATCH", "container_problem_inspection_only")]
+    [InlineData("PRODUCT_MISMATCH", "container_problem_inspection_only")]
+    [InlineData("BROKEN", "container_problem_code_invalid")]
+    public async Task What_is_inside_is_only_reported_at_the_inspection_and_unknown_codes_are_refused(string code, string error)
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        var stepId = await CurrentStepIdAsync(jobId);
+
+        var refused = await Assert.ThrowsAsync<DomainValidationException>(
+            () => Engine().FailContainerAtStepAsync(stepId, C1, "seen", default, _staff, code));
+
+        Assert.Equal(error, refused.Code);
+        _db.ChangeTracker.Clear();
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobContainerStatus.ASSIGNED, job.JobContainers.Single(c => c.ContainerId == C1).Status);
+    }
+
+    [Fact]
+    public void An_inspection_lists_every_problem_found_and_none_is_other()
+    {
+        Assert.Equal([ContainerProblemCodes.Other], JobExecutionEngine.InspectionDefectsFor(null));
+        Assert.Equal(
+            [ContainerProblemCodes.QuantityMismatch, ContainerProblemCodes.PackagingDefect],
+            JobExecutionEngine.InspectionDefectsFor(["quantity_mismatch", "PACKAGING_DEFECT", "QUANTITY_MISMATCH"]));
+        Assert.Equal("container_problem_code_invalid",
+            Assert.Throws<DomainValidationException>(() => JobExecutionEngine.InspectionDefectsFor(["NOPE"])).Code);
     }
 
     [Fact]
@@ -1487,6 +1566,15 @@ public sealed class JobExecutionEngineTests
 
         public List<SystemIssueDraft> SystemDrafts { get; } = [];
 
+        public List<ContainerProblemDraft> ContainerDrafts { get; } = [];
+
+        public Task<Guid> ReportContainerProblemAsync(ContainerProblemDraft draft, CancellationToken cancellationToken = default)
+        {
+            if (failWith is not null) throw failWith;
+            ContainerDrafts.Add(draft);
+            return Task.FromResult(IssueId);
+        }
+
         public Task<Guid> ReportAsync(SystemIssueDraft draft, CancellationToken cancellationToken = default)
         {
             if (failWith is not null) throw failWith;
@@ -1495,9 +1583,27 @@ public sealed class JobExecutionEngineTests
         }
     }
 
-    private JobExecutionEngine EngineWith(IIssueReporter reporter) =>
+    private JobExecutionEngine EngineWith(IIssueReporter reporter, IContainerHolds? holds = null) =>
         new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance,
-            issueReporter: reporter, warehouse: _warehouse);
+            issueReporter: reporter, warehouse: _warehouse, containerHolds: holds);
+
+    private sealed class RecordingHolds : IContainerHolds
+    {
+        public List<ContainerHoldRequest> Holds { get; } = [];
+
+        public Task<ContainerHoldSnapshot> HoldAsync(ContainerHoldRequest request, CancellationToken cancellationToken = default)
+        {
+            Holds.Add(request);
+            return Task.FromResult(new ContainerHoldSnapshot(request.ContainerId, "CTN", "HOLD", request.ReasonCode, request.IssueId,
+                DateTimeOffset.UtcNow, null, null, request.AtEndpointId, null, null));
+        }
+
+        public Task<ContainerHoldSnapshot> ReleaseAsync(ContainerReleaseRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ContainerHoldSnapshot?> GetAsync(Guid containerId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ContainerHoldSnapshot?>(null);
+    }
 
     /// <summary>Turns the HUMAN step that is waiting now into a REPORT_ISSUE step.</summary>
     private async Task<Guid> WaitingReportIssueStepAsync(Guid jobId)

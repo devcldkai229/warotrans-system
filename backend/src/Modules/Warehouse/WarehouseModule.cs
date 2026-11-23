@@ -76,6 +76,7 @@ public static class WarehouseModule
         services.AddScoped<IEndpointStorageLocations, EndpointStorageLocations>();
         services.AddScoped<ContainerMovementRecorder>();
         services.AddScoped<IContainerMovementRecorder>(sp => sp.GetRequiredService<ContainerMovementRecorder>());
+        services.AddScoped<WaroTrans.BuildingBlocks.Abstractions.IContainerHolds>(sp => sp.GetRequiredService<ContainerMovementRecorder>());
         services.AddScoped<RecoverContainerHandler>();
 
         return services;
