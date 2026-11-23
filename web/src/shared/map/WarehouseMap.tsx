@@ -831,7 +831,7 @@ export function WarehouseMap({
             </g>
           ) : null}
 
-          {/* Zones: soft tinted areas with a thin edge and a coloured anchor dot (names are HTML callouts). */}
+          {/* Zones: soft tinted areas with dashed rule borders (OTTO) and hover-only anchor dots. */}
           {show.zones ? (
             <g opacity={layerOpacity('zones')}>
               {zones.map((zone) => {
@@ -841,9 +841,51 @@ export function WarehouseMap({
                 const over = show.occupancy && exclusive && load > 1
                 const full = show.occupancy && exclusive && load === 1
                 const isSelected = selected.zoneId === zone.id
+                const isHovered = hoveredZoneId === zone.id
+                const isKeepOut = zone.zoneType === 'KEEP_OUT'
                 const anchor = zoneCentroid(points)
-                // Later states win: switched off, then full, then over capacity; a selection only thickens the edge.
-                const paint = over
+
+                const baseFillOpacity = Math.min(ZONE_FILL_OPACITY[zone.zoneType], isKeepOut ? 0.16 : 0.15)
+                const ottoPaint = over
+                  ? {
+                      fill: MAP_RED,
+                      fillOpacity: 0.18,
+                      stroke: MAP_RED,
+                      strokeOpacity: 0.96,
+                      strokeWidth: 2 * ottoStrokeUnit,
+                    }
+                  : full
+                    ? {
+                        fill: MAP_AMBER,
+                        fillOpacity: 0.2,
+                        stroke: MAP_AMBER,
+                        strokeOpacity: isSelected ? 0.96 : isHovered ? 0.88 : 0.68,
+                        strokeWidth: (isSelected ? 2 : isHovered ? 1.5 : 1.15) * ottoStrokeUnit,
+                      }
+                    : !zone.isActive
+                      ? {
+                          fill: MAP_OFF,
+                          fillOpacity: 0.08,
+                          stroke: MAP_OFF,
+                          strokeOpacity: isSelected ? 0.96 : isHovered ? 0.88 : 0.68,
+                          strokeWidth: (isSelected ? 2 : isHovered ? 1.5 : 1.15) * ottoStrokeUnit,
+                        }
+                      : {
+                          fill: 'currentColor',
+                          fillOpacity: baseFillOpacity + (isHovered || isSelected ? 0.06 : 0),
+                          stroke: 'currentColor',
+                          strokeOpacity: isSelected ? 0.96 : isHovered ? 0.88 : 0.68,
+                          strokeWidth: (isSelected ? 2 : isHovered ? 1.5 : 1.15) * ottoStrokeUnit,
+                        }
+
+                const ottoDash = !zone.isActive
+                  ? `${3 * ottoStrokeUnit} ${3 * ottoStrokeUnit}`
+                  : isKeepOut || isSelected || over
+                    ? undefined
+                    : `${4.5 * ottoStrokeUnit} ${3.2 * ottoStrokeUnit}`
+
+                // Classic mode: switched off, then full, then over capacity; a selection only thickens the edge.
+                const classicPaint = over
                   ? { fill: MAP_RED, fillOpacity: 0.18, stroke: MAP_RED, strokeOpacity: 1, strokeWidth: 0.22 * mark }
                   : full
                     ? { fill: MAP_AMBER, fillOpacity: 0.2, stroke: MAP_AMBER, strokeOpacity: 1, strokeWidth: 0.1 * mark }
@@ -856,6 +898,7 @@ export function WarehouseMap({
                           strokeOpacity: 0.7,
                           strokeWidth: 0.1 * mark,
                         }
+
                 return (
                   <g
                     key={zone.id}
@@ -872,24 +915,47 @@ export function WarehouseMap({
                         : undefined
                     }
                   >
-                    <polygon
-                      points={stagePoints(points)}
-                      strokeLinejoin="round"
-                      strokeDasharray={zone.isActive ? undefined : `${0.5 * mark} ${0.4 * mark}`}
-                      {...paint}
-                      {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 * mark } : null)}
-                    />
-                    {zone.zoneType === 'KEEP_OUT' ? (
+                    {isOtto ? (
+                      <polygon
+                        points={stagePoints(points)}
+                        strokeLinejoin="round"
+                        strokeDasharray={ottoDash}
+                        {...ottoPaint}
+                      />
+                    ) : (
+                      <polygon
+                        points={stagePoints(points)}
+                        strokeLinejoin="round"
+                        strokeDasharray={zone.isActive ? undefined : `${0.5 * mark} ${0.4 * mark}`}
+                        {...classicPaint}
+                        {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 * mark } : null)}
+                      />
+                    )}
+                    {isKeepOut ? (
                       <polygon points={stagePoints(points)} fill={isOtto ? 'url(#wmap-otto-hatch)' : 'url(#wmap-hatch)'} stroke="none" />
                     ) : null}
-                    <circle
-                      cx={X(anchor.x)}
-                      cy={Y(anchor.y)}
-                      r={0.28 * mark}
-                      fill="currentColor"
-                      stroke={MAP_HALO}
-                      strokeWidth={0.1 * mark}
-                    />
+                    {isOtto ? (
+                      isHovered ? (
+                        <circle
+                          cx={X(anchor.x)}
+                          cy={Y(anchor.y)}
+                          r={3.2 * ottoStrokeUnit}
+                          fill={ottoPaint.stroke}
+                          stroke={MAP_HALO}
+                          strokeWidth={1.2 * ottoStrokeUnit}
+                          pointerEvents="none"
+                        />
+                      ) : null
+                    ) : (
+                      <circle
+                        cx={X(anchor.x)}
+                        cy={Y(anchor.y)}
+                        r={0.28 * mark}
+                        fill="currentColor"
+                        stroke={MAP_HALO}
+                        strokeWidth={0.1 * mark}
+                      />
+                    )}
                   </g>
                 )
               })}
