@@ -15,9 +15,11 @@ import {
 import {
   AlertTriangle,
   Bell,
+  CheckCheck,
   CheckCircle2,
   PackageCheck,
   Truck,
+  type LucideIcon,
 } from 'lucide-react-native';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
@@ -38,6 +40,52 @@ export interface NotificationSheetProps {
 }
 
 const POPOVER_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
+const ALERT_TITLE_PATTERN =
+  /\b(cancel|cancelled|cargo|block|blocked|fail|failed|error|hazard|fault)\b/i;
+const JOB_READY_PATTERN = /\b(ready|handover|assigned)\b/i;
+
+function notificationIconSpec(
+  item: LiveNotificationEvent,
+  isDark: boolean,
+): { Icon: LucideIcon; color: string; wellBg: string } {
+  if (item.kind === 'ISSUE_RESOLVED') {
+    return {
+      Icon: CheckCircle2,
+      color: isDark ? '#30D158' : '#248A3D',
+      wellBg: isDark ? 'rgba(48, 209, 88, 0.14)' : 'rgba(52, 199, 89, 0.12)',
+    };
+  }
+  if (
+    item.category === 'HAZARD' ||
+    item.category === 'BATTERY_LOW' ||
+    item.entityType === 'RECOVERY' ||
+    ALERT_TITLE_PATTERN.test(item.title)
+  ) {
+    return {
+      Icon: AlertTriangle,
+      color: isDark ? '#FF9F0A' : '#B45309',
+      wellBg: isDark ? 'rgba(255, 159, 10, 0.14)' : 'rgba(245, 158, 11, 0.12)',
+    };
+  }
+  const neutralWell = isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)';
+  const neutralInk = isDark ? '#E4E6EB' : '#1C1C1E';
+  if (
+    item.category === 'JOB_ASSIGNED' ||
+    JOB_READY_PATTERN.test(`${item.title} ${item.message}`)
+  ) {
+    return {
+      Icon: PackageCheck,
+      color: neutralInk,
+      wellBg: neutralWell,
+    };
+  }
+  return {
+    Icon: Truck,
+    color: neutralInk,
+    wellBg: neutralWell,
+  };
+}
 
 /** Compact notification popover; tap outside or use the accessibility escape gesture to close. */
 export function NotificationSheet({
@@ -89,6 +137,7 @@ export function NotificationSheet({
     open.current = visible;
     return () => { open.current = false; };
   }, [visible]);
+
   const {
     notifications,
     unreadCount,
@@ -109,6 +158,7 @@ export function NotificationSheet({
   }, [unreadCount, onUnreadCountChange]);
 
   const handleMarkAllRead = () => {
+    triggerHaptic('tap');
     // Errors stay in this modal. Read state changes only after the server answers.
     void markAllNotificationsRead().catch(() => {});
   };
@@ -126,29 +176,20 @@ export function NotificationSheet({
     }
   };
 
-  const renderIcon = (item: LiveNotificationEvent) => {
-    const isCompleted = item.kind === 'ISSUE_RESOLVED';
-    if (isCompleted) {
-      return <CheckCircle2 size={16} color={colors.success} strokeWidth={2.2} />;
-    }
-    if (item.category === 'HAZARD') {
-      return <AlertTriangle size={16} color={colors.warning} strokeWidth={2.2} />;
-    }
-    if (
-      item.category === 'JOB_ASSIGNED' ||
-      item.title?.toLowerCase().includes('ready') ||
-      item.message?.toLowerCase().includes('ready')
-    ) {
-      return <PackageCheck size={16} color={colors.primary} strokeWidth={2.2} />;
-    }
-    return <Truck size={16} color={colors.primary} strokeWidth={2.2} />;
+  const renderNotificationIcon = (item: LiveNotificationEvent) => {
+    const { Icon, color, wellBg } = notificationIconSpec(item, isDark);
+    return (
+      <View style={[styles.iconWell, { backgroundColor: wellBg }, item.isRead && styles.iconWellRead]}>
+        <Icon size={15} color={color} strokeWidth={2.1} />
+      </View>
+    );
   };
 
   const webGlassStyle: ViewStyle | null =
     Platform.OS === 'web'
       ? ({
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          backdropFilter: 'blur(28px) saturate(190%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(190%)',
         } as unknown as ViewStyle)
       : null;
 
@@ -187,7 +228,7 @@ export function NotificationSheet({
           style={styles.backdrop}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close notifications dropdown"
+          accessibilityLabel={translateText('Close notifications dropdown')}
         />
 
         {/* Anchored Popover Card below Header Bell */}
@@ -196,50 +237,120 @@ export function NotificationSheet({
             styles.dropdownCard,
             webGlassStyle,
             compact && styles.cardCompact,
-            { top: topInset + 52 },
+            { top: topInset + 56 },
             popoverMotionStyle,
           ]}
         >
-            {(notificationReadError || notificationsError) && (
-              <View style={styles.state}>
-                {notificationReadError && <Text variant="caption" color="dangerText" accessibilityRole="alert">{notificationReadError}</Text>}
-                {notificationsError && <Text variant="caption" color="dangerText" accessibilityRole="alert">{notificationsError}</Text>}
-                {notificationsAvailable && (
-                  <Pressable
-                    onPress={() => { void refreshNotifications(); }}
-                    disabled={notificationsRefreshing || isSavingNotification}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: notificationsRefreshing || isSavingNotification, busy: notificationsRefreshing }}
-                    style={({ pressed }) => [styles.retry, pressed && styles.btnPressed]}
-                  >
-                    <Text variant="caption" color="primary" fontWeight="600">Try Again</Text>
-                  </Pressable>
+          {/* Structured Popover Header */}
+          <View style={styles.headerRow}>
+            <View style={styles.headerLeft}>
+              <Text variant="bodyMedium" color={colors.textPrimary} style={styles.headerTitle}>
+                Notifications
+              </Text>
+              {unreadCount > 0 && (
+                <View style={styles.countChip}>
+                  <Text variant="caption" color={colors.textPrimary} style={styles.countChipText}>
+                    {unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {unreadCount > 0 && (
+              <Pressable
+                onPress={handleMarkAllRead}
+                disabled={isSavingNotification}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={translateText('Mark all as read')}
+                accessibilityState={{ disabled: isSavingNotification, busy: isSavingNotification }}
+                style={({ pressed }) => [
+                  styles.headerActionBtn,
+                  pressed && !isSavingNotification && styles.headerActionPressed,
+                  isSavingNotification && styles.headerActionDisabled,
+                ]}
+              >
+                {isSavingNotification ? (
+                  <ActivityIndicator size="small" color={colors.textSecondary} />
+                ) : (
+                  <CheckCheck size={13} color={colors.textSecondary} strokeWidth={2.2} />
                 )}
-              </View>
+                <Text variant="caption" color={colors.textSecondary} style={styles.headerActionText}>
+                  {isSavingNotification ? 'Saving…' : 'Mark all read'}
+                </Text>
+              </Pressable>
             )}
+          </View>
+          <View style={styles.headerDivider} />
 
-            {!notificationsAvailable ? (
-              <View style={styles.emptyState}>
-                <Text variant="caption" color="textSecondary">Notifications unavailable</Text>
-              </View>
-            ) : notificationsLoading ? (
-              <View style={styles.emptyState}>
-                <ActivityIndicator color={colors.primary} accessibilityLabel="Loading notifications" />
-              </View>
-            ) : !notificationsError && notifications.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Bell size={22} color={colors.textMuted} strokeWidth={1.5} />
-                <Text variant="caption" color="textSecondary">No notifications yet</Text>
-              </View>
-            ) : null}
+          {(notificationReadError || notificationsError) && (
+            <View style={styles.state}>
+              {notificationReadError && (
+                <Text variant="caption" color="dangerText" accessibilityRole="alert">
+                  {notificationReadError}
+                </Text>
+              )}
+              {notificationsError && (
+                <Text variant="caption" color="dangerText" accessibilityRole="alert">
+                  {notificationsError}
+                </Text>
+              )}
+              {notificationsAvailable && (
+                <Pressable
+                  onPress={() => { void refreshNotifications(); }}
+                  disabled={notificationsRefreshing || isSavingNotification}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    disabled: notificationsRefreshing || isSavingNotification,
+                    busy: notificationsRefreshing,
+                  }}
+                  style={({ pressed }) => [styles.retry, pressed && styles.btnPressed]}
+                >
+                  <Text variant="caption" color="primary" fontWeight="600">Try Again</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
-            {/* Notification items list */}
-            {notifications.length > 0 && <ScrollView
+          {!notificationsAvailable ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconCircle}>
+                <Bell size={17} color={colors.textMuted} strokeWidth={1.8} />
+              </View>
+              <Text variant="caption" color={colors.textSecondary} style={styles.emptyText}>
+                Notifications unavailable
+              </Text>
+            </View>
+          ) : notificationsLoading ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconCircle}>
+                <ActivityIndicator
+                  size="small"
+                  color={colors.textSecondary}
+                  accessibilityLabel={translateText('Loading notifications')}
+                />
+              </View>
+            </View>
+          ) : !notificationsError && notifications.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconCircle}>
+                <Bell size={17} color={colors.textMuted} strokeWidth={1.8} />
+              </View>
+              <Text variant="caption" color={colors.textSecondary} style={styles.emptyText}>
+                No notifications yet
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Notification items list */}
+          {notifications.length > 0 && (
+            <ScrollView
               style={styles.list}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
             >
-              {notifications.map((item) => {
+              {notifications.map((item, idx) => {
                 const rawDisplayTitle = item.title.startsWith('Job JOB-')
                   ? item.title.slice(4)
                   : item.title;
@@ -248,66 +359,50 @@ export function NotificationSheet({
                   content: item.message,
                 });
                 const localizedTime = translateText(item.timeLabel);
+                const isLast = idx === notifications.length - 1;
 
                 return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => { void handleItemPress(item); }}
-                    disabled={isSavingNotification}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${localized.title}, ${localizedTime}, ${translateText(item.isRead ? 'read' : 'unread')}`}
-                    accessibilityState={{ disabled: isSavingNotification }}
-                    style={({ pressed }) => [
-                      styles.item,
-                      !item.isRead && styles.itemUnread,
-                      pressed && styles.itemPressed,
-                    ]}
-                  >
-                    <View style={styles.iconSlot}>
-                      {renderIcon(item)}
-                    </View>
+                  <View key={item.id}>
+                    <Pressable
+                      onPress={() => { void handleItemPress(item); }}
+                      disabled={isSavingNotification}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${localized.title}, ${localizedTime}, ${translateText(item.isRead ? 'read' : 'unread')}`}
+                      accessibilityState={{ disabled: isSavingNotification }}
+                      style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+                    >
+                      {renderNotificationIcon(item)}
 
-                    <View style={styles.itemContent}>
-                      <View style={styles.itemTopRow}>
-                        {!item.isRead && <View style={styles.unreadDot} />}
+                      <View style={styles.itemContent}>
                         <Text
                           variant="label"
-                          color={colors.textPrimary}
+                          color={item.isRead ? colors.textSecondary : colors.textPrimary}
                           style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
                         >
                           {localized.title}
                         </Text>
+
+                        <Text
+                          variant="caption"
+                          color={colors.textSecondary}
+                          style={styles.itemDesc}
+                        >
+                          {localized.content}
+                        </Text>
+
+                        <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
+                          {localizedTime}
+                        </Text>
                       </View>
 
-                      <Text
-                        variant="caption"
-                        color={colors.textSecondary}
-                        style={styles.itemDesc}
-                      >
-                        {localized.content}
-                      </Text>
-
-                      <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                        {localizedTime}
-                      </Text>
-                    </View>
-                  </Pressable>
+                      {!item.isRead && <View style={styles.unreadDot} />}
+                    </Pressable>
+                    {!isLast && <View style={styles.insetDivider} />}
+                  </View>
                 );
               })}
-            </ScrollView>}
-            {unreadCount > 0 && (
-              <Pressable
-                onPress={handleMarkAllRead}
-                disabled={isSavingNotification}
-                accessibilityRole="button"
-                accessibilityLabel="Mark all as read"
-                accessibilityState={{ disabled: isSavingNotification, busy: isSavingNotification }}
-                style={({ pressed }) => [styles.footerAction, pressed && styles.btnPressed]}
-              >
-                {isSavingNotification && <ActivityIndicator size="small" color={colors.primary} />}
-                <Text variant="caption" color="primary" fontWeight="600">{isSavingNotification ? 'Saving…' : 'Mark All As Read'}</Text>
-              </Pressable>
-            )}
+            </ScrollView>
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -318,123 +413,203 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
   StyleSheet.create({
     backdrop: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.06)',
+      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.34)' : 'rgba(18, 19, 23, 0.08)',
     },
     dropdownCard: {
       position: 'absolute',
       right: 16,
-      width: 280,
-      maxHeight: 340,
+      width: 326,
+      maxWidth: '92%',
+      maxHeight: 424,
       zIndex: 1000,
-      backgroundColor: isDark ? 'rgba(34, 36, 40, 0.90)' : 'rgba(255, 255, 255, 0.90)',
-      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(28, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.94)',
+      borderRadius: 18,
       borderCurve: 'continuous',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.08)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(18, 19, 23, 0.08)',
       shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 14 },
-      shadowOpacity: isDark ? 0.48 : 0.14,
-      shadowRadius: 32,
-      elevation: 14,
+      shadowOffset: { width: 0, height: 16 },
+      shadowOpacity: isDark ? 0.52 : 0.14,
+      shadowRadius: 36,
+      elevation: 16,
     },
     cardCompact: {
-      width: 240,
+      width: 260,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      gap: 8,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    headerTitle: {
+      fontSize: 14,
+      lineHeight: 18,
+      fontWeight: '600',
+      letterSpacing: -0.2,
+    },
+    countChip: {
+      height: 19,
+      minWidth: 20,
+      paddingHorizontal: 6,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(18, 19, 23, 0.07)',
+    },
+    countChipText: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '600',
+      fontVariant: ['tabular-nums'],
+    },
+    headerActionBtn: {
+      minHeight: 28,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+      borderCurve: 'continuous',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    headerActionPressed: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)',
+      opacity: 0.85,
+    },
+    headerActionDisabled: {
+      opacity: 0.5,
+    },
+    headerActionText: {
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: '600',
+    },
+    headerDivider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.08)',
     },
     btnPressed: {
       opacity: 0.65,
     },
     list: {
-      maxHeight: 280,
+      maxHeight: 360,
       flexShrink: 1,
       backgroundColor: 'transparent',
     },
+    listContent: {
+      paddingVertical: 4,
+    },
     state: {
-      paddingHorizontal: 16,
-      paddingTop: 14,
+      marginHorizontal: 12,
+      marginTop: 10,
+      marginBottom: 4,
+      padding: 10,
+      borderRadius: 10,
+      borderCurve: 'continuous',
+      backgroundColor: colors.dangerBg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.dangerBorder,
+      gap: 6,
     },
     emptyState: {
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 20,
-      paddingVertical: 16,
-      gap: 8,
+      paddingVertical: 28,
+      gap: 10,
+    },
+    emptyIconCircle: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
+    },
+    emptyText: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '500',
     },
     retry: {
       alignSelf: 'flex-start',
-      minHeight: 44,
+      minHeight: 36,
+      paddingHorizontal: 8,
+      borderRadius: 7,
       justifyContent: 'center',
-    },
-    footerAction: {
-      minHeight: 44,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(60, 60, 67, 0.12)',
-    },
-    listContent: {
-      paddingBottom: 4,
     },
     item: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: 10,
+      gap: 11,
       paddingHorizontal: 14,
-      paddingVertical: 11,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(60, 60, 67, 0.12)',
+      paddingVertical: 12,
       backgroundColor: 'transparent',
     },
-    itemUnread: {
-      backgroundColor: isDark ? 'rgba(45, 136, 255, 0.12)' : 'rgba(50, 121, 249, 0.06)',
-    },
     itemPressed: {
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(18, 19, 23, 0.04)',
     },
-    iconSlot: {
-      width: 20,
-      paddingTop: 2,
+    iconWell: {
+      width: 32,
+      height: 32,
+      marginTop: 1,
+      borderRadius: 9,
+      borderCurve: 'continuous',
       alignItems: 'center',
+      justifyContent: 'center',
       flexShrink: 0,
+    },
+    iconWellRead: {
+      opacity: 0.62,
     },
     itemContent: {
       flex: 1,
       minWidth: 0,
     },
-    itemTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
     itemTitle: {
-      fontSize: 12.5,
-      fontWeight: '600',
-      flex: 1,
-      lineHeight: 17,
+      fontSize: 13,
+      lineHeight: 18,
+      letterSpacing: -0.15,
+      fontWeight: '500',
     },
     itemTitleUnread: {
-      fontWeight: '700',
-      color: colors.textPrimary,
-    },
-    unreadDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.primary,
-      flexShrink: 0,
+      fontWeight: '600',
     },
     itemDesc: {
-      fontSize: 12,
-      lineHeight: 17,
-      marginTop: 2,
+      fontSize: 12.5,
+      lineHeight: 17.5,
+      marginTop: 3,
     },
     itemTime: {
-      fontSize: 12,
+      fontSize: 11,
+      lineHeight: 14,
       fontWeight: '500',
-      marginTop: 3,
+      fontVariant: ['tabular-nums'],
+      marginTop: 6,
+    },
+    unreadDot: {
+      width: 6.5,
+      height: 6.5,
+      borderRadius: 3.25,
+      backgroundColor: isDark ? '#0A84FF' : '#007AFF',
+      marginTop: 6,
+      marginLeft: 2,
+      flexShrink: 0,
+    },
+    insetDivider: {
+      height: StyleSheet.hairlineWidth,
+      marginLeft: 57,
+      marginRight: 14,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.08)',
     },
   });
