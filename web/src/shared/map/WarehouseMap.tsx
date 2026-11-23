@@ -845,7 +845,20 @@ export function WarehouseMap({
                 const isKeepOut = zone.zoneType === 'KEEP_OUT'
                 const anchor = zoneCentroid(points)
 
-                const baseFillOpacity = Math.min(ZONE_FILL_OPACITY[zone.zoneType], isKeepOut ? 0.16 : 0.15)
+                const baseFillOpacity = exclusive
+                  ? 0.22
+                  : Math.min(ZONE_FILL_OPACITY[zone.zoneType], isKeepOut ? 0.16 : 0.15)
+                const activeStrokeOpacity = isSelected
+                  ? 0.96
+                  : isHovered
+                    ? exclusive
+                      ? 0.92
+                      : 0.88
+                    : exclusive
+                      ? 0.84
+                      : 0.68
+                const activeStrokeWidth =
+                  (isSelected ? 2 : isHovered ? (exclusive ? 1.6 : 1.5) : exclusive ? 1.35 : 1.15) * ottoStrokeUnit
                 const ottoPaint = over
                   ? {
                       fill: MAP_RED,
@@ -874,8 +887,8 @@ export function WarehouseMap({
                           fill: 'currentColor',
                           fillOpacity: baseFillOpacity + (isHovered || isSelected ? 0.06 : 0),
                           stroke: 'currentColor',
-                          strokeOpacity: isSelected ? 0.96 : isHovered ? 0.88 : 0.68,
-                          strokeWidth: (isSelected ? 2 : isHovered ? 1.5 : 1.15) * ottoStrokeUnit,
+                          strokeOpacity: activeStrokeOpacity,
+                          strokeWidth: activeStrokeWidth,
                         }
 
                 const ottoDash = !zone.isActive
