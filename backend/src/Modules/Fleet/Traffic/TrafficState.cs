@@ -1802,10 +1802,16 @@ public sealed class TrafficState
 
         robot.X = x;
         robot.Y = y;
-        var under = ResourcesUnder(x, y, StandingYaw(robot, x, y));
+        var standingYaw = StandingYaw(robot, x, y);
+        var under = ResourcesUnder(x, y, standingYaw);
         var keep = under.Concat(robot.ServiceHoldIds).ToHashSet(StringComparer.Ordinal);
+        // With its heading known (it stands still, see StandingYaw) a cell outside the body rectangle is clear: it does
+        // not turn before its next grant. The any-heading circle kept a robot done at EP-SHELF-C-1 holding 34 cells
+        // (0.7 x 0.6 m), across the way of the robot heading for INBOUND (sim V019 2026-11-24).
         var released = robot.OccupiedResourceIds
-            .Where(rid => !keep.Contains(rid) && IsPhysicallyClear(robot, rid, x, y))
+            .Where(rid => !keep.Contains(rid)
+                          && ((standingYaw is not null && rid.StartsWith("cell:", StringComparison.Ordinal))
+                              || IsPhysicallyClear(robot, rid, x, y)))
             .ToList();
         foreach (var rid in released)
         {

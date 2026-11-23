@@ -130,6 +130,9 @@ public sealed class RobotCareService(
     /// <summary>An idle robot making way stops at least this far from the waiting robot's way (then: the closest such place).</summary>
     public const double MakeWayClearMeters = 0.6;
 
+    /// <summary>How far the idle robot's straight way to its stand-aside place stays from the waiter's planned path.</summary>
+    public const double MakeWayPathClearMeters = 0.45;
+
     private static readonly Dictionary<(Guid Waiter, Guid Blocker), DateTimeOffset> BlockedSince = [];
     private static readonly Dictionary<Guid, DateTimeOffset> LastYield = [];
 
@@ -361,7 +364,12 @@ public sealed class RobotCareService(
                 }
 
                 // A robot going home in the way of work gives up; one we sent to make way keeps going (freed above).
-                if (deadlockIds.Contains(blockerId) && !makingWay)
+                // Giving up takes more than one call (CANCEL, then the NAVIGATE ends, then traffic is reconciled): keep
+                // calling while it stands in the way, not only while it is DEADLOCK_RISK. After the CANCEL it no longer
+                // is, and its intent stayed YIELDING for ever: never "idle", so it never made way (sim V019 2026-11-24).
+                var blockerStill = snapshot.Robots.FirstOrDefault(r => r.RobotId == blockerId) is { } bv
+                                   && bv.Phase != WaroTrans.Fleet.Traffic.TrafficRobotPhase.Authorized;
+                if ((deadlockIds.Contains(blockerId) || blockerStill) && !makingWay)
                 {
                     await fleet.YieldPositioningAsync(blockerId, Guid.Empty, cancellationToken);
                     logger.LogInformation("Robot {Blocker} positioning intent cancelled: deadlocked with {Waiter}", blocker.Code, waiter.Code);
@@ -428,12 +436,19 @@ public sealed class RobotCareService(
             // behind the waiting robot; driving there through it locked both).
             bool RouteClear(EndpointPoseWithType e) =>
                 DistanceToSegment(waiter.PoseX, waiter.PoseY, blocker.PoseX, blocker.PoseY, e.X, e.Y) >= MakeWayClearMeters;
+            // Nor cross the way the waiting robot planned further on (sim V019 2026-11-24, B<->C crossing: the idle robot at
+            // C-1 was sent to a place whose straight way out cut the waiter's path; each then waited for the other's cells).
+            // Path points next to the idle robot are left out: it stands on that path, which is why it has to move.
+            bool CrossesItsPath(EndpointPoseWithType e) => waiterPath
+                .Where(p => Math.Sqrt(Math.Pow(p.X - blocker.PoseX, 2) + Math.Pow(p.Y - blocker.PoseY, 2)) > MakeWayClearMeters)
+                .Any(p => DistanceToSegment(p.X, p.Y, blocker.PoseX, blocker.PoseY, e.X, e.Y) < MakeWayPathClearMeters);
             EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool) => pool
                 .Where(RouteClear)
                 .Where(e => Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
                             && !targets.Contains(e.Id)
                             && others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)))
                 .OrderByDescending(e => OffItsPath(e))
+                .ThenByDescending(e => !CrossesItsPath(e))
                 // Clear enough of the waiting robot, then the CLOSEST such place: lab 2026-11-24 an idle robot at
                 // PARKING-B was sent to the farthest endpoint (EP-SHELF-A-2, 3 m) to let the other one leave PARKING-A.
                 .ThenByDescending(e => Away(e) >= MakeWayClearMeters)
@@ -442,14 +457,66 @@ public sealed class RobotCareService(
             // A parking place or wait point first; on a map with too few, any free endpoint off the waiting robot's way
             // that no live Job is headed to (a charger never).
             var standAside = endpoints.Where(e => Services.WaitPoints.IsStandAside(e, waitPointCodes)).ToList();
+            // The traffic's own test, not a distance: the body standing at the endpoint takes none of the cells the waiting
+            // robot's whole planned path needs (sim V019 2026-11-24: EP-OUTBOUND was 0.7 m from that path, "on it" by
+            // the 0.8 m rule, yet clear of every cell it needs; the idle robot at SHELF-C-1 then had nowhere to go).
+            var waiterWay = PolicyFor(blocker.CurrentMapVersionId) is { } wayPolicy
+                            && snapshot.Robots.FirstOrDefault(r => r.RobotId == waiterId) is { ProposedPath.IsDefaultOrEmpty: false } wv
+                ? (Policy: wayPolicy, Cells: WaroTrans.Fleet.Traffic.SemanticReservation.WholePathResources(wayPolicy, wv.ProposedPath))
+                : default;
+            bool OffItsWay(EndpointPoseWithType e)
+            {
+                if (waiterWay.Policy is null)
+                {
+                    return false;
+                }
+
+                var body = new HashSet<string>(StringComparer.Ordinal);
+                WaroTrans.Fleet.Traffic.SemanticReservation.StandingCells(
+                    waiterWay.Policy, e.X, e.Y, e.Yaw, trafficOptions!.Value.EffectiveStandingMargin, body);
+                return !body.Overlaps(waiterWay.Cells);
+            }
+
             var target = Pick(standAside.Where(OffItsPath))
                          ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
                                                       && !headedTo.Contains(e.Id) && OffItsPath(e)))
-                         ?? Pick(standAside);
+                         ?? Pick(standAside)
+                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER
+                                                      && !headedTo.Contains(e.Id) && OffItsWay(e)));
             // Any free place beats standing in the way of a robot with work (the cooldown stops ping-pong).
             if (target is null || Away(target) <= 0.30)
             {
-                logger.LogInformation("Robot {Blocker} is in the way of {Waiter} but has nowhere better to go", blocker.Code, waiter.Code);
+                // No endpoint fits: free floor close by, off the waiter's whole planned path (sim V019 2026-11-24: an idle
+                // robot at SHELF-C-1 stood on the way to INBOUND; every parking place lay behind the waiting robot).
+                if (await YieldSpotAsync(blocker, waiterId, snapshot, cancellationToken) is { } spot)
+                {
+                    try
+                    {
+                        // No endpoint: a fresh id keeps the "one robot per target" rule of positioning intents.
+                        await fleet.StartReturnToParkAsync(blockerId, Guid.NewGuid(), spot.X, spot.Y, spot.Yaw, cancellationToken);
+                        lock (YieldLock)
+                        {
+                            LastYield[blockerId] = now;
+                        }
+
+                        sent++;
+                        logger.LogInformation(
+                            "Robot {Blocker} (idle) makes way for {Waiter}: going to free floor ({X:F2}, {Y:F2})",
+                            blocker.Code, waiter.Code, spot.X, spot.Y);
+                    }
+                    catch (AppException refused)
+                    {
+                        logger.LogInformation("Robot {Blocker} cannot make way for {Waiter}: {Code}", blocker.Code, waiter.Code, refused.Code);
+                    }
+
+                    continue;
+                }
+
+                var why = string.Join("; ", endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER).Select(e =>
+                    $"{e.Code}:{(RouteClear(e) ? "" : "route ")}{(OffItsPath(e) ? "" : "onpath ")}{(targets.Contains(e.Id) ? "target " : "")}"
+                    + $"{(headedTo.Contains(e.Id) ? "headed " : "")}{(Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5 ? "" : "here ")}"
+                    + $"{(others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)) ? "" : "taken ")}away={Away(e):F2}"));
+                logger.LogInformation("Robot {Blocker} is in the way of {Waiter} but has nowhere better to go ({Why})", blocker.Code, waiter.Code, why);
                 continue;
             }
 
@@ -502,12 +569,32 @@ public sealed class RobotCareService(
 
         var now = clock.GetUtcNow();
         var positioning = await fleet.GetPositioningRobotIdsAsync(cancellationToken);
+        // A robot in the way of one with work makes way first (MakeWayAsync), and goes home once nobody waits for it:
+        // sent home through the waiting robot it was refused (DEADLOCK_RISK), cancelled, sent again, for ever (sim V019
+        // 2026-11-24, SHELF-C-1 -> PARKING-B behind the robot heading for INBOUND).
+        var blocking = new HashSet<Guid>();
+        if (traffic is not null)
+        {
+            var snap = await traffic.GetTrafficSnapshotAsync(cancellationToken);
+            blocking.UnionWith(snap.Robots
+                .Where(r => r.BlockingOwner is not null && r.WaitingReason != WaroTrans.Fleet.Traffic.TrafficWaitingReason.None)
+                .Select(r => r.BlockingOwner!.Value));
+            blocking.UnionWith(snap.Waits.Where(w => w.BlockingOwner is not null).Select(w => w.BlockingOwner!.Value));
+        }
+
         var sent = 0;
         foreach (var candidate in await fleet.GetIdleRobotsAsync(cancellationToken))
         {
             var robot = candidate.Robot;
             var quietSince = candidate.LastCommandAt;
-            if (positioning.Contains(robot.Id)
+            bool madeWayRecently;
+            lock (YieldLock)
+            {
+                madeWayRecently = LastYield.TryGetValue(robot.Id, out var y) && (now - y).TotalSeconds < 15;
+            }
+
+            if (blocking.Contains(robot.Id) || madeWayRecently
+                || positioning.Contains(robot.Id)
                 || (quietSince is { } last && (now - last).TotalSeconds < idle.Value.IdleSeconds)
                 // Its pose decides the nearest free place and what traffic reserves: no guess from a stale or lost pose.
                 || robot.LocalizationStatus != LocalizationStatus.LOCALIZED
@@ -709,6 +796,60 @@ public sealed class RobotCareService(
     }
 
     /// <summary>Endpoints another robot stands on or is driving to (positioning, a recovery leg).</summary>
+    /// <summary>
+    /// Free floor close by for an idle robot in the way: none of the cells the waiting robot's whole planned path needs
+    /// (nor its body), none another robot holds. Null without a semantic map bundle of the robot's map, or nothing free.
+    /// </summary>
+    /// <summary>The semantic traffic policy of this map (the Host's bundle), null when the bundle is another map's or missing.</summary>
+    private WaroTrans.Fleet.Traffic.SemanticTrafficPolicy? PolicyFor(Guid mapVersionId)
+    {
+        var mapDir = trafficOptions?.Value.SemanticMapDirectory?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(mapDir) || !Directory.Exists(mapDir)
+            || WaroTrans.Fleet.Traffic.SemanticReservation.TryReadManifestMapVersionId(mapDir) != mapVersionId
+            || WaroTrans.Fleet.Traffic.SemanticReservation.TryLoadFromDirectory(mapDir, mapVersionId, "") is not { } loaded)
+        {
+            return null;
+        }
+
+        return trafficOptions!.Value.ApplySemanticOverrides(loaded);
+    }
+
+    private Task<(double X, double Y, double Yaw)?> YieldSpotAsync(
+        RobotSnapshot blocker, Guid waiterId, WaroTrans.Fleet.Traffic.TrafficSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        var mapDir = trafficOptions?.Value.SemanticMapDirectory?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(mapDir) || !Directory.Exists(mapDir)
+            || WaroTrans.Fleet.Traffic.SemanticReservation.TryReadManifestMapVersionId(mapDir) != blocker.CurrentMapVersionId
+            || WaroTrans.Fleet.Traffic.SemanticReservation.TryLoadFromDirectory(mapDir, blocker.CurrentMapVersionId, "") is not { } loaded
+            || WaroTrans.Fleet.Traffic.FreeFloorGrid.TryLoad(mapDir) is not { } grid)
+        {
+            return Task.FromResult<(double, double, double)?>(null);
+        }
+
+        var policy = trafficOptions!.Value.ApplySemanticOverrides(loaded);
+        var margin = trafficOptions.Value.EffectiveStandingMargin;
+        var avoid = new HashSet<string>(StringComparer.Ordinal);
+        var positions = new List<(double X, double Y)>();
+        foreach (var r in snapshot.Robots.Where(r => r.RobotId != blocker.Id))
+        {
+            avoid.UnionWith(r.OccupiedResourceIds);
+            if (r.X is double x && r.Y is double y)
+            {
+                positions.Add((x, y));
+            }
+
+            if (r.RobotId == waiterId && !r.ProposedPath.IsDefaultOrEmpty)
+            {
+                avoid.UnionWith(WaroTrans.Fleet.Traffic.SemanticReservation.WholePathResources(policy, r.ProposedPath));
+            }
+        }
+
+        return Task.FromResult(WaroTrans.Fleet.Traffic.YieldSpots.Find(
+            policy, grid, blocker.PoseX, blocker.PoseY, avoid, positions, margin,
+            maxRadius: Execution.JobExecutionEngine.GoalYieldSpotMaxMeters));
+    }
+
     private async Task<HashSet<Guid>> TakenEndpointsAsync(RobotSnapshot robot, IReadOnlyList<EndpointPoseWithType> endpoints, CancellationToken cancellationToken)
     {
         var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))

@@ -141,44 +141,6 @@
     ],
     "zones": [
         {
-            "id": "e1497aea-85b5-4e40-8541-686fe9d29dcc",
-            "code": "ZONE-AREA-INBOUND",
-            "name": "Area Inbound",
-            "policy": null,
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [
-                            2.175,
-                            0.261
-                        ],
-                        [
-                            2.601,
-                            0.261
-                        ],
-                        [
-                            2.603,
-                            0.666
-                        ],
-                        [
-                            2.177,
-                            0.666
-                        ],
-                        [
-                            2.175,
-                            0.261
-                        ]
-                    ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "SINGLE_OCCUPANCY",
-            "map_version_id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
-            "policy_schema_version": 1
-        },
-        {
             "id": "f3972a37-742e-4523-8229-092ae3a3f748",
             "code": "ZONE-KEEP-OUT-SHELF-B",
             "name": "Keep Out Shelf B",
@@ -701,7 +663,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-23T10:02:34.2893+00:00",
+    "exportedAt": "2026-11-23T10:24:37.87397+00:00",
     "mapVersion": {
         "id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
         "code": "MAP-ONE-V019",
