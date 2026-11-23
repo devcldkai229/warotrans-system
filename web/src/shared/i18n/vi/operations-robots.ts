@@ -90,7 +90,6 @@ export const vi_operations_robots: Record<string, string> = {
   'Target': 'Đích',
   'Back to robot': 'Quay lại robot',
   'polling': 'đang truy vấn định kỳ',
-  'Zones': 'Vùng',
   'Follow robot': 'Theo robot',
   'Whole map': 'Toàn bản đồ',
   'Floor point': 'Điểm trên sàn',
