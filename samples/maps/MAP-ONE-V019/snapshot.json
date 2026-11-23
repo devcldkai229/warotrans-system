@@ -179,44 +179,6 @@
             "policy_schema_version": 1
         },
         {
-            "id": "74436aca-8dab-498c-8a66-206871623b30",
-            "code": "ZONE-KEEP-OUT-BOUND",
-            "name": "Keep Out Bound",
-            "policy": null,
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [
-                            1.204,
-                            -0.469
-                        ],
-                        [
-                            1.729,
-                            -0.47
-                        ],
-                        [
-                            1.733,
-                            -0.479
-                        ],
-                        [
-                            1.204,
-                            -0.481
-                        ],
-                        [
-                            1.204,
-                            -0.469
-                        ]
-                    ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "KEEP_OUT",
-            "map_version_id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
-            "policy_schema_version": 1
-        },
-        {
             "id": "f3972a37-742e-4523-8229-092ae3a3f748",
             "code": "ZONE-KEEP-OUT-SHELF-B",
             "name": "Keep Out Shelf B",
@@ -679,21 +641,6 @@
             "storage_location_code": null
         },
         {
-            "x": 2.323,
-            "y": 0.48,
-            "id": "c9ae04cc-ed43-45da-9143-858f2669c7fc",
-            "yaw": 1.5708,
-            "code": "EP-QUEUE-B",
-            "name": "Queue B",
-            "is_enabled": true,
-            "endpoint_type": "QUEUE",
-            "yaw_tolerance": 0.08726646259971647,
-            "map_version_id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
-            "position_tolerance": 0.05,
-            "source_endpoint_id": "65b75418-e2e9-4f09-baad-59d4d60b5d61",
-            "storage_location_code": null
-        },
-        {
             "x": -0.602,
             "y": 1.215,
             "id": "ce6b7f53-b83e-4d55-9e92-1c235bb6e98d",
@@ -754,7 +701,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-23T07:46:05.781934+00:00",
+    "exportedAt": "2026-11-23T10:02:34.2893+00:00",
     "mapVersion": {
         "id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
         "code": "MAP-ONE-V019",
