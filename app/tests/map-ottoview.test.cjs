@@ -772,3 +772,55 @@ test('computeStationArchitecture prevents adjacent wall shelf bays from overlapp
     }
   }
 });
+
+test('resolveRobotTagPlacements avoids overlapping adjacent and stacked robot labels', () => {
+  const models = require('../src/shared/maps/rosMapModels.json');
+  const load = createLoader({ './rosMapModels.json': models });
+  const { resolveRobotTagPlacements } = load('src/shared/maps/mapArchitecture.ts');
+
+  const pair = [
+    { id: 'r1', code: 'RBT-001', x: 100, y: 200 },
+    { id: 'r2', code: 'RBT-002', x: 155, y: 200 },
+  ];
+  const at1x = resolveRobotTagPlacements(pair, 14, 1);
+  assert.equal(at1x.r1.placement, 'below');
+  assert.equal(at1x.r2.placement, 'above');
+
+  const at2x = resolveRobotTagPlacements(pair, 14, 2);
+  assert.equal(at2x.r1.placement, 'below');
+  assert.equal(at2x.r2.placement, 'below');
+
+  const trio = resolveRobotTagPlacements(
+    [
+      ...pair,
+      { id: 'r3', code: 'RBT-003', x: 210, y: 200 },
+    ],
+    14,
+    1,
+  );
+  assert.equal(trio.r1.placement, 'below');
+  assert.equal(trio.r2.placement, 'above');
+  assert.equal(trio.r3.placement, 'below');
+
+  const stacked = resolveRobotTagPlacements(
+    [
+      { id: 'r1', code: 'RBT-001', x: 100, y: 100 },
+      { id: 'r2', code: 'RBT-002', x: 100, y: 142 },
+    ],
+    14,
+    1,
+  );
+  assert.equal(stacked.r1.placement, 'above');
+  assert.equal(stacked.r2.placement, 'below');
+
+  const selectedSecond = resolveRobotTagPlacements(
+    [
+      { id: 'r1', code: 'RBT-001', x: 100, y: 200, isSelected: false },
+      { id: 'r2', code: 'RBT-002', x: 155, y: 200, isSelected: true },
+    ],
+    14,
+    1,
+  );
+  assert.equal(selectedSecond.r2.placement, 'below');
+  assert.equal(selectedSecond.r1.placement, 'above');
+});

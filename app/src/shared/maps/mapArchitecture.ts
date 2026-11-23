@@ -356,3 +356,157 @@ export function computeStationArchitecture(
 
   return { dockBays, shelfBays };
 }
+
+export const ROBOT_TAG_WIDTH = 104;
+export const ROBOT_TAG_HEIGHT = 18;
+export const ROBOT_TAG_GAP = 6;
+
+export type RobotTagPlacement = 'below' | 'above' | 'right' | 'left' | 'below-far' | 'above-far';
+
+export interface RobotTagAnchorInput {
+  id: string;
+  code: string;
+  x: number;
+  y: number;
+  isSelected?: boolean;
+}
+
+export interface ResolvedRobotTagLayout {
+  placement: RobotTagPlacement;
+  tagWidth: number;
+}
+
+interface ScreenBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+const ROBOT_TAG_PRIORITY: readonly RobotTagPlacement[] = [
+  'below',
+  'above',
+  'right',
+  'left',
+  'below-far',
+  'above-far',
+];
+
+/** Estimate screen width of a robot code pill (`dot + code + pill padding`). */
+export function estimateRobotTagWidth(code: string): number {
+  return Math.min(ROBOT_TAG_WIDTH, Math.max(46, Math.ceil(24 + code.length * 6.4)));
+}
+
+function boxOverlapArea(a: ScreenBox, b: ScreenBox, pad: number): number {
+  const ox = Math.max(0, Math.min(a.x2 + pad, b.x2) - Math.max(a.x1 - pad, b.x1));
+  if (ox <= 0) return 0;
+  const oy = Math.max(0, Math.min(a.y2 + pad, b.y2) - Math.max(a.y1 - pad, b.y1));
+  return ox * oy;
+}
+
+function candidateTagBox(
+  placement: RobotTagPlacement,
+  cx: number,
+  cy: number,
+  radius: number,
+  tagW: number,
+): ScreenBox {
+  switch (placement) {
+    case 'below': {
+      const y1 = cy + radius + ROBOT_TAG_GAP;
+      return { x1: cx - tagW / 2, y1, x2: cx + tagW / 2, y2: y1 + ROBOT_TAG_HEIGHT };
+    }
+    case 'above': {
+      const y2 = cy - radius - ROBOT_TAG_GAP;
+      return { x1: cx - tagW / 2, y1: y2 - ROBOT_TAG_HEIGHT, x2: cx + tagW / 2, y2 };
+    }
+    case 'right': {
+      const x1 = cx + radius + ROBOT_TAG_GAP;
+      return { x1, y1: cy - ROBOT_TAG_HEIGHT / 2, x2: x1 + tagW, y2: cy + ROBOT_TAG_HEIGHT / 2 };
+    }
+    case 'left': {
+      const x2 = cx - radius - ROBOT_TAG_GAP;
+      return { x1: x2 - tagW, y1: cy - ROBOT_TAG_HEIGHT / 2, x2, y2: cy + ROBOT_TAG_HEIGHT / 2 };
+    }
+    case 'below-far': {
+      const y1 = cy + radius + ROBOT_TAG_GAP + ROBOT_TAG_HEIGHT + 4;
+      return { x1: cx - tagW / 2, y1, x2: cx + tagW / 2, y2: y1 + ROBOT_TAG_HEIGHT };
+    }
+    case 'above-far': {
+      const y1 = cy - radius - ROBOT_TAG_GAP - ROBOT_TAG_HEIGHT * 2 - 4;
+      return { x1: cx - tagW / 2, y1, x2: cx + tagW / 2, y2: y1 + ROBOT_TAG_HEIGHT };
+    }
+  }
+}
+
+/**
+ * Resolve deterministic non-overlapping tag slot placements (`below`, `above`, `right`, `left`,
+ * `below-far`, `above-far`) in screen coordinates at the current settled zoom.
+ */
+export function resolveRobotTagPlacements(
+  items: readonly RobotTagAnchorInput[],
+  halfLength: number,
+  zoom: number,
+): Record<string, ResolvedRobotTagLayout> {
+  if (items.length === 0) return {};
+
+  const z = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
+  const r = (halfLength + 2) * z;
+
+  const entries = items.map(item => {
+    const cx = item.x * z;
+    const cy = item.y * z;
+    return {
+      item,
+      cx,
+      cy,
+      tagWidth: estimateRobotTagWidth(item.code),
+      chassis: { x1: cx - r, y1: cy - r, x2: cx + r, y2: cy + r },
+    };
+  });
+
+  const sorted = [...entries].sort(
+    (a, b) =>
+      (a.item.isSelected ? 0 : 1) - (b.item.isSelected ? 0 : 1) ||
+      a.item.code.localeCompare(b.item.code) ||
+      a.item.id.localeCompare(b.item.id),
+  );
+
+  const placedTags: ScreenBox[] = [];
+  const result: Record<string, ResolvedRobotTagLayout> = {};
+
+  for (const current of sorted) {
+    let chosenPlacement: RobotTagPlacement = 'below';
+    let chosenBox = candidateTagBox('below', current.cx, current.cy, r, current.tagWidth);
+    let bestScore = Infinity;
+
+    for (const placement of ROBOT_TAG_PRIORITY) {
+      const box = candidateTagBox(placement, current.cx, current.cy, r, current.tagWidth);
+      let score = 0;
+
+      for (const placed of placedTags) {
+        score += boxOverlapArea(box, placed, 4);
+      }
+      for (const other of entries) {
+        if (other.item.id === current.item.id) continue;
+        score += boxOverlapArea(box, other.chassis, 2);
+      }
+
+      if (score === 0) {
+        chosenPlacement = placement;
+        chosenBox = box;
+        break;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        chosenPlacement = placement;
+        chosenBox = box;
+      }
+    }
+
+    placedTags.push(chosenBox);
+    result[current.item.id] = { placement: chosenPlacement, tagWidth: current.tagWidth };
+  }
+
+  return result;
+}
