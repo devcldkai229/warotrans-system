@@ -50,7 +50,6 @@
         "FleetIdle__AutoReturnToPark": "false",
         "FleetIdle__IdleSeconds": "3",
         "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-A",
-        "FleetIdle__GoalCorridors": "EP-INBOUND=1.10,-1.15,2.65,1.60",
         "Logging__LogLevel__Default": "Information",
         "Logging__LogLevel__Microsoft.EntityFrameworkCore": "Warning"
       }
