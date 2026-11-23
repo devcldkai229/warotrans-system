@@ -48,7 +48,6 @@ export function MapControl({
       onPress={onPress}
       style={({ pressed }) => [
         styles.control,
-        WEB_HUD_GLASS_STYLE,
         { width, height },
         style,
         selected && styles.selected,
