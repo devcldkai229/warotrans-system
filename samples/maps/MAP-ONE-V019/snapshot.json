@@ -141,44 +141,6 @@
     ],
     "zones": [
         {
-            "id": "f3972a37-742e-4523-8229-092ae3a3f748",
-            "code": "ZONE-KEEP-OUT-SHELF-B",
-            "name": "Keep Out Shelf B",
-            "policy": null,
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [
-                            0.528,
-                            0.948
-                        ],
-                        [
-                            0.554,
-                            0.946
-                        ],
-                        [
-                            0.551,
-                            0.184
-                        ],
-                        [
-                            0.528,
-                            0.183
-                        ],
-                        [
-                            0.528,
-                            0.948
-                        ]
-                    ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "KEEP_OUT",
-            "map_version_id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
-            "policy_schema_version": 1
-        },
-        {
             "id": "7253b40f-bc0f-45fa-90e5-d51f6a3973c5",
             "code": "ZONE-KEEP-OUT-ZONE-A",
             "name": "Keep Out Zone A",
@@ -663,7 +625,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-23T10:24:37.87397+00:00",
+    "exportedAt": "2026-11-23T11:26:24.502179+00:00",
     "mapVersion": {
         "id": "60ccc4ed-ecf1-4ccc-9a9f-bbecc1ea4c9e",
         "code": "MAP-ONE-V019",

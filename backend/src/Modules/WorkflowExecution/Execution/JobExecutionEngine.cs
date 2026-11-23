@@ -2796,7 +2796,19 @@ public sealed partial class JobExecutionEngine(
                         var reachedWithin = waitAt is { Id: var spotId } && spotId == Guid.Empty
                             ? waitAt.PositionTolerance
                             : Math.Max(0.25, waitAt?.PositionTolerance ?? 0);
-                        if (waitAt is null
+                        // Nowhere to stand aside, and the robot that has the goal is held by traffic behind THIS one
+                        // (it is still on its way): this one goes first. Lab 2026-11-23 (two INBOUND at once): RBT-002,
+                        // already ahead on the way, waited "where it stands" on RBT-001's path and RBT-001 waited for it.
+                        var goesFirst = waitAt is null && goalBusy.Robot is { } holder
+                                        && goalBusy.Reason.Contains("on its way", StringComparison.Ordinal)
+                                        && await BlocksTrafficOfAsync(robot.Id, holder, cancellationToken);
+                        if (goesFirst)
+                        {
+                            logger.LogInformation(
+                                "Job {JobNo} {StepKey}: {Busy}, but that robot waits behind this one and there is no place to stand aside: this one goes first",
+                                job.JobNo, stepKey, goalBusy.Reason);
+                        }
+                        else if (waitAt is null
                             || Dist(robot.PoseX, robot.PoseY, waitAt.X, waitAt.Y) <= reachedWithin)
                         {
                             if (!waitingAlready)
@@ -2814,10 +2826,12 @@ public sealed partial class JobExecutionEngine(
                             await SaveAndPublishAsync(cancellationToken);
                             return false;
                         }
-
-                        queueZone = zone;
-                        goal = waitAt;
-                        await LogGoalQueueAsync(job, robotId, stepKey, pose, goalBusy.Reason, waitAt, cancellationToken);
+                        else
+                        {
+                            queueZone = zone;
+                            goal = waitAt;
+                            await LogGoalQueueAsync(job, robotId, stepKey, pose, goalBusy.Reason, waitAt, cancellationToken);
+                        }
                     }
 
                     // Goal only — robot Nav2 plans; grant arrives after traffic_plan uplink.

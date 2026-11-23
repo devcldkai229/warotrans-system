@@ -471,6 +471,14 @@ public sealed class RobotCareService(
                     return false;
                 }
 
+                // Not a bay next to a keep-out: the NAVIGATE there has no tolerance, so the gateway docks (run-in) and
+                // its plan came within reach of the keep-out ring (KEEPOUT_VIOLATION for ever, lab 2026-11-23 SHELF-B).
+                if (!waiterWay.Policy.KeepoutZones.IsDefaultOrEmpty
+                    && waiterWay.Policy.KeepoutZones.Any(z => WaroTrans.Fleet.Traffic.SemanticReservation.DiscHitsZone(e.X, e.Y, 0.8, z.Ring)))
+                {
+                    return false;
+                }
+
                 var body = new HashSet<string>(StringComparer.Ordinal);
                 WaroTrans.Fleet.Traffic.SemanticReservation.StandingCells(
                     waiterWay.Policy, e.X, e.Y, e.Yaw, trafficOptions!.Value.EffectiveStandingMargin, body);
