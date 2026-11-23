@@ -461,6 +461,15 @@ export function WarehouseMap({
   const basePxPerMetre = isOtto && stageSize.width > 0 && width > 0 ? stageSize.width / width : 110
   const ottoStrokeUnit = 1 / Math.max(20, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
   const ottoHatchStep = 6.5 / Math.max(8, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
+  const ottoCheckerSize = 9 / Math.max(8, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
+  const ottoCheckerColors = useMemo(
+    () => (isOtto ? Array.from(new Set(cellSets.map((set) => set.color))) : []),
+    [isOtto, cellSets],
+  )
+  const ottoCheckerIndex = useMemo(
+    () => new Map(ottoCheckerColors.map((color, idx) => [color, idx])),
+    [ottoCheckerColors],
+  )
   const ottoRobotLenM = Math.max(ROBOT_LENGTH_METERS, 22 / Math.max(20, basePxPerMetre))
   const ottoRobotWidM = ottoRobotLenM * (ROBOT_WIDTH_METERS / ROBOT_LENGTH_METERS)
   const ottoEndpointSizeM = Math.max(0.18, Math.min(0.24, 21 / Math.max(20, basePxPerMetre)))
@@ -590,6 +599,21 @@ export function WarehouseMap({
                 strokeWidth={ottoHatchStep * 0.28}
               />
             </pattern>
+            {ottoCheckerColors.map((color, idx) => {
+              const half = ottoCheckerSize / 2
+              return (
+                <pattern
+                  key={`checker-${idx}`}
+                  id={`wmap-otto-checker-${idx}`}
+                  width={ottoCheckerSize}
+                  height={ottoCheckerSize}
+                  patternUnits="userSpaceOnUse"
+                >
+                  <rect x={0} y={0} width={half} height={half} fill={color} />
+                  <rect x={half} y={half} width={half} height={half} fill={color} />
+                </pattern>
+              )
+            })}
             <pattern id="wmap-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <circle cx="0" cy="0" r="0.09" fill={MAP_LINE} />
             </pattern>
@@ -787,32 +811,10 @@ export function WarehouseMap({
               style={{ pointerEvents: 'none', imageRendering: 'pixelated' }}
             />
           ))}
-          {cellSets.length > 0 ? (
+          {!isOtto && cellSets.length > 0 ? (
             <g pointerEvents="none">
-              {cellSets.map((set) => {
-                const isSetFocused =
-                  selected.robotCode === set.robotCode || Boolean(focusRobotCodes?.includes(set.robotCode))
-                const fillOpacity = isOtto
-                  ? set.kind === 'held'
-                    ? isSetFocused
-                      ? 0.2
-                      : 0.1
-                    : 0
-                  : set.kind === 'held'
-                    ? 0.28
-                    : 0
-                const strokeOpacity = isOtto
-                  ? set.kind === 'held'
-                    ? isSetFocused
-                      ? 0.55
-                      : 0.28
-                    : isSetFocused
-                      ? 0.68
-                      : 0.36
-                  : set.kind === 'held'
-                    ? 0.5
-                    : 0.85
-                return set.cells.map((c) => (
+              {cellSets.map((set) =>
+                set.cells.map((c) => (
                   <rect
                     key={`cell-${set.robotCode}-${set.kind}-${c.x}-${c.y}`}
                     x={X(c.x)}
@@ -820,14 +822,13 @@ export function WarehouseMap({
                     width={set.size}
                     height={set.size}
                     fill={set.kind === 'held' ? set.color : 'none'}
-                    fillOpacity={fillOpacity}
+                    fillOpacity={set.kind === 'held' ? 0.28 : 0}
                     stroke={set.color}
-                    strokeOpacity={strokeOpacity}
-                    strokeWidth={isOtto ? ottoStrokeUnit * 0.75 : 0.012}
-                    strokeDasharray={isOtto && set.kind === 'granted' ? `${ottoStrokeUnit * 2.4} ${ottoStrokeUnit * 2}` : undefined}
+                    strokeOpacity={set.kind === 'held' ? 0.5 : 0.85}
+                    strokeWidth={0.012}
                   />
-                ))
-              })}
+                )),
+              )}
             </g>
           ) : null}
 
@@ -1090,6 +1091,40 @@ export function WarehouseMap({
               {drawing.points.map((point, index) => (
                 <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16 * mark} />
               ))}
+            </g>
+          ) : null}
+
+          {/* Traffic cells (OTTO): checkerboard held/granted reservations layered over static lanes & zones. */}
+          {isOtto && cellSets.length > 0 ? (
+            <g pointerEvents="none">
+              {cellSets.map((set) => {
+                const isSetFocused =
+                  selected.robotCode === set.robotCode || Boolean(focusRobotCodes?.includes(set.robotCode))
+                const checkerIdx = ottoCheckerIndex.get(set.color)
+                const patternFill = checkerIdx != null ? `url(#wmap-otto-checker-${checkerIdx})` : set.color
+                const fillOpacity =
+                  set.kind === 'held' ? (isSetFocused ? 0.44 : 0.32) : isSetFocused ? 0.2 : 0.13
+                const strokeOpacity =
+                  set.kind === 'held' ? (isSetFocused ? 0.88 : 0.68) : isSetFocused ? 0.9 : 0.78
+                const strokeWidth = (set.kind === 'held' ? 1.1 : 1.15) * ottoStrokeUnit
+                const dash =
+                  set.kind === 'granted' ? `${ottoStrokeUnit * 3} ${ottoStrokeUnit * 2}` : undefined
+                return set.cells.map((c) => (
+                  <rect
+                    key={`otto-cell-${set.robotCode}-${set.kind}-${c.x}-${c.y}`}
+                    x={X(c.x)}
+                    y={Y(c.y + set.size)}
+                    width={set.size}
+                    height={set.size}
+                    fill={patternFill}
+                    fillOpacity={fillOpacity}
+                    stroke={set.color}
+                    strokeOpacity={strokeOpacity}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={dash}
+                  />
+                ))
+              })}
             </g>
           ) : null}
 
