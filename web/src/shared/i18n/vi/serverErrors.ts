@@ -172,4 +172,9 @@ export const viServerErrors: Record<string, string> = {
   issue_reported_range_invalid: 'Thời điểm kết thúc phải sau thời điểm bắt đầu.',
   issue_container_outcome_not_allowed: 'Kết quả này không phù hợp với lỗi của kiện hàng.',
   container_quantity_not_reduced: 'Số hàng còn tốt phải nhỏ hơn số hiện có trong kiện.',
+  auto_localize_running: "Robot '{q1}' đang tự định vị.",
+  auto_localize_no_candidates: "Bản đồ của robot '{q1}' không có endpoint nào để định vị.",
+  robot_manual_mode: "Robot '{q1}' đang được điều khiển bằng tay.",
+  localize_target_required: 'Hãy chọn một endpoint hoặc một vị trí.',
+  invalid_pose: 'Vị trí phải là các số hợp lệ.',
 }

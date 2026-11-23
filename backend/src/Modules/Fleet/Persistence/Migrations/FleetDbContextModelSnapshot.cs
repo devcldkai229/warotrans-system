@@ -468,6 +468,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("reject_reason_code");
 
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_json");
+
                     b.Property<Guid>("RobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("robot_id");

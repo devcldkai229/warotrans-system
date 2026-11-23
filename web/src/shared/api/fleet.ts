@@ -366,6 +366,70 @@ export function stopRobot(id: string, reason?: string, mode: 'STOP' | 'PAUSE' = 
   return apiFetch<StopState>(`/api/fleet/robots/${id}/commands/stop`, { method: 'POST', body: JSON.stringify({ mode, reason }) })
 }
 
+/** Admin: the robot now runs on another PUBLISHED map of its warehouse. Its localization becomes UNKNOWN. */
+export function changeRobotMap(id: string, mapVersionId: string) {
+  return apiFetch<Robot>(`/api/fleet/robots/${id}/map`, { method: 'PUT', body: JSON.stringify({ mapVersionId }) })
+}
+
+/** The robot sets its pose estimate to a pose of its map (a suggestion of auto-localize). */
+export function localizeRobotAtPose(id: string, pose: { x: number; y: number; yaw: number }) {
+  return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/localize`, {
+    method: 'POST',
+    body: JSON.stringify(pose),
+  })
+}
+
+/** The robot finds where it stands by itself; a turn on the spot only with allowSpin. Follow getAutoLocalize. */
+export function autoLocalizeRobot(id: string, allowSpin = false) {
+  return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/auto-localize`, {
+    method: 'POST',
+    body: JSON.stringify({ allowSpin }),
+  })
+}
+
+export type AutoLocalizeState = 'NONE' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'REJECTED' | 'TIMEOUT'
+
+export interface AutoLocalizeSuggestion {
+  x: number
+  y: number
+  yaw: number
+  /** 0..1: how well the scan fits the map there. */
+  score: number
+  endpointCode: string | null
+  /** LAST_POSE / HOME / ENDPOINT / GLOBAL (found away from every endpoint) / SPIN */
+  source: string
+}
+
+/** The latest auto-localize of a robot and what the robot answered. */
+export interface AutoLocalizeStatus {
+  robotId: string
+  commandId: string | null
+  state: AutoLocalizeState
+  /** CANDIDATE_MATCH / GLOBAL_SPIN / NONE */
+  method: string | null
+  errorCode: string | null
+  rejectReason: string | null
+  /** MATCHED / AMBIGUOUS / NO_MATCH / NO_SCAN */
+  matchReason: string | null
+  score: number | null
+  margin: number | null
+  endpointCode: string | null
+  x: number | null
+  y: number | null
+  yaw: number | null
+  suggestions: AutoLocalizeSuggestion[]
+  allowSpin: boolean
+  /** OPERATOR / AUTO / MAP_CHANGED */
+  trigger: string | null
+  detail: string | null
+  issuedAt: string | null
+  completedAt: string | null
+}
+
+export function getAutoLocalize(id: string) {
+  return apiFetch<AutoLocalizeStatus>(`/api/fleet/robots/${id}/auto-localize`)
+}
+
 /** The robot sets its pose estimate to this endpoint of its map (where it was placed). Watch localizationStatus. */
 export function localizeRobot(id: string, endpointId: string) {
   return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/localize`, {

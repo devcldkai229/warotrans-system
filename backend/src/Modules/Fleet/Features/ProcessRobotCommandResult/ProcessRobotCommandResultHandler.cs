@@ -58,6 +58,12 @@ public sealed class ProcessRobotCommandResultHandler(
                 command.Status);
             return;
         }
+
+        if (message.Result is { ValueKind: JsonValueKind.Object } detail)
+        {
+            command.ResultJson = detail.GetRawText();
+        }
+
         JobAssignment? assignment = null;
         if (command.JobAssignmentId is { } assignmentId)
         {

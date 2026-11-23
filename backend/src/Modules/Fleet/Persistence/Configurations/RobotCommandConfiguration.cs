@@ -17,6 +17,7 @@ public sealed class RobotCommandConfiguration : IEntityTypeConfiguration<RobotCo
         builder.Property(x => x.Outcome).HasMaxLength(40);
         builder.Property(x => x.ErrorCode).HasMaxLength(80);
         builder.Property(x => x.RejectReasonCode).HasMaxLength(80);
+        builder.Property(x => x.ResultJson).HasColumnType("jsonb");
 
         builder.HasIndex(x => x.RobotId);
         builder.HasIndex(x => x.Status);
