@@ -460,6 +460,7 @@ export function WarehouseMap({
 
   const basePxPerMetre = isOtto && stageSize.width > 0 && width > 0 ? stageSize.width / width : 110
   const ottoStrokeUnit = 1 / Math.max(20, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
+  const ottoHatchStep = 6.5 / Math.max(8, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
   const ottoRobotLenM = Math.max(ROBOT_LENGTH_METERS, 22 / Math.max(20, basePxPerMetre))
   const ottoRobotWidM = ottoRobotLenM * (ROBOT_WIDTH_METERS / ROBOT_LENGTH_METERS)
   const ottoEndpointSizeM = Math.max(0.18, Math.min(0.24, 21 / Math.max(20, basePxPerMetre)))
@@ -571,6 +572,23 @@ export function WarehouseMap({
           <defs>
             <pattern id="wmap-hatch" width="1" height="1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <line x1="0" y1="0" x2="0" y2="1" stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.55} strokeWidth="0.35" />
+            </pattern>
+            <pattern
+              id="wmap-otto-hatch"
+              width={ottoHatchStep}
+              height={ottoHatchStep}
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <line
+                x1={0}
+                y1={0}
+                x2={0}
+                y2={ottoHatchStep}
+                stroke={ZONE_COLOR.KEEP_OUT}
+                strokeOpacity={0.62}
+                strokeWidth={ottoHatchStep * 0.28}
+              />
             </pattern>
             <pattern id="wmap-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <circle cx="0" cy="0" r="0.09" fill={MAP_LINE} />
@@ -861,7 +879,9 @@ export function WarehouseMap({
                       {...paint}
                       {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 * mark } : null)}
                     />
-                    {zone.zoneType === 'KEEP_OUT' ? <polygon points={stagePoints(points)} fill="url(#wmap-hatch)" stroke="none" /> : null}
+                    {zone.zoneType === 'KEEP_OUT' ? (
+                      <polygon points={stagePoints(points)} fill={isOtto ? 'url(#wmap-otto-hatch)' : 'url(#wmap-hatch)'} stroke="none" />
+                    ) : null}
                     <circle
                       cx={X(anchor.x)}
                       cy={Y(anchor.y)}
