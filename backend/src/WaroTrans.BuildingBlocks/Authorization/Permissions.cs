@@ -106,6 +106,25 @@ public static class Permissions
     /// <summary>Issue robot recording credentials, read the access audit.</summary>
     public const string EvidenceAdmin = "evidence.admin";
 
+    // Incident investigation (WaroTrans.AI, a separate read-only service; the Host only checks these permissions)
+
+    /// <summary>See AI incident cases: anomaly, hypotheses with evidence, the drafted ticket.</summary>
+    public const string IncidentRead = "incident.read";
+
+    /// <summary>Start or repeat an AI investigation of a case and ask it grounded questions.</summary>
+    public const string IncidentInvestigate = "incident.investigate";
+
+    /// <summary>Approve an action the AI proposed (e.g. create the IssueReport); executed with the approver's own token.</summary>
+    public const string IncidentApprove = "incident.approve";
+
+    /// <summary>Record verification, close, dismiss or reopen a case.</summary>
+    public const string IncidentClose = "incident.close";
+
+    // Fault Injection Lab (test-only module, Lab:Enabled; never in production)
+
+    /// <summary>Run controlled fault experiments against lab robots. Admin only.</summary>
+    public const string LabOperate = "lab.operate";
+
     public static IReadOnlyList<string> All { get; } =
     [
         UserManage, ConsoleAccess,
@@ -117,6 +136,8 @@ public static class Permissions
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,
         StatisticsRead,
-        EvidenceRead, EvidencePlayback, EvidenceAnnotate, EvidenceExport, EvidenceAdmin
+        EvidenceRead, EvidencePlayback, EvidenceAnnotate, EvidenceExport, EvidenceAdmin,
+        IncidentRead, IncidentInvestigate, IncidentApprove, IncidentClose,
+        LabOperate
     ];
 }

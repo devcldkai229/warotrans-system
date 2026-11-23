@@ -487,8 +487,31 @@ public sealed partial class JobExecutionEngine
             .ToListAsync(cancellationToken))
         .ToHashSet();
 
-    private void LogGoalQueue(Job job, string stepKey, EndpointPoseSnapshot goal, string busy, EndpointPoseSnapshot? waitAt) =>
-        logger.LogInformation(
-            "Job {JobNo} {StepKey}: goal {Goal} is taken ({Busy}); robot waits {Where}",
-            job.JobNo, stepKey, goal.Code, busy, waitAt is null ? "where it stands" : $"at {waitAt.Code}");
+    private async Task LogGoalQueueAsync(Job job, Guid robotId, string stepKey, EndpointPoseSnapshot goal, string busy,
+        EndpointPoseSnapshot? waitAt, CancellationToken cancellationToken)
+    {
+        var where = waitAt is null ? "where it stands" : $"at {waitAt.Code}";
+        logger.LogInformation("Job {JobNo} {StepKey}: goal {Goal} is taken ({Busy}); robot waits {Where}",
+            job.JobNo, stepKey, goal.Code, busy, where);
+        await RecordTrafficDecisionAsync(robotId, "goal-wait",
+            $"job={job.JobNo}:goal={goal.Code}:busy={busy}:waits={(waitAt?.Code ?? "in-place")}", cancellationToken);
+    }
+
+    /// <summary>Evidence of a movement decision taken here (traffic records it; a failure never stops the Job).</summary>
+    private async Task RecordTrafficDecisionAsync(Guid robotId, string code, string detail, CancellationToken cancellationToken)
+    {
+        if (segmentedTraffic is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await segmentedTraffic.RecordDecisionAsync(robotId, code, detail, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Traffic decision {Code} for robot {Robot} not recorded", code, robotId);
+        }
+    }
 }

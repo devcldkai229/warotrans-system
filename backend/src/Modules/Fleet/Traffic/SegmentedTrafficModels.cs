@@ -93,7 +93,11 @@ public sealed record TrafficSnapshot(
     ImmutableArray<ResourceTrafficView> Resources,
     ImmutableArray<TrafficWaitDiagnostics> Waits,
     ImmutableArray<TrafficCycleDiagnostics> Cycles,
-    ImmutableArray<string> RecentEvents);
+    ImmutableArray<string> RecentEvents)
+{
+    /// <summary>Recent decisions in order (<see cref="TrafficDecision.Seq"/>); what the evidence tap records.</summary>
+    public ImmutableArray<TrafficDecision> Decisions { get; init; } = [];
+}
 
 public sealed record RoutePlanRequest(
     Guid RequestId,

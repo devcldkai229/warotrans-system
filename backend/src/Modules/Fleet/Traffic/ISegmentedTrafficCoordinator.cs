@@ -123,4 +123,7 @@ public interface ISegmentedTrafficCoordinator
         bool robotReportsIdle = true, CancellationToken ct = default);
 
     Task<TrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken ct = default);
+
+    /// <summary>Records a movement decision taken outside the coordinator (deadlock retreat, goal wait) as evidence.</summary>
+    Task RecordDecisionAsync(Guid robotId, string code, string detail, CancellationToken ct = default);
 }

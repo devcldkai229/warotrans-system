@@ -22,7 +22,11 @@ public sealed record TransportEventEnvelope(
     string? RobotCode,
     Guid? AssignmentId,
     string? SourceStatusCode,
-    JsonElement Payload);
+    JsonElement Payload)
+{
+    /// <summary>Optional source ordering (e.g. traffic decision number); absent from older producers.</summary>
+    public long? Sequence { get; init; }
+}
 
 public sealed record TransportEventBatch(IReadOnlyList<TransportEventEnvelope> Events);
 
@@ -45,18 +49,19 @@ public static class TransportEventTypes
     public const string RobotBatteryLow = "robot.battery-low";
     public const string RobotGatewayRestarted = "robot.gateway-restarted";
     public const string TrafficWaitChanged = "traffic.wait-changed";
+    public const string TrafficDecision = "traffic.decision";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         TransportRequestProgressed, TransportRequestClosed, JobStatusChanged, JobStepStatusChanged,
         JobContainerStatusChanged, JobRobotAssignmentChanged, RobotCommandLifecycle, RobotConnectivityChanged,
-        RobotErrorReported, RobotBatteryLow, RobotGatewayRestarted, TrafficWaitChanged
+        RobotErrorReported, RobotBatteryLow, RobotGatewayRestarted, TrafficWaitChanged, TrafficDecision
     };
 
     /// <summary>About one robot, not one trip: filed under the robot's run open at that time.</summary>
     public static bool IsRobotScoped(string eventType) =>
         eventType is RobotConnectivityChanged or RobotErrorReported or RobotBatteryLow or RobotGatewayRestarted
-            or TrafficWaitChanged;
+            or TrafficWaitChanged or TrafficDecision;
 }
 
 /// <summary>What the monolith's reconciliation API (GET /api/evidence-bridge/transport-requests/{id}/runs) returns.</summary>

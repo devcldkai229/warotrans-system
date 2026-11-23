@@ -2374,6 +2374,8 @@ public sealed partial class JobExecutionEngine(
             logger.LogWarning(
                 "Deadlock: robot {Robot} (job {JobNo}) and robot {Winner} waited for each other; {Robot} backs off to {Endpoint}",
                 robot.Code, job.JobNo, winner.Code, robot.Code, pose.Code);
+            await RecordTrafficDecisionAsync(robotId, "deadlock-retreat",
+                $"job={job.JobNo}:waited-for={winner.Code}:to={pose.Code}", cancellationToken);
             return true;
         }
         finally
@@ -2781,7 +2783,7 @@ public sealed partial class JobExecutionEngine(
                         {
                             if (!waitingAlready)
                             {
-                                LogGoalQueue(job, stepKey, pose, goalBusy.Reason, waitAt);
+                                await LogGoalQueueAsync(job, robotId, stepKey, pose, goalBusy.Reason, waitAt, cancellationToken);
                             }
 
                             step.OutputValues = AreaWaitOutputs(step.OutputValues, queueSince.Value, zone, goalBusy.Reason, now);
@@ -2797,7 +2799,7 @@ public sealed partial class JobExecutionEngine(
 
                         queueZone = zone;
                         goal = waitAt;
-                        LogGoalQueue(job, stepKey, pose, goalBusy.Reason, waitAt);
+                        await LogGoalQueueAsync(job, robotId, stepKey, pose, goalBusy.Reason, waitAt, cancellationToken);
                     }
 
                     // Goal only — robot Nav2 plans; grant arrives after traffic_plan uplink.

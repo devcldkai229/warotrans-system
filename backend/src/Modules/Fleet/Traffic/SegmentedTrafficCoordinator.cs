@@ -351,6 +351,13 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     public Task<TrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken ct = default) =>
         EnqueueAsync(s => s.Snapshot(), ct);
 
+    public Task RecordDecisionAsync(Guid robotId, string code, string detail, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            s.RecordDecision(robotId, code, detail);
+            return true;
+        }, ct);
+
     private async Task<T> EnqueueAsync<T>(Func<TrafficState, T> action, CancellationToken ct)
     {
         EnsureStarted();

@@ -15,6 +15,8 @@ public sealed class TrafficState
     private readonly Dictionary<string, List<Waiter>> _queues = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, AcquireResult> _idempotency = new();
     private readonly Queue<string> _events;
+    private readonly Queue<TrafficDecision> _decisions;
+    private long _decisionSeq;
     private readonly int _eventCap;
     private CompiledTrafficGraph? _graph;
     private SemanticTrafficPolicy? _semantic;
@@ -35,6 +37,7 @@ public sealed class TrafficState
         _clock = clock ?? TimeProvider.System;
         _eventCap = Math.Max(16, options.EventLogCapacity);
         _events = new Queue<string>(_eventCap);
+        _decisions = new Queue<TrafficDecision>(_eventCap);
         _open = !options.RequireCoordinatorLease;
         Epoch = 1;
         Phase = "Reconciling";
@@ -2138,8 +2141,14 @@ public sealed class TrafficState
             resourceViews,
             waits,
             cycles,
-            _events.ToImmutableArray());
+            _events.ToImmutableArray())
+        {
+            Decisions = _decisions.ToImmutableArray(),
+        };
     }
+
+    /// <summary>A decision taken outside the coordinator about a robot's movement (deadlock retreat, goal wait).</summary>
+    public void RecordDecision(Guid robotId, string code, string detail) => Log($"{code}:{robotId}:{detail}");
 
     /// <summary>
     /// What the map draws of a robot's Nav2 plan: the part still ahead of its pose (thinned to ~5 cm steps) while it
@@ -2862,7 +2871,17 @@ public sealed class TrafficState
             _events.Dequeue();
         }
 
-        _events.Enqueue($"{_clock.GetUtcNow():O}|{message}");
+        var now = _clock.GetUtcNow();
+        _events.Enqueue($"{now:O}|{message}");
+        if (TrafficDecisionClassifier.TryClassify(message, out var d))
+        {
+            if (_decisions.Count >= _eventCap)
+            {
+                _decisions.Dequeue();
+            }
+
+            _decisions.Enqueue(new TrafficDecision(++_decisionSeq, now, d.RobotId, d.Kind, d.Code, d.Severity, d.Detail));
+        }
     }
 
     private sealed class RobotRuntime(Guid robotId)
