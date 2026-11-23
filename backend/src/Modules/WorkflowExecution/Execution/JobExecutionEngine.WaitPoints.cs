@@ -173,6 +173,12 @@ public sealed partial class JobExecutionEngine
                     return ($"{other.Code} is pulling out of it", other.Id);
                 }
             }
+
+            // A goal at the end of a narrow way is taken in turn: busy while another robot with work is in its box.
+            if (InGoalCorridor(goal.Code, other.PoseX, other.PoseY))
+            {
+                return ($"{other.Code} is in the {goal.Code} corridor", other.Id);
+            }
         }
 
         // Robots without work: standing on the goal, or on their way off it (making way / going to park).
@@ -236,9 +242,14 @@ public sealed partial class JobExecutionEngine
         bool MayStop(double x, double y) =>
             policy.NoStopZones.IsDefaultOrEmpty || !policy.NoStopZones.Any(z => SemanticReservation.DiscHitsZone(x, y, stopRadius, z.Ring));
 
-        // 1. Where it stands.
-        if (Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y) >= QueueGoalClearanceMeters
-            && MayStop(robot.PoseX, robot.PoseY) && OffWay(robot.PoseX, robot.PoseY, robot.PoseYaw))
+        // 1. Where it stands, unless the goal has its own queue point (then it waits there, see 2a).
+        var goalHasQueue = freeEndpoints?.GoalQueues.ContainsKey(goal.Code) == true;
+        // With a corridor (FleetIdle:GoalCorridors) "clear" also means outside it: inside, it is in the way of the robot
+        // that comes out, whatever the cells say.
+        var standsClear = Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y) >= QueueGoalClearanceMeters
+                          && MayStop(robot.PoseX, robot.PoseY) && OffWay(robot.PoseX, robot.PoseY, robot.PoseYaw)
+                          && !InGoalCorridor(goal.Code, robot.PoseX, robot.PoseY);
+        if (standsClear && !goalHasQueue)
         {
             return null;
         }
@@ -274,11 +285,30 @@ public sealed partial class JobExecutionEngine
             e.IsEnabled && e.EndpointType != EndpointType.CHARGER && e.Id != goal.Id && !targets.Contains(e.Id)
             && robots.All(r => Dist(e.X, e.Y, r.PoseX, r.PoseY) > Math.Max(GoalOccupiedRadiusMeters, e.PositionTolerance));
         bool Fits(EndpointPoseWithType e) =>
-            Dist(e.X, e.Y, goal.X, goal.Y) >= QueueGoalClearanceMeters && MayStop(e.X, e.Y) && OffWay(e.X, e.Y, e.Yaw);
+            Dist(e.X, e.Y, goal.X, goal.Y) >= QueueGoalClearanceMeters && MayStop(e.X, e.Y) && OffWay(e.X, e.Y, e.Yaw)
+            && !InGoalCorridor(goal.Code, e.X, e.Y);
 
-        // 2. The queue point nearest to the goal, if it serves that goal (close to it): a queue point across the floor is
+        // 2a. The queue point configured for this goal (FleetIdle:GoalQueueEndpoints), e.g. EP-INBOUND=EP-QUEUE-B: the
+        // INBOUND bay is a dead end, so its queue stands outside, on the way in. It counts as out of the way also when the
+        // other robot is already closer to the goal than the queue point is (it has driven past it).
+        var otherToGoal = other is null ? double.PositiveInfinity : Dist(other.PoseX, other.PoseY, goal.X, goal.Y);
+        var place = freeEndpoints?.GoalQueues.TryGetValue(goal.Code, out var queueCode) == true
+            ? endpoints.FirstOrDefault(e => string.Equals(e.Code, queueCode, StringComparison.OrdinalIgnoreCase)
+                                            && Free(e) && MayStop(e.X, e.Y)
+                                            && Dist(e.X, e.Y, goal.X, goal.Y) >= QueueGoalClearanceMeters
+                                            && !InGoalCorridor(goal.Code, e.X, e.Y)
+                                            && (OffWay(e.X, e.Y, e.Yaw) || otherToGoal + 0.30 < Dist(e.X, e.Y, goal.X, goal.Y)))
+            : null;
+
+        // A goal with its own queue point that cannot be used right now: wait where it stands if that is clear.
+        if (place is null && goalHasQueue && standsClear)
+        {
+            return null;
+        }
+
+        // 2b. The queue point nearest to the goal, if it serves that goal (close to it): a queue point across the floor is
         // no place to wait for a shelf (sim 2026-11-23: a drop-off at EP-SHELF-C-1 waited at Queue B next to INBOUND).
-        var place = endpoints
+        place ??= endpoints
             .Where(e => e.EndpointType == EndpointType.QUEUE && Free(e) && Fits(e)
                         && Dist(e.X, e.Y, goal.X, goal.Y) <= QueueServesGoalMeters)
             .OrderBy(e => Dist(e.X, e.Y, goal.X, goal.Y))
@@ -300,7 +330,8 @@ public sealed partial class JobExecutionEngine
         // (MAP-ONE-V015) stood on the only way out of the INBOUND dead end; the robot at INBOUND waited for its cells
         // and it waited for INBOUND: no traffic cycle, so no deadlock retreat ever freed them (sim, 2026-11-23).
         if (other is not null
-            && await YieldSpotAsync(robot, other, goal, robots, cancellationToken, maxRadius: GoalYieldSpotMaxMeters) is { } spot)
+            && await YieldSpotAsync(robot, other, goal, robots, cancellationToken, maxRadius: GoalYieldSpotMaxMeters) is { } spot
+            && !InGoalCorridor(goal.Code, spot.X, spot.Y))
         {
             return new EndpointPoseSnapshot(Guid.Empty, job.MapVersionId,
                 FormattableString.Invariant($"spot ({spot.X:F2}, {spot.Y:F2})"), spot.X, spot.Y, spot.Yaw, true, RetreatArrivalToleranceMeters);
@@ -308,6 +339,11 @@ public sealed partial class JobExecutionEngine
 
         return null;
     }
+
+    /// <summary>Inside the box robots take in turn for <paramref name="goalCode"/> (FleetIdle:GoalCorridors); false without one.</summary>
+    private bool InGoalCorridor(string goalCode, double x, double y) =>
+        freeEndpoints?.GoalCorridors.TryGetValue(goalCode, out var b) == true
+        && x >= b.MinX && x <= b.MaxX && y >= b.MinY && y <= b.MaxY;
 
     /// <summary>How far a robot waiting for its goal looks for free floor to step aside to (out of a dead end).</summary>
     public const double GoalYieldSpotMaxMeters = 2.0;

@@ -43,9 +43,13 @@ $repo = Split-Path -Parent $PSScriptRoot
 $logs = Join-Path $repo ".logs"
 New-Item -ItemType Directory -Force $logs | Out-Null
 
+# Real robots upload trajectory, plans and camera clips to the Recorder from the LAN (lab 2026-11-24: the "http" profile
+# listened on localhost only, every robot upload timed out and the journals had no path).
+$recorderProfile = if ($HostProfile -eq "RealRobot") { "lan" } else { "http" }
+
 $services = @(
   @{ Name = "host";     Project = "backend\src\WaroTrans.Host";                   Match = "WaroTrans.Host";              Port = 5090; Profile = $HostProfile; Evidence = $false },
-  @{ Name = "recorder"; Project = "backend\src\WaroTrans.Evidence\Recorder";      Match = "WaroTrans.Evidence.Recorder"; Port = 5095; Profile = "http";       Evidence = $true },
+  @{ Name = "recorder"; Project = "backend\src\WaroTrans.Evidence\Recorder";      Match = "WaroTrans.Evidence.Recorder"; Port = 5095; Profile = $recorderProfile; Evidence = $true },
   @{ Name = "worker";   Project = "backend\src\WaroTrans.Evidence\Worker";        Match = "WaroTrans.Evidence.Worker";   Port = 5096; Profile = "http";       Evidence = $true }
 )
 if ($NoEvidence) { $services = @($services | Where-Object { -not $_.Evidence }) }

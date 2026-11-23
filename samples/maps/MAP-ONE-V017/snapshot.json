@@ -633,7 +633,7 @@
             "code": "EP-QUEUE-A",
             "name": "Queue A",
             "is_enabled": true,
-            "endpoint_type": "WAYPOINT",
+            "endpoint_type": "QUEUE",
             "yaw_tolerance": 0.0873,
             "map_version_id": "1b57f9d4-525e-43d4-9357-276636621406",
             "position_tolerance": 0.08,
@@ -644,7 +644,7 @@
             "x": 1.759,
             "y": 0.591,
             "id": "24ef8d75-0c5e-4ff9-9595-a2b0d7d69333",
-            "yaw": 1.5707963267948966,
+            "yaw": 1.5708,
             "code": "EP-QUEUE-B",
             "name": "Queue B",
             "is_enabled": true,
@@ -716,7 +716,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-22T20:55:06.268777+00:00",
+    "exportedAt": "2026-11-23T05:54:29.758499+00:00",
     "mapVersion": {
         "id": "1b57f9d4-525e-43d4-9357-276636621406",
         "code": "MAP-ONE-V017",
