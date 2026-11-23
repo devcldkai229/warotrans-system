@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
   type PointerEvent,
+  type ViewStyle,
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
@@ -143,6 +145,14 @@ const PRESET_OPTIONS = [
   { label: 'Minimal', value: 'minimal' },
   { label: 'SLAM / Grid', value: 'technical' },
 ] as const;
+
+const WEB_HUD_GLASS_STYLE: ViewStyle | null =
+  Platform.OS === 'web'
+    ? ({
+        backdropFilter: 'blur(20px) saturate(170%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(170%)',
+      } as unknown as ViewStyle)
+    : null;
 
 function SheetContainer({
   inline,
@@ -1102,67 +1112,51 @@ function MapCanvas({
         <View
           style={[
             styles.inspectCard,
+            WEB_HUD_GLASS_STYLE,
             {
               bottom: inspectBottom,
               right: 12,
             },
           ]}
         >
-          {inspected.kind === 'zone' ? (
-            <>
+          <View style={styles.inspectBody}>
+            <View style={styles.inspectHeader}>
               <View
                 style={[
-                  styles.inspectAccent,
-                  { backgroundColor: zoneColor(inspected.zone.zoneType) },
+                  styles.inspectDot,
+                  {
+                    backgroundColor:
+                      inspected.kind === 'zone' ? zoneColor(inspected.zone.zoneType) : LANE_BLUE,
+                  },
                 ]}
               />
-              <View style={styles.inspectBody}>
-                <View style={styles.inspectHeader}>
-                  <Text variant="bodyMedium" fontWeight="700" numberOfLines={1} style={styles.inspectTitle}>
-                    {inspected.zone.name || inspected.zone.code}
-                  </Text>
-                  <View
-                    style={[
-                      styles.inspectBadge,
-                      { backgroundColor: `${zoneColor(inspected.zone.zoneType)}22` },
-                    ]}
-                  >
-                    <Text
-                      variant="caption"
-                      fontWeight="700"
-                      style={{ color: zoneColor(inspected.zone.zoneType), fontSize: 11 }}
-                    >
-                      {zoneLabel(inspected.zone.zoneType)}
-                    </Text>
-                  </View>
-                </View>
-                <Text variant="caption" color="textSecondary" numberOfLines={2}>
-                  {ZONE_DESCRIPTION[inspected.zone.zoneType] ?? zoneShortBadge(inspected.zone)}
-                  {inspected.zone.maxSpeed != null ? ` · Max ${inspected.zone.maxSpeed} m/s` : ''}
+              <Text variant="bodyMedium" fontWeight="600" numberOfLines={1} style={styles.inspectTitle}>
+                {inspected.kind === 'zone'
+                  ? inspected.zone.name || inspected.zone.code
+                  : inspected.edge.name || inspected.edge.code}
+              </Text>
+              <View style={styles.inspectBadge}>
+                <Text variant="caption" color="textSecondary" style={styles.inspectBadgeText}>
+                  {inspected.kind === 'zone'
+                    ? zoneLabel(inspected.zone.zoneType)
+                    : inspected.edge.direction === 'ONE_WAY'
+                    ? 'One-way lane'
+                    : 'Two-way lane'}
                 </Text>
               </View>
-            </>
-          ) : (
-            <>
-              <View style={[styles.inspectAccent, { backgroundColor: LANE_BLUE }]} />
-              <View style={styles.inspectBody}>
-                <View style={styles.inspectHeader}>
-                  <Text variant="bodyMedium" fontWeight="700" numberOfLines={1} style={styles.inspectTitle}>
-                    {inspected.edge.name || inspected.edge.code}
-                  </Text>
-                  <View style={[styles.inspectBadge, { backgroundColor: colors.infoBg }]}>
-                    <Text variant="caption" fontWeight="700" color="infoText" style={{ fontSize: 11 }}>
-                      {inspected.edge.direction === 'ONE_WAY' ? 'One-way lane' : 'Two-way lane'}
-                    </Text>
-                  </View>
-                </View>
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                  Width {(inspected.edge.widthMeters || 1).toFixed(1)} m
-                  {inspected.edge.maxSpeed != null ? ` · Max ${inspected.edge.maxSpeed} m/s` : ''}
-                </Text>
-              </View>
-            </>
-          )}
+            </View>
+            {inspected.kind === 'zone' ? (
+              <Text variant="caption" color="textSecondary" numberOfLines={2}>
+                {ZONE_DESCRIPTION[inspected.zone.zoneType] ?? zoneShortBadge(inspected.zone)}
+                {inspected.zone.maxSpeed != null ? ` · Max ${inspected.zone.maxSpeed} m/s` : ''}
+              </Text>
+            ) : (
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                Width {(inspected.edge.widthMeters || 1).toFixed(1)} m
+                {inspected.edge.maxSpeed != null ? ` · Max ${inspected.edge.maxSpeed} m/s` : ''}
+              </Text>
+            )}
+          </View>
           <Pressable
             onPress={() => setInspected(null)}
             accessibilityRole="button"
@@ -1192,7 +1186,7 @@ function MapCanvas({
           />
 
           {state && (following || state.lastReported) ? (
-            <View style={styles.telemetryChip}>
+            <View style={[styles.telemetryChip, WEB_HUD_GLASS_STYLE]}>
               <Text
                 variant="caption"
                 color={state.lastReported ? 'warningText' : 'textSecondary'}
@@ -1390,7 +1384,7 @@ function MapCanvas({
                                 <View style={styles.robotIconBox}>
                                   <Bot
                                     size={18}
-                                    color={r.isOnline ? colors.primaryText : colors.textMuted}
+                                    color={r.isOnline ? colors.textPrimary : colors.textMuted}
                                   />
                                 </View>
                                 <View style={styles.robotInfo}>
@@ -1652,40 +1646,30 @@ function MapCanvas({
                 </View>
 
                 <View style={styles.specBox}>
-                  <View style={styles.specRow}>
-                    <Text variant="caption" color="textSecondary">
-                      Position X
+                  <View style={styles.specCell}>
+                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
+                      X
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      fontWeight="700"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {endpoint.x.toFixed(3)} m
+                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
+                      {`${endpoint.x.toFixed(2)} m`}
                     </Text>
                   </View>
-                  <View style={styles.specRow}>
-                    <Text variant="caption" color="textSecondary">
-                      Position Y
+                  <View style={styles.specDividerV} />
+                  <View style={styles.specCell}>
+                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
+                      Y
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      fontWeight="700"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {endpoint.y.toFixed(3)} m
+                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
+                      {`${endpoint.y.toFixed(2)} m`}
                     </Text>
                   </View>
-                  <View style={styles.specRow}>
-                    <Text variant="caption" color="textSecondary">
-                      Orientation Yaw
+                  <View style={styles.specDividerV} />
+                  <View style={styles.specCell}>
+                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
+                      Yaw
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      fontWeight="700"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {((endpoint.yaw * 180) / Math.PI).toFixed(1)}° ({endpoint.yaw.toFixed(3)} rad)
+                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
+                      {`${((endpoint.yaw * 180) / Math.PI).toFixed(1)}°`}
                     </Text>
                   </View>
                 </View>
@@ -1720,26 +1704,12 @@ function MapCanvas({
             ) : sheet === 'robot' && robot && state ? (
               /* Robot Detail View */
               <View style={styles.detailContainer}>
-                <View
-                  style={[
-                    styles.robotHero,
-                    { borderColor: robot.isOnline ? colors.successBorder : colors.borderStrong },
-                  ]}
-                >
+                <View style={styles.robotHero}>
                   <View style={styles.robotHeroTop}>
-                    <View
-                      style={[
-                        styles.robotAvatar,
-                        { backgroundColor: (ROBOT_COLOR[robot.status] ?? colors.textMuted) + '22' },
-                      ]}
-                    >
+                    <View style={styles.robotAvatar}>
                       <Bot
-                        size={24}
-                        color={
-                          robot.isOnline
-                            ? ROBOT_COLOR[robot.status] ?? colors.primaryText
-                            : colors.textMuted
-                        }
+                        size={20}
+                        color={robot.isOnline ? colors.textPrimary : colors.textMuted}
                       />
                     </View>
                     <View style={styles.detailHeroText}>
@@ -1758,7 +1728,7 @@ function MapCanvas({
                   </View>
                   <View style={styles.robotStats}>
                     <View style={styles.robotStat}>
-                      <Text variant="caption" color="textSecondary">
+                      <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
                         Battery
                       </Text>
                       <BatteryIndicator
@@ -1768,20 +1738,24 @@ function MapCanvas({
                         bar
                       />
                     </View>
+                    <View style={styles.robotStatDivider} />
                     <View style={styles.robotStat}>
-                      <Text variant="caption" color="textSecondary">
+                      <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
                         Status
                       </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={styles.robotStatValueRow}>
                         <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted,
-                          }}
+                          style={[
+                            styles.robotStatusDot,
+                            { backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted },
+                          ]}
                         />
-                        <Text variant="bodyMedium" fontWeight="700" numberOfLines={1}>
+                        <Text
+                          variant="bodyMedium"
+                          fontWeight="600"
+                          numberOfLines={1}
+                          style={styles.robotStatValue}
+                        >
                           {robotStatusLabel(robot.status)}
                         </Text>
                       </View>
@@ -1873,27 +1847,64 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     smallState: { position: 'absolute', left: 24, right: 24, justifyContent: 'center' },
     station: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 20 },
     robotHero: {
-      borderWidth: 1.5,
-      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      borderCurve: 'continuous',
       padding: 14,
-      gap: 14,
-      backgroundColor: colors.surface,
+      gap: 12,
+      backgroundColor: colors.surfaceSubtle,
     },
     robotHeroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     robotAvatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 14,
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    robotStats: { flexDirection: 'row', gap: 8 },
+    robotStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderCurve: 'continuous',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
     robotStat: {
       flex: 1,
+      gap: 5,
+    },
+    robotStatDivider: {
+      width: StyleSheet.hairlineWidth,
+      height: 28,
+      backgroundColor: colors.border,
+      marginHorizontal: 12,
+    },
+    robotStatLabel: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '500',
+    },
+    robotStatValueRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: 6,
-      padding: 10,
-      borderRadius: 12,
-      backgroundColor: colors.surfaceSubtle,
+    },
+    robotStatusDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 3.5,
+    },
+    robotStatValue: {
+      fontSize: 13,
+      lineHeight: 17,
+      flexShrink: 1,
     },
 
     topLeftHud: {
@@ -1998,18 +2009,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: radii.lg,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+      borderRadius: 16,
+      borderCurve: 'continuous',
       borderWidth: 1,
-      backgroundColor: colors.mapHudBg,
-      borderColor: colors.mapHudBorder,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.90)' : 'rgba(255, 255, 255, 0.92)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       ...shadows.md,
-    },
-    inspectAccent: {
-      width: 4,
-      alignSelf: 'stretch',
-      borderRadius: 2,
     },
     inspectBody: {
       flex: 1,
@@ -2019,8 +2026,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     inspectHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 7,
       flexWrap: 'wrap',
+    },
+    inspectDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      flexShrink: 0,
     },
     inspectTitle: {
       flexShrink: 1,
@@ -2028,7 +2041,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     inspectBadge: {
       paddingHorizontal: 7,
       paddingVertical: 1.5,
-      borderRadius: 6,
+      borderRadius: 999,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)',
+    },
+    inspectBadgeText: {
+      fontSize: 10.5,
+      fontWeight: '600',
     },
     inspectClose: {
       width: 28,
@@ -2036,7 +2054,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.surfaceSubtle,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
     },
 
     footer: {
@@ -2053,8 +2071,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
-      backgroundColor: colors.mapHudBg,
-      borderColor: colors.mapHudBorder,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       ...shadows.sm,
     },
 
@@ -2256,16 +2274,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 12,
     },
     robotCardSelected: {
-      backgroundColor: colors.primaryLight,
-      borderColor: colors.primaryBorder,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.05)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(18, 19, 23, 0.16)',
     },
     robotIconBox: {
       width: 36,
       height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 10,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2305,15 +2322,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       minHeight: 52,
     },
     stationItemSelected: {
-      backgroundColor: colors.primaryLight,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.05)',
     },
     stationIconBox: {
       width: 32,
       height: 32,
-      borderRadius: 16,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 9,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2328,12 +2344,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 8,
     },
     typeTag: {
-      backgroundColor: colors.surface,
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      borderRadius: 4,
-      borderWidth: 1,
-      borderColor: colors.border,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
+      paddingHorizontal: 6.5,
+      paddingVertical: 1.5,
+      borderRadius: 999,
     },
 
     // Empty Card
@@ -2349,25 +2363,25 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
 
     // Detail Views
     detailContainer: {
-      gap: 16,
+      gap: 14,
     },
     detailHeroCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 14,
-      padding: 16,
+      gap: 12,
+      padding: 14,
       backgroundColor: colors.surfaceSubtle,
-      borderRadius: radii.lg,
+      borderRadius: 16,
+      borderCurve: 'continuous',
       borderWidth: 1,
       borderColor: colors.border,
     },
     detailHeroIconBox: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+      width: 40,
+      height: 40,
+      borderRadius: 11,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2377,17 +2391,37 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 2,
     },
     specBox: {
-      backgroundColor: colors.surfaceSubtle,
-      padding: 14,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 10,
-    },
-    specRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 14,
+      borderCurve: 'continuous',
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 12,
+      paddingHorizontal: 6,
+    },
+    specCell: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 3,
+    },
+    specCellLabel: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '500',
+    },
+    specCellValue: {
+      fontSize: 13.5,
+      lineHeight: 18,
+      fontWeight: '700',
+      fontFamily: typography.fontMono,
+      fontVariant: ['tabular-nums'],
+    },
+    specDividerV: {
+      width: StyleSheet.hairlineWidth,
+      height: 26,
+      backgroundColor: colors.border,
     },
     detailActions: {
       gap: 10,

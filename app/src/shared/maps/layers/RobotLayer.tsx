@@ -86,13 +86,13 @@ const RobotInteractiveOverlay = memo(function RobotInteractiveOverlay({
           style={[
             styles.tag,
             styles.tagDefault,
-            isSelected && { backgroundColor: tone, borderColor: tone },
+            isSelected && styles.tagSelected,
           ]}
         >
           <View
             style={[
               styles.tagDot,
-              { backgroundColor: isSelected ? '#ffffff' : tone },
+              { backgroundColor: tone },
             ]}
           />
           <Text
@@ -290,17 +290,32 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     tag: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 5,
-      paddingVertical: 1,
-      borderRadius: 5,
+      gap: 4.5,
+      paddingHorizontal: 6.5,
+      paddingVertical: 2,
+      borderRadius: 999,
       borderWidth: 1,
     },
     tagDefault: {
       backgroundColor: colors.mapLabelBg,
       borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : colors.mapHudBorder,
     },
+    tagSelected: {
+      backgroundColor: isDark ? '#F3F4F6' : '#18191B',
+      borderColor: isDark ? '#FFFFFF' : 'rgba(255, 255, 255, 0.16)',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.36 : 0.18,
+      shadowRadius: 4,
+      elevation: 3,
+    },
     tagDot: { width: 4.5, height: 4.5, borderRadius: 2.25 },
-    tagText: { fontSize: 9.5, lineHeight: 12, color: colors.textPrimary },
-    tagTextSelected: { color: '#ffffff' },
+    tagText: {
+      fontSize: 9.5,
+      lineHeight: 12,
+      fontVariant: ['tabular-nums'],
+      letterSpacing: 0.15,
+      color: colors.textPrimary,
+    },
+    tagTextSelected: { color: isDark ? '#111317' : '#FFFFFF' },
   });

@@ -48,6 +48,7 @@ export function MapControl({
       onPress={onPress}
       style={({ pressed }) => [
         styles.control,
+        WEB_HUD_GLASS_STYLE,
         { width, height },
         style,
         selected && styles.selected,
@@ -98,6 +99,14 @@ function ClusterButton({
 }
 
 const PULSE_EASE_OUT = Easing.out(Easing.cubic);
+
+const WEB_HUD_GLASS_STYLE: ViewStyle | null =
+  Platform.OS === 'web'
+    ? ({
+        backdropFilter: 'blur(18px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+      } as unknown as ViewStyle)
+    : null;
 
 function formatMapBaseCode(mapCode: string, versionNo: number): string {
   const trimmed = mapCode.trim();
@@ -185,18 +194,10 @@ export function MapTopStatusPill({
 
   const baseCode = formatMapBaseCode(mapCode, versionNo);
 
-  const webGlassStyle: ViewStyle | null =
-    Platform.OS === 'web'
-      ? ({
-          backdropFilter: 'blur(16px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-        } as unknown as ViewStyle)
-      : null;
-
   return (
     <View style={styles.topLeftStack} pointerEvents="box-none">
       <View
-        style={[styles.statusPill, webGlassStyle]}
+        style={[styles.statusPill, WEB_HUD_GLASS_STYLE]}
         pointerEvents="none"
       >
         <View style={styles.statusGroup}>
@@ -301,12 +302,13 @@ export function MapToolCluster({
   onLegend: () => void;
   onFollow: () => void;
 }) {
-  const colors = useThemeColors();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const iconSize = horizontal ? 16 : 17;
+  const selectedIconColor = isDark ? '#18191A' : '#FFFFFF';
 
   return (
-    <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
+    <View style={[styles.clusterPill, WEB_HUD_GLASS_STYLE, horizontal && styles.clusterRow]}>
       <ClusterButton label="Map layers and locations" compact={horizontal} onPress={onLayers}>
         <Layers size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
@@ -314,7 +316,7 @@ export function MapToolCluster({
       <ClusterButton label="Map legend" compact={horizontal} selected={legendOpen} onPress={onLegend}>
         <BookOpen
           size={iconSize}
-          color={legendOpen ? colors.primaryText : colors.textPrimary}
+          color={legendOpen ? selectedIconColor : colors.textPrimary}
           strokeWidth={1.85}
         />
       </ClusterButton>
@@ -330,7 +332,7 @@ export function MapToolCluster({
           >
             <LocateFixed
               size={iconSize}
-              color={following ? colors.primaryText : colors.textPrimary}
+              color={following ? selectedIconColor : colors.textPrimary}
               strokeWidth={1.85}
             />
           </ClusterButton>
@@ -356,7 +358,7 @@ export function MapCameraCluster({
   const iconSize = horizontal ? 16 : 17;
 
   return (
-    <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
+    <View style={[styles.clusterPill, WEB_HUD_GLASS_STYLE, horizontal && styles.clusterRow]}>
       <ClusterButton label="Zoom in" compact={horizontal} disabled={zoom >= 8} onPress={() => onZoom(2)}>
         <Plus size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
@@ -431,7 +433,7 @@ export function MapOrientationBox({
     value !== null && Number.isFinite(value) ? `${value.toFixed(2)} m` : '--';
 
   return (
-    <View style={[styles.orientBox, compact && styles.orientBoxCompact]}>
+    <View style={[styles.orientBox, WEB_HUD_GLASS_STYLE, compact && styles.orientBoxCompact]}>
       <View style={styles.reticleWrap}>
         <Text variant="caption" maxFontSizeMultiplier={1.15} style={styles.orientDeg}>
           0°
@@ -506,11 +508,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 12,
-      backgroundColor: colors.mapHudBg,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
     },
-    selected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+    selected: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(18, 19, 23, 0.08)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.24)' : 'rgba(18, 19, 23, 0.18)',
+    },
     pressed: { opacity: 0.78 },
     pressedScale: { opacity: 0.85, transform: [{ scale: 0.94 }] },
     disabled: { opacity: 0.36 },
@@ -614,9 +619,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     clusterPill: {
       borderRadius: 23,
       padding: 3,
-      backgroundColor: colors.mapHudBg,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       alignItems: 'center',
       ...shadows.md,
     },
@@ -637,7 +642,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderRadius: 18,
     },
     clusterBtnSelected: {
-      backgroundColor: colors.primaryLight,
+      backgroundColor: isDark ? '#E4E6EB' : '#1C1C1E',
     },
     dividerH: {
       width: 22,
@@ -653,19 +658,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
 
     orientBox: {
-      borderRadius: 6,
+      borderRadius: 14,
+      borderCurve: 'continuous',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
-      backgroundColor: colors.mapHudBg,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
+      paddingHorizontal: 10,
+      paddingVertical: 7,
       minWidth: 84,
       gap: 4,
       ...shadows.sm,
     },
     orientBoxCompact: {
-      paddingHorizontal: 7,
-      paddingVertical: 5,
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
       minWidth: 74,
       gap: 3,
     },

@@ -4,8 +4,8 @@ import { Check, Crosshair } from 'lucide-react-native';
 import type { EndpointDto } from '../api/navigationApi';
 import { getUserErrorMessage } from '../api/client';
 import type { ThemeColors } from '../theme/colors';
+import type { ThemeShadows } from '../theme/shadows';
 import { useThemedStyles } from '../theme/ThemeContext';
-import { radii } from '../theme/radii';
 import { typography } from '../theme/typography';
 import { Button, Text } from '../ui';
 import { localizeEndpointOptions } from './localizeOptions';
@@ -53,17 +53,46 @@ export function RobotLocalizePanel({ robotCode, isOnline, localizationStatus, ma
       ) : (
         <>
           <Text variant="caption" color={colors.textSecondary}>Where does {robotCode} stand right now? Pick the point it was placed on.</Text>
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent} nestedScrollEnabled>
-            {options.map(endpoint => (
-              <Pressable key={endpoint.id} onPress={() => setSelected(endpoint.id)} accessibilityRole="radio"
-                accessibilityState={{ selected: endpoint.id === selected }} accessibilityLabel={`Endpoint ${endpoint.code}`}
-                style={[styles.option, endpoint.id === selected && styles.optionOn]}>
-                <Text variant="bodyMedium" style={styles.code}>{endpoint.code}</Text>
-                {endpoint.id === selected ? <Check size={16} color={colors.primaryText} /> : null}
-              </Pressable>
-            ))}
-            {!options.length ? <Text variant="caption">This map has no enabled points.</Text> : null}
-          </ScrollView>
+          <View style={styles.listWrap}>
+            <ScrollView style={styles.list} nestedScrollEnabled>
+              {options.map((endpoint, idx) => {
+                const isSelected = endpoint.id === selected;
+                const isLast = idx === options.length - 1;
+                return (
+                  <View key={endpoint.id}>
+                    <Pressable
+                      onPress={() => setSelected(endpoint.id)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Endpoint ${endpoint.code}`}
+                      style={({ pressed }) => [
+                        styles.option,
+                        isSelected && styles.optionOn,
+                        pressed && styles.optionPressed,
+                      ]}
+                    >
+                      <Text
+                        variant="bodyMedium"
+                        fontWeight={isSelected ? '600' : '500'}
+                        style={styles.code}
+                      >
+                        {endpoint.code}
+                      </Text>
+                      {isSelected ? <Check size={15} color={colors.textPrimary} strokeWidth={2.2} /> : null}
+                    </Pressable>
+                    {!isLast ? <View style={styles.divider} /> : null}
+                  </View>
+                );
+              })}
+              {!options.length ? (
+                <View style={styles.emptyWrap}>
+                  <Text variant="caption" color={colors.textSecondary}>
+                    This map has no enabled points.
+                  </Text>
+                </View>
+              ) : null}
+            </ScrollView>
+          </View>
           <Button title={chosen ? `Localize At ${chosen.code}` : 'Pick A Point'} variant="primary" size="md" fullWidth
             disabled={!chosen || !isOnline} loading={busy} onPress={send} />
           <Button title="Close" variant="ghost" size="md" fullWidth onPress={() => setOpen(false)} disabled={busy} />
@@ -75,12 +104,33 @@ export function RobotLocalizePanel({ robotCode, isOnline, localizationStatus, ma
   );
 }
 
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) => StyleSheet.create({
   box: { gap: 8 },
+  listWrap: {
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    overflow: 'hidden',
+  },
   list: { maxHeight: 260 },
-  listContent: { gap: 6 },
-  option: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12,
-    borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  optionOn: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  option: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+  },
+  optionOn: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.05)',
+  },
+  optionPressed: { opacity: 0.72 },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 12,
+    backgroundColor: colors.border,
+  },
+  emptyWrap: { paddingHorizontal: 14, paddingVertical: 12 },
   code: { fontFamily: typography.fontMono },
 });

@@ -123,8 +123,8 @@ export function AccountSheet({
   const webGlassStyle: ViewStyle | null =
     Platform.OS === 'web'
       ? ({
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          backdropFilter: 'blur(28px) saturate(190%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(190%)',
         } as unknown as ViewStyle)
       : null;
 
@@ -169,7 +169,7 @@ export function AccountSheet({
           style={[
             styles.dropdownCard,
             webGlassStyle,
-            { top: topInset + 52 },
+            { top: topInset + 54 },
             popoverMotionStyle,
           ]}
         >
@@ -325,12 +325,12 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       position: 'absolute',
       right: 16,
       width: 252,
-      backgroundColor: isDark ? 'rgba(34, 36, 40, 0.90)' : 'rgba(255, 255, 255, 0.90)',
+      backgroundColor: isDark ? 'rgba(28, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.94)',
       borderRadius: 16,
       borderCurve: 'continuous',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.08)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(18, 19, 23, 0.08)',
       shadowColor: '#000000',
       shadowOffset: { width: 0, height: 14 },
       shadowOpacity: isDark ? 0.48 : 0.14,
