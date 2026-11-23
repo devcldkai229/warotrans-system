@@ -10,7 +10,6 @@ import { listRobots } from '@/shared/api/fleet'
 import { cx } from '@/shared/lib/cx'
 import { humanize } from '@/shared/lib/format'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
-import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { useNotificationsHub, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
 import { BatteryLevel } from '@/shared/ui/BatteryLevel'
@@ -326,21 +325,23 @@ export function FleetPage() {
           bounds={monitorMap.geometry.bounds}
           occupancyImageUrl={monitorMap.geometry.occupancyImageUrl}
           mapVersion={monitorMap.version}
-        />
-        <MapVersionToolbar
-          warehouses={monitorMap.warehouses}
-          warehouseId={monitorMap.warehouseId}
-          onWarehouseChange={monitorMap.setWarehouseId}
-          maps={monitorMap.maps}
-          mapVersionId={monitorMap.mapVersionId}
-          onMapVersionChange={monitorMap.setMapVersionId}
-          activeMapId={monitorMap.activeMapId}
+          mapToolbar={{
+            warehouses: monitorMap.warehouses,
+            warehouseId: monitorMap.warehouseId,
+            onWarehouseChange: monitorMap.setWarehouseId,
+            maps: monitorMap.maps,
+            mapVersionId: monitorMap.mapVersionId,
+            onMapVersionChange: monitorMap.setMapVersionId,
+            activeMapId: monitorMap.activeMapId,
+          }}
         />
         {monitorMap.isLoading ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-5 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-float">{t('Loading map…')}</div>
+          <div className="pointer-events-none absolute top-14 left-3 z-5 rounded-full border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] px-3 py-1.5 text-xs text-muted shadow-float backdrop-blur-md">
+            {t('Loading map…')}
+          </div>
         ) : null}
         {monitorMap.error ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-5 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-xs text-red-ink shadow-float">
+          <div className="pointer-events-none absolute top-14 left-3 z-5 max-w-sm rounded-xl border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] px-3 py-2 text-xs text-red-ink shadow-float backdrop-blur-md">
             {monitorMap.error.message || t('Failed to load map version.')}
           </div>
         ) : null}

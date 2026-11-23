@@ -137,6 +137,28 @@
     --map-image-filter: invert(0.88) brightness(0.62);
     --app-shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.2), 0 12px 28px rgb(0 0 0 / 0.35);
     --app-shadow-modal: 0 0 0 1px rgb(255 255 255 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.7);
+    --otto-canvas-bg: #13161c;
+    --otto-grid-dot: rgb(148 163 184 / 0.16);
+    --otto-floor-stroke: rgb(148 163 184 / 0.24);
+    --otto-hud-bg: rgb(28 31 38 / 0.88);
+    --otto-hud-border: rgb(255 255 255 / 0.12);
+    --otto-chassis-fill: #f1f5f9;
+    --otto-chassis-stroke: #0b0f17;
+    --otto-deck-fill: #cbd5e1;
+    --otto-deck-stroke: #64748b;
+    --otto-shelf-fill: rgb(148 163 184 / 0.18);
+    --otto-shelf-stroke: rgb(148 163 184 / 0.55);
+    --otto-shelf-slot: rgb(148 163 184 / 0.28);
+    --otto-bay-fill: rgb(148 163 184 / 0.08);
+    --otto-bay-stroke: rgb(203 213 225 / 0.55);
+    --otto-endpoint-neutral: #e6ecf5;
+    --otto-endpoint-muted: #94a3b8;
+    --otto-endpoint-emerald: #34d399;
+    --otto-endpoint-amber: #fbbf24;
+    --otto-tag-bg: rgb(24 27 34 / 0.92);
+    --otto-tag-border: rgb(255 255 255 / 0.2);
+    --otto-tag-selected-bg: #f3f4f6;
+    --otto-tag-selected-ink: #111317;
   }
 
   /* Light theme: Facebook-style white cards on a light grey page. */
@@ -183,6 +205,28 @@
     --app-shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.08), 0 12px 28px rgb(0 0 0 / 0.12);
     --app-shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.35);
     --map-image-filter: none;
+    --otto-canvas-bg: #e7ecf2;
+    --otto-grid-dot: rgb(71 85 105 / 0.18);
+    --otto-floor-stroke: rgb(15 23 42 / 0.16);
+    --otto-hud-bg: rgb(255 255 255 / 0.9);
+    --otto-hud-border: rgb(15 23 42 / 0.1);
+    --otto-chassis-fill: #1e293b;
+    --otto-chassis-stroke: #ffffff;
+    --otto-deck-fill: #334155;
+    --otto-deck-stroke: #475569;
+    --otto-shelf-fill: rgb(148 163 184 / 0.24);
+    --otto-shelf-stroke: rgb(100 116 139 / 0.65);
+    --otto-shelf-slot: rgb(100 116 139 / 0.34);
+    --otto-bay-fill: rgb(15 23 42 / 0.035);
+    --otto-bay-stroke: rgb(71 85 105 / 0.48);
+    --otto-endpoint-neutral: #1f2937;
+    --otto-endpoint-muted: #64748b;
+    --otto-endpoint-emerald: #059669;
+    --otto-endpoint-amber: #d97706;
+    --otto-tag-bg: rgb(255 255 255 / 0.94);
+    --otto-tag-border: rgb(15 23 42 / 0.12);
+    --otto-tag-selected-bg: #18191b;
+    --otto-tag-selected-ink: #ffffff;
   }
 
   html {
