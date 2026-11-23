@@ -44,6 +44,61 @@ const POPOVER_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const ALERT_TITLE_PATTERN =
   /\b(cancel|cancelled|cargo|block|blocked|fail|failed|error|hazard|fault)\b/i;
 const JOB_READY_PATTERN = /\b(ready|handover|assigned)\b/i;
+const ENTITY_CODE_RE = /\b((?:REQ|JOB|RBT|ISS|ISSUE|AMR)-[A-Z0-9-]+)\b/i;
+
+function capitalizeFirst(value: string): string {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatCompactTime(createdAt: string | undefined, fallbackLabel: string): string {
+  const ts = createdAt ? Date.parse(createdAt) : Number.NaN;
+  if (Number.isFinite(ts)) {
+    const diffMs = Date.now() - ts;
+    if (diffMs >= 0) {
+      if (diffMs < 60_000) return translateText('Now');
+      if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m`;
+      if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h`;
+      if (diffMs < 7 * 86_400_000) return `${Math.floor(diffMs / 86_400_000)}d`;
+      return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    }
+  }
+  return translateText(fallbackLabel).replace(/\s+\d{4}(?:,\s*\d{1,2}:\d{2})?$/, '').trim();
+}
+
+function summarizeNotification(
+  localizedTitle: string,
+  localizedContent: string,
+): { headline: string; summary: string } {
+  const match = ENTITY_CODE_RE.exec(localizedTitle);
+  if (!match) {
+    return { headline: localizedTitle, summary: localizedContent };
+  }
+  const code = match[1];
+  let remainder = localizedTitle
+    .replace(code, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (/^Cancelled request\s+/i.test(remainder)) {
+    remainder = `Cancelled · ${capitalizeFirst(remainder.replace(/^Cancelled request\s+/i, ''))}`;
+  } else if (/^Yêu cầu đã hủy\s+/i.test(remainder)) {
+    remainder = `Đã hủy · ${capitalizeFirst(remainder.replace(/^Yêu cầu đã hủy\s+/i, ''))}`;
+  } else {
+    remainder = remainder
+      .replace(/^Transport request\s+/i, 'Request ')
+      .replace(/^Yêu cầu vận chuyển\s+/i, 'Yêu cầu ')
+      .replace(/\b(?:was|is)\s+(paused|cancelled|rejected|waiting|assigned)\b/gi, '$1')
+      .replace(/^Issue you reported(?:\s+was)?\s+resolved$/i, 'Issue resolved')
+      .replace(/^Sự cố do bạn báo cáo đã được xử lý$/i, 'Sự cố đã được xử lý');
+    remainder = capitalizeFirst(remainder);
+  }
+
+  return {
+    headline: code,
+    summary: remainder || localizedContent,
+  };
+}
 
 function notificationIconSpec(
   item: LiveNotificationEvent,
@@ -180,7 +235,7 @@ export function NotificationSheet({
     const { Icon, color, wellBg } = notificationIconSpec(item, isDark);
     return (
       <View style={[styles.iconWell, { backgroundColor: wellBg }, item.isRead && styles.iconWellRead]}>
-        <Icon size={15} color={color} strokeWidth={2.1} />
+        <Icon size={14} color={color} strokeWidth={2.1} />
       </View>
     );
   };
@@ -237,7 +292,7 @@ export function NotificationSheet({
             styles.dropdownCard,
             webGlassStyle,
             compact && styles.cardCompact,
-            { top: topInset + 56 },
+            { top: topInset + 54 },
             popoverMotionStyle,
           ]}
         >
@@ -260,7 +315,7 @@ export function NotificationSheet({
               <Pressable
                 onPress={handleMarkAllRead}
                 disabled={isSavingNotification}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
                 accessibilityRole="button"
                 accessibilityLabel={translateText('Mark all as read')}
                 accessibilityState={{ disabled: isSavingNotification, busy: isSavingNotification }}
@@ -273,7 +328,7 @@ export function NotificationSheet({
                 {isSavingNotification ? (
                   <ActivityIndicator size="small" color={colors.textSecondary} />
                 ) : (
-                  <CheckCheck size={13} color={colors.textSecondary} strokeWidth={2.2} />
+                  <CheckCheck size={12.5} color={colors.textSecondary} strokeWidth={2.2} />
                 )}
                 <Text variant="caption" color={colors.textSecondary} style={styles.headerActionText}>
                   {isSavingNotification ? 'Saving…' : 'Mark all read'}
@@ -316,7 +371,7 @@ export function NotificationSheet({
           {!notificationsAvailable ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Bell size={17} color={colors.textMuted} strokeWidth={1.8} />
+                <Bell size={15} color={colors.textMuted} strokeWidth={1.8} />
               </View>
               <Text variant="caption" color={colors.textSecondary} style={styles.emptyText}>
                 Notifications unavailable
@@ -335,7 +390,7 @@ export function NotificationSheet({
           ) : !notificationsError && notifications.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Bell size={17} color={colors.textMuted} strokeWidth={1.8} />
+                <Bell size={15} color={colors.textMuted} strokeWidth={1.8} />
               </View>
               <Text variant="caption" color={colors.textSecondary} style={styles.emptyText}>
                 No notifications yet
@@ -359,6 +414,11 @@ export function NotificationSheet({
                   content: item.message,
                 });
                 const localizedTime = translateText(item.timeLabel);
+                const compactTime = formatCompactTime(item.createdAt, item.timeLabel);
+                const { headline, summary } = summarizeNotification(
+                  localized.title,
+                  localized.content,
+                );
                 const isLast = idx === notifications.length - 1;
 
                 return (
@@ -374,28 +434,37 @@ export function NotificationSheet({
                       {renderNotificationIcon(item)}
 
                       <View style={styles.itemContent}>
-                        <Text
-                          variant="label"
-                          color={item.isRead ? colors.textSecondary : colors.textPrimary}
-                          style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
-                        >
-                          {localized.title}
-                        </Text>
+                        <View style={styles.itemTopRow}>
+                          <Text
+                            variant="label"
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            color={item.isRead ? colors.textSecondary : colors.textPrimary}
+                            style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
+                          >
+                            {headline}
+                          </Text>
 
-                        <Text
-                          variant="caption"
-                          color={colors.textSecondary}
-                          style={styles.itemDesc}
-                        >
-                          {localized.content}
-                        </Text>
+                          <View style={styles.itemMeta}>
+                            <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
+                              {compactTime}
+                            </Text>
+                            {!item.isRead && <View style={styles.unreadDot} />}
+                          </View>
+                        </View>
 
-                        <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                          {localizedTime}
-                        </Text>
+                        {Boolean(summary) && (
+                          <Text
+                            variant="caption"
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            color={colors.textSecondary}
+                            style={styles.itemSummary}
+                          >
+                            {summary}
+                          </Text>
+                        )}
                       </View>
-
-                      {!item.isRead && <View style={styles.unreadDot} />}
                     </Pressable>
                     {!isLast && <View style={styles.insetDivider} />}
                   </View>
@@ -418,12 +487,12 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     dropdownCard: {
       position: 'absolute',
       right: 16,
-      width: 326,
-      maxWidth: '92%',
-      maxHeight: 424,
+      width: 276,
+      maxWidth: '84%',
+      maxHeight: 312,
       zIndex: 1000,
       backgroundColor: isDark ? 'rgba(28, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.94)',
-      borderRadius: 18,
+      borderRadius: 16,
       borderCurve: 'continuous',
       overflow: 'hidden',
       borderWidth: 1,
@@ -435,14 +504,14 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       elevation: 16,
     },
     cardCompact: {
-      width: 260,
+      width: 224,
     },
     headerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 14,
-      paddingVertical: 11,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
       gap: 8,
     },
     headerLeft: {
@@ -453,34 +522,34 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       minWidth: 0,
     },
     headerTitle: {
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 13,
+      lineHeight: 16,
       fontWeight: '600',
       letterSpacing: -0.2,
     },
     countChip: {
-      height: 19,
-      minWidth: 20,
-      paddingHorizontal: 6,
+      height: 17,
+      minWidth: 18,
+      paddingHorizontal: 5,
       borderRadius: 999,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(18, 19, 23, 0.07)',
     },
     countChipText: {
-      fontSize: 11,
-      lineHeight: 14,
+      fontSize: 10.5,
+      lineHeight: 13,
       fontWeight: '600',
       fontVariant: ['tabular-nums'],
     },
     headerActionBtn: {
-      minHeight: 28,
-      paddingHorizontal: 8,
-      borderRadius: 8,
+      minHeight: 24,
+      paddingHorizontal: 6,
+      borderRadius: 7,
       borderCurve: 'continuous',
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 5,
+      gap: 4,
     },
     headerActionPressed: {
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)',
@@ -490,8 +559,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       opacity: 0.5,
     },
     headerActionText: {
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 11.5,
+      lineHeight: 14,
       fontWeight: '600',
     },
     headerDivider: {
@@ -502,12 +571,12 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       opacity: 0.65,
     },
     list: {
-      maxHeight: 360,
+      maxHeight: 266,
       flexShrink: 1,
       backgroundColor: 'transparent',
     },
     listContent: {
-      paddingVertical: 4,
+      paddingVertical: 3,
     },
     state: {
       marginHorizontal: 12,
@@ -524,21 +593,21 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     emptyState: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 28,
-      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 22,
+      gap: 8,
     },
     emptyIconCircle: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
     },
     emptyText: {
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: 12.5,
+      lineHeight: 16,
       fontWeight: '500',
     },
     retry: {
@@ -550,20 +619,19 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     },
     item: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 11,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 9.5,
       backgroundColor: 'transparent',
     },
     itemPressed: {
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(18, 19, 23, 0.04)',
     },
     iconWell: {
-      width: 32,
-      height: 32,
-      marginTop: 1,
-      borderRadius: 9,
+      width: 28,
+      height: 28,
+      borderRadius: 8,
       borderCurve: 'continuous',
       alignItems: 'center',
       justifyContent: 'center',
@@ -576,40 +644,50 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       flex: 1,
       minWidth: 0,
     },
+    itemTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
     itemTitle: {
-      fontSize: 13,
-      lineHeight: 18,
+      flex: 1,
+      minWidth: 0,
+      fontSize: 12.5,
+      lineHeight: 16,
       letterSpacing: -0.15,
       fontWeight: '500',
     },
     itemTitleUnread: {
       fontWeight: '600',
     },
-    itemDesc: {
-      fontSize: 12.5,
-      lineHeight: 17.5,
-      marginTop: 3,
+    itemMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      flexShrink: 0,
     },
     itemTime: {
-      fontSize: 11,
+      fontSize: 10.5,
       lineHeight: 14,
       fontWeight: '500',
       fontVariant: ['tabular-nums'],
-      marginTop: 6,
     },
     unreadDot: {
-      width: 6.5,
-      height: 6.5,
-      borderRadius: 3.25,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
       backgroundColor: isDark ? '#0A84FF' : '#007AFF',
-      marginTop: 6,
-      marginLeft: 2,
       flexShrink: 0,
+    },
+    itemSummary: {
+      fontSize: 11.5,
+      lineHeight: 15,
+      marginTop: 2,
     },
     insetDivider: {
       height: StyleSheet.hairlineWidth,
-      marginLeft: 57,
-      marginRight: 14,
+      marginLeft: 50,
+      marginRight: 12,
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.08)',
     },
   });

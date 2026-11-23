@@ -289,6 +289,7 @@ export const vi: Record<string, string> = {
   'Mark All As Read': 'Đánh dấu tất cả đã đọc',
   'Notifications': 'Thông báo',
   'Mark all read': 'Đọc tất cả',
+  'Now': 'Vừa xong',
   'Sign in with notification access to save read status.': 'Hãy đăng nhập tài khoản có quyền thông báo để lưu trạng thái đã đọc.',
   'Could not load notifications. Try again.': 'Không tải được thông báo. Hãy thử lại.',
   'Could not verify this read request. Refresh the inbox before trying again.': 'Không xác minh được yêu cầu đánh dấu đã đọc. Hãy làm mới hộp thư trước khi thử lại.',
