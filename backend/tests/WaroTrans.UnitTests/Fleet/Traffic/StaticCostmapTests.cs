@@ -1,4 +1,4 @@
-using WaroTrans.Fleet.Features.GetSemanticLayers;
+using WaroTrans.BuildingBlocks.Maps;
 
 namespace WaroTrans.UnitTests.Fleet.Traffic;
 

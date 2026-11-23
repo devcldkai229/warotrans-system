@@ -116,3 +116,16 @@ export function liveCostmapToDataUrl(body: LiveCostmapBody): string | null {
   ctx.putImageData(img, 0, 0)
   return canvas.toDataURL('image/png')
 }
+
+/** OccupancyGrid value under a map point (rows bottom-up); null outside the grid. */
+export function costAtPoint(body: LiveCostmapBody, bytes: Uint8Array, x: number, y: number): number | null {
+  const col = Math.floor((x - body.originX) / body.resolution)
+  const row = Math.floor((y - body.originY) / body.resolution)
+  if (col < 0 || row < 0 || col >= body.width || row >= body.height) return null
+  return bytes[row * body.width + col] ?? null
+}
+
+/** A robot's centre may not be here: a wall (100) or within the inscribed radius of one (99). */
+export function blocksEndpoint(cost: number | null): boolean {
+  return cost === 99 || cost === 100
+}

@@ -28,6 +28,7 @@ export const vi_operations_robots: Record<string, string> = {
   'No map selected': 'Chưa chọn bản đồ',
   'Costmap': 'Costmap',
   'Off': 'Tắt',
+  'Drag to move': 'Kéo để di chuyển',
   'Map': 'Bản đồ',
   "The map's own costmap: walls + inflation, as Nav2 plans right after mapping (no robot, no traffic)": 'Costmap của chính bản đồ: tường + inflation, như Nav2 lập đường ngay sau khi quét map (không phụ thuộc robot, không traffic)',
   'Add the planner keep-out mask (lethal)': 'Thêm mặt nạ vùng cấm của planner (cấm)',

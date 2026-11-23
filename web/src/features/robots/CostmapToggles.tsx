@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { t } from '@/shared/i18n'
 import type { useCostmapOverlay } from './useCostmapOverlay'
 
 const ROW = 'flex h-7 w-full items-center gap-2 rounded-lg px-2 text-left transition-colors duration-200'
 const ON = 'bg-primary-soft text-primary-ink'
 const OFF = 'text-ink-2 hover:bg-container-high'
+
+const POS_KEY = 'warotrans.fleetMap.costmapBox'
+const DEFAULT_POS = { right: 12, top: 56 }
 
 /** Costmap legend: only what blocks a robot is drawn. */
 const LEGEND: { swatch: string; label: string }[] = [
@@ -16,6 +19,42 @@ const LEGEND: { swatch: string; label: string }[] = [
 export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCostmapOverlay> }) {
   const { view, update } = costmap
   const [open, setOpen] = useState(true)
+  // Draggable: offset from the map's top-right corner, kept inside the map frame and remembered per viewer.
+  const [pos, setPos] = useState<{ right: number; top: number }>(() => {
+    try {
+      const raw = window.localStorage.getItem(POS_KEY)
+      return raw ? (JSON.parse(raw) as { right: number; top: number }) : DEFAULT_POS
+    } catch {
+      return DEFAULT_POS
+    }
+  })
+  const box = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ x: number; y: number; right: number; top: number } | null>(null)
+  const onGripDown = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { x: e.clientX, y: e.clientY, right: pos.right, top: pos.top }
+  }
+  const onGripMove = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    const d = drag.current
+    const el = box.current
+    if (!d || !el) return
+    const frame = el.parentElement?.getBoundingClientRect()
+    const maxRight = frame ? Math.max(0, frame.width - el.offsetWidth) : Infinity
+    const maxTop = frame ? Math.max(0, frame.height - 40) : Infinity
+    setPos({
+      right: Math.min(maxRight, Math.max(0, d.right - (e.clientX - d.x))),
+      top: Math.min(maxTop, Math.max(0, d.top + (e.clientY - d.y))),
+    })
+  }
+  const onGripUp = () => {
+    drag.current = null
+    try {
+      window.localStorage.setItem(POS_KEY, JSON.stringify(pos))
+    } catch {
+      // per-viewer convenience only
+    }
+  }
   const source = (value: string | null, label: string, title?: string) => (
     <button type="button" aria-pressed={view.costmapRobot === value} title={title} onClick={() => update({ costmapRobot: value })}
       className={`${ROW} ${view.costmapRobot === value ? ON : OFF}`}>
@@ -31,12 +70,20 @@ export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCost
   )
 
   return (
-    <div className="absolute top-14 right-3 z-5 w-56 rounded-2xl bg-surface/95 p-2 text-xs shadow-float">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        className="flex w-full items-center justify-between px-2 py-1 font-medium text-ink">
-        {t('Costmap')}
-        <span className="text-muted">{open ? '−' : '+'}</span>
-      </button>
+    <div ref={box} className="absolute z-5 w-56 rounded-2xl bg-surface/95 p-2 text-xs shadow-float"
+      style={{ right: pos.right, top: pos.top }}>
+      <div className="flex items-center gap-1">
+        <span role="separator" aria-label={t('Drag to move')} title={t('Drag to move')}
+          className="cursor-grab touch-none select-none px-1 text-muted active:cursor-grabbing"
+          onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp}>
+          ⠿
+        </span>
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+          className="flex flex-1 items-center justify-between py-1 pr-2 font-medium text-ink">
+          {t('Costmap')}
+          <span className="text-muted">{open ? '−' : '+'}</span>
+        </button>
+      </div>
       {open ? (
         <div className="mt-1 flex flex-col gap-0.5">
           {source(null, t('Off'))}

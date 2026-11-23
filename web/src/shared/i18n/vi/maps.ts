@@ -230,4 +230,8 @@ export const vi_maps: Record<string, string> = {
   'FIRST_AVAILABLE: the first free point by code': 'FIRST_AVAILABLE: điểm trống đầu tiên theo mã',
   'Points in the group': 'Các điểm trong nhóm',
   'Save group': 'Lưu nhóm',
+  'An endpoint cannot stand on a wall (costmap magenta). Place it in the free area.': 'Không thể đặt endpoint trên tường (vùng tím của costmap). Hãy đặt vào vùng trống.',
+  'An endpoint cannot stand this close to a wall: a robot centre may not be here (costmap cyan, < {r} m). Place it in the free area.': 'Không thể đặt endpoint sát tường như vậy: tâm robot không được ở đây (vùng xanh của costmap, < {r} m). Hãy đặt vào vùng trống.',
+  'Costmap: walls (magenta) and where a robot centre may not be (cyan). Endpoints cannot be placed there.': 'Costmap: tường (tím) và nơi tâm robot không được đứng (xanh). Không đặt endpoint ở đó được.',
+  'This map has no occupancy image yet': 'Bản đồ này chưa có ảnh occupancy',
 }

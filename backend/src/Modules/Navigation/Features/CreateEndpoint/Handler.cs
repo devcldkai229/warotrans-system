@@ -14,7 +14,8 @@ public sealed class CreateEndpointHandler(
     NavigationDbContext dbContext,
     EndpointStorage endpointStorage,
     IBusinessCodeGenerator codeGenerator,
-    IValidator<CreateEndpointRequest> validator)
+    IValidator<CreateEndpointRequest> validator,
+    MapCostmapService costmaps)
 {
     public async Task<EndpointResponse> HandleAsync(
         Guid mapVersionId,
@@ -42,6 +43,8 @@ public sealed class CreateEndpointHandler(
                 $"Endpoints can only be added to DRAFT map versions (current status: {mapVersion.Status}).",
                 "map_version_not_draft");
         }
+
+        await costmaps.EnsureEndpointPlaceableAsync(mapVersion, request.X, request.Y, cancellationToken);
 
         var name = request.Name.Trim();
         var code = await codeGenerator.NextEndpointCodeAsync(name, cancellationToken);

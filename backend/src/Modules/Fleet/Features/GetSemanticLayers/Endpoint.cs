@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Authorization;
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Maps;
 using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Traffic;
@@ -77,8 +78,8 @@ public static class Endpoint
                         title: "No semantic bundle is configured (Traffic:SemanticMapDirectory)");
                 }
 
-                var body = ReadStaticCostmap(dir, keepout ?? false, inscribed ?? DefaultInscribed,
-                    inflation ?? DefaultInflationRadius, scaling ?? DefaultCostScaling);
+                var body = ReadStaticCostmap(dir, keepout ?? false, inscribed ?? StaticCostmap.DefaultInscribed,
+                    inflation ?? StaticCostmap.DefaultInflationRadius, scaling ?? StaticCostmap.DefaultCostScaling);
                 return body is null
                     ? Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "The bundle has no map.yaml / map.pgm")
                     : Results.Ok(body);
@@ -113,9 +114,6 @@ public static class Endpoint
 
     /// <summary>Nav2 global costmap parameters of the lab robots (nav2_params_lane_aware.yaml, read live 2026-11-24):
     /// footprint half-width 0.13 + padding 0.02, inflation_radius 0.35, cost_scaling_factor 4.0.</summary>
-    public const double DefaultInscribed = 0.152; // the larger robot (RBT-002: half-width 0.132 + padding 0.02); RBT-001 0.13
-    public const double DefaultInflationRadius = 0.35;
-    public const double DefaultCostScaling = 4.0;
 
     private static readonly Dictionary<string, object> StaticCache = new();
 

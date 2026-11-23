@@ -83,6 +83,7 @@ public static class NavigationModule
         services.AddScoped<CloneMapVersionHandler>();
         services.AddScoped<Features.EndpointGroups.EndpointGroupService>();
         RegisterMapAssetStore(services, configuration);
+        services.AddSingleton<MapCostmapService>();
 
         services.AddScoped<EndpointStorage>();
         services.AddScoped<NavigationModuleApi>();
@@ -125,6 +126,7 @@ public static class NavigationModule
         ArchiveMapVersionEndpoint.Map(group);
         ImportMapVersionEndpoint.Map(group);
         CloneMapVersionEndpoint.Map(group);
+        Features.GetMapCostmap.GetMapCostmapEndpoint.Map(group);
         CreateEndpointEndpoint.Map(group);
         GetEndpointEndpoint.Map(group);
         UpdateEndpointEndpoint.Map(group);
