@@ -3275,7 +3275,8 @@ public sealed partial class JobExecutionEngine(
 
         try
         {
-            var bundle = await trafficCompile.CompileAsync(mapVersionId, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
+            var graphMap = trafficOptions?.Value.GraphMapFor(mapVersionId) ?? mapVersionId;
+            var bundle = await trafficCompile.CompileAsync(graphMap, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
             if (bundle.Result.HasErrors)
             {
                 // Map editor validation can flag clearance/corridor issues while the compiled graph

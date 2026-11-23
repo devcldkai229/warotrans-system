@@ -434,8 +434,12 @@ public sealed class RobotCareService(
                 .ToListAsync(cancellationToken);
             // Its own way there must not pass the waiting robot (sim 2026-11-24: the closest place, PARKING-A, lay
             // behind the waiting robot; driving there through it locked both).
+            // Never closer than they already are: when the two stand 0.44 m apart every way starts within 0.6 m of the
+            // waiter, and nothing was ever "clear" (lab 2026-11-23: RBT-001 at SHELF-C-1 under RBT-002 going home).
+            var apart = Math.Sqrt(Math.Pow(waiter.PoseX - blocker.PoseX, 2) + Math.Pow(waiter.PoseY - blocker.PoseY, 2));
             bool RouteClear(EndpointPoseWithType e) =>
-                DistanceToSegment(waiter.PoseX, waiter.PoseY, blocker.PoseX, blocker.PoseY, e.X, e.Y) >= MakeWayClearMeters;
+                DistanceToSegment(waiter.PoseX, waiter.PoseY, blocker.PoseX, blocker.PoseY, e.X, e.Y)
+                >= Math.Min(MakeWayClearMeters, apart - 0.02);
             // Nor cross the way the waiting robot planned further on (sim V019 2026-11-24, B<->C crossing: the idle robot at
             // C-1 was sent to a place whose straight way out cut the waiter's path; each then waited for the other's cells).
             // Path points next to the idle robot are left out: it stands on that path, which is why it has to move.

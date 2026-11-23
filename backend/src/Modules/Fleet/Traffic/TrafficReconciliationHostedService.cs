@@ -35,7 +35,7 @@ public sealed class TrafficReconciliationHostedService(
         {
             try
             {
-                var compiled = await compile.CompileAsync(mv, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken)
+                var compiled = await compile.CompileAsync(options.Value.GraphMapFor(mv), TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken)
                     .ConfigureAwait(false);
                 graph = compiled.Result.Graph;
                 await segmented.BindGraphAsync(mv, graph, cancellationToken).ConfigureAwait(false);

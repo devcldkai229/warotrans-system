@@ -19,6 +19,16 @@ public sealed class TrafficOptions
 
     public TrafficCoordinatorMode Mode { get; set; } = TrafficCoordinatorMode.Shadow;
 
+    /// <summary>
+    /// Active Mode: compile the lane graph from this map version instead of the Job's / robot's map (a DRAFT clone of
+    /// the published map with the same endpoint codes and occupancy, drawn as a connected lane network for the Nav2
+    /// Route Server). Null: the Job's own map. The published map's semantic lanes stay untouched for Semantic Mode.
+    /// </summary>
+    public Guid? RouteGraphMapVersionId { get; set; }
+
+    /// <summary>The map version whose lane graph Active Mode drives on.</summary>
+    public Guid GraphMapFor(Guid mapVersionId) => RouteGraphMapVersionId ?? mapVersionId;
+
     public TrafficFootprintOptions Footprint { get; set; } = new();
 
     /// <summary>Endpoint code → bay kind. CHARGER/PARK may also come from EndpointType.</summary>
