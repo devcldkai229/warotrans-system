@@ -26,6 +26,12 @@ public sealed record EvidenceEnvelope(
 {
     public const int CurrentSchemaVersion = 1;
     public const string CoreSource = "warotrans-core";
+
+    /// <summary>
+    /// Optional (additive, still v1): the source's own ordering when wall clocks cannot order two events, e.g. the
+    /// traffic coordinator's decision number. Left out of the JSON when null, so older readers see no change.
+    /// </summary>
+    public long? Sequence { get; init; }
 }
 
 public static class EvidenceEventTypes
@@ -42,4 +48,7 @@ public static class EvidenceEventTypes
     public const string RobotBatteryLow = "robot.battery-low";
     public const string RobotGatewayRestarted = "robot.gateway-restarted";
     public const string TrafficWaitChanged = "traffic.wait-changed";
+
+    /// <summary>A traffic coordinator decision about one robot (grant, refusal, quarantine, deadlock retreat, goal wait).</summary>
+    public const string TrafficDecision = "traffic.decision";
 }

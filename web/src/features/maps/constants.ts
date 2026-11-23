@@ -12,6 +12,7 @@ export const ENDPOINT_TEMPLATES: EndpointTemplate[] = [
   { type: 'WAYPOINT', title: t('Waypoint'), description: t('Waypoint / intermediate point') },
   { type: 'CHARGER', title: t('Charger'), description: t('Charging point') },
   { type: 'PARK', title: t('Park'), description: t('Parking / waiting point') },
+  { type: 'QUEUE', title: t('Queue point'), description: t('Queue point: robots wait their turn here') },
 ]
 
 export interface ZoneTemplate {

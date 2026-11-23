@@ -65,18 +65,20 @@ export const LANE_CHEVRON_OPACITY = 0.8
 
 /**
  * Endpoint colours:
- * WAYPOINT — black; CHARGER — green; PARK — deep orange (distinct from zone yellow/red/sky/purple).
+ * WAYPOINT — black; CHARGER — green; PARK — deep orange; QUEUE — purple (distinct from zone yellow/red/sky/purple).
  */
 export const ENDPOINT_COLOR: Record<EndpointType, string> = {
   WAYPOINT: '#121317',
   CHARGER: '#2e7d32',
   PARK: '#ef6c00',
+  QUEUE: '#6a1b9a',
 }
 
 export const ENDPOINT_NAME: Record<EndpointType, string> = {
   WAYPOINT: t('Waypoint'),
   CHARGER: t('Charger'),
   PARK: t('Park'),
+  QUEUE: t('Queue point'),
 }
 
 export const ROBOT_COLOR: Record<RobotStatus, string> = {

@@ -46,7 +46,10 @@ public static class RolePermissionMatrix
                 Permissions.NotificationRead,
                 // Incident investigation: replay what the robots did. Not the access audit or robot credentials.
                 Permissions.EvidenceRead, Permissions.EvidencePlayback, Permissions.EvidenceAnnotate,
-                Permissions.EvidenceExport
+                Permissions.EvidenceExport,
+                // AI incident cases for their robots (the AI service filters by the same robot scope).
+                Permissions.IncidentRead, Permissions.IncidentInvestigate, Permissions.IncidentApprove,
+                Permissions.IncidentClose
             }.ToFrozenSet(StringComparer.Ordinal)
         }.ToFrozenDictionary(StringComparer.Ordinal);
 

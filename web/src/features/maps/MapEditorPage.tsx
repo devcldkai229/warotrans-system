@@ -54,6 +54,7 @@ import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
 import { EndpointGroupsPanel } from './editor/EndpointGroupsPanel'
 import { MapEditorCanvas, type EditorTool } from './editor/MapEditorCanvas'
+import { useMapCostmap } from './editor/useMapCostmap'
 import { degToRad, normalizeYaw, radToDeg } from './yaw'
 import { t } from '@/shared/i18n'
 const WORKFLOW_PANEL = { min: 320, default: 460, key: 'warotrans.workflowPanelWidth' }
@@ -207,6 +208,22 @@ export function MapEditorPage() {
     searchParams.get('state') === 'workflow' ? { kind: 'workflow', workflowId: 'new' } : { kind: 'idle' },
   )
   const [tool, setTool] = useState<EditorTool>('select')
+  const [showCostmap, setShowCostmap] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('warotrans.mapEditor.costmap') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleCostmap = () =>
+    setShowCostmap((on) => {
+      try {
+        window.localStorage.setItem('warotrans.mapEditor.costmap', on ? '0' : '1')
+      } catch {
+        // per-viewer convenience only
+      }
+      return !on
+    })
   const [query, setQuery] = useState('')
   const [panelWidth, setPanelWidth] = useState(readPanelWidth)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -331,6 +348,17 @@ export function MapEditorPage() {
   const occupancyUrl = resolveMapAssetUrl(version?.previewImageUri)
 
   const mapVersionId = version?.id ?? ''
+  const costmap = useMapCostmap(version?.id)
+  /** Why an endpoint may not stand at a point (the map's costmap: wall or inscribed band), else null. */
+  const endpointPlaceError = (at: Point): string | null => {
+    const blocked = costmap.endpointBlockedAt(at.x, at.y)
+    if (!blocked) return null
+    return blocked === 'wall'
+      ? t('An endpoint cannot stand on a wall (costmap magenta). Place it in the free area.')
+      : t('An endpoint cannot stand this close to a wall: a robot centre may not be here (costmap cyan, < {r} m). Place it in the free area.', {
+          r: costmap.inscribedRadius ?? 0.15,
+        })
+  }
 
   const selectedEndpoint = useMemo((): Endpoint | undefined => {
     if (mode.kind !== 'endpoint' || !epDraft) return undefined
@@ -537,6 +565,10 @@ export function MapEditorPage() {
     setActionError(null)
     const at = { x: snap(world.x), y: snap(world.y) }
 
+    if ((tool === 'endpoint' || mode.kind === 'placing') && endpointPlaceError(at)) {
+      setActionError(endpointPlaceError(at))
+      return
+    }
     if (tool === 'endpoint' && mode.kind !== 'placing') {
       setMode({ kind: 'placing', endpointType: 'WAYPOINT', name: '', at, yawDeg: DEFAULT_YAW_DEG })
       return
@@ -569,6 +601,11 @@ export function MapEditorPage() {
   }
 
   function placeEndpoint(endpointType: EndpointType, name: string, at: Point, yawDeg: number) {
+    const placeError = endpointPlaceError(at)
+    if (placeError) {
+      setActionError(placeError)
+      return
+    }
     if (!version || !isDraft) return
     const trimmed = name.trim()
     if (!trimmed) {
@@ -602,6 +639,11 @@ export function MapEditorPage() {
     const trimmed = (epDraft.name ?? '').trim()
     if (!trimmed) {
       setActionError(t('Name is required — code is generated as EP-{NAME}.'))
+      return
+    }
+    const saveError = endpointPlaceError({ x: Number(epDraft.x), y: Number(epDraft.y) })
+    if (saveError) {
+      setActionError(saveError)
       return
     }
     const endpointType = (epDraft.endpointType as EndpointType) ?? 'WAYPOINT'
@@ -1160,6 +1202,23 @@ export function MapEditorPage() {
                 {item.label}
               </button>
             ))}
+            <span className="mx-1 h-5 w-px bg-outline/60" />
+            <button
+              type="button"
+              disabled={!costmap.available}
+              title={costmap.available
+                ? t('Costmap: walls (magenta) and where a robot centre may not be (cyan). Endpoints cannot be placed there.')
+                : t('This map has no occupancy image yet')}
+              className={cx(
+                'flex h-8 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-200 disabled:opacity-40',
+                showCostmap ? 'bg-primary text-white' : 'text-ink-2 hover:bg-surface hover:text-ink',
+              )}
+              aria-pressed={showCostmap}
+              onClick={toggleCostmap}
+            >
+              <span className="inline-block size-2.5 rounded-sm bg-[#00ffff] ring-1 ring-[#ff00ff]" />
+              {t('Costmap')}
+            </button>
           </div>
         ) : null}
       </div>
@@ -1169,6 +1228,7 @@ export function MapEditorPage() {
           <MapEditorCanvas
             transform={transform}
             previewUrl={occupancyUrl}
+            costmapUrl={showCostmap ? costmap.url : null}
             endpoints={canvasEndpoints}
             edges={canvasEdges}
             zones={canvasZones}
@@ -1190,18 +1250,29 @@ export function MapEditorPage() {
             onEdgeWidthChange={resizeEdgeWidth}
             onEndpointMove={
               isDraft
-                ? (id, at) =>
-                    setEpDraft((draft) => (draft?.id === id ? { ...draft, x: snap(at.x), y: snap(at.y) } : draft))
+                ? (id, at) => {
+                    const to = { x: snap(at.x), y: snap(at.y) }
+                    const err = endpointPlaceError(to)
+                    if (err) {
+                      setActionError(err)
+                      return
+                    }
+                    setEpDraft((draft) => (draft?.id === id ? { ...draft, ...to } : draft))
+                  }
                 : undefined
             }
             pendingEndpoint={
               mode.kind === 'placing' ? { at: mode.at, yaw: degToRad(mode.yawDeg) } : null
             }
-            onPendingEndpointMove={(at) =>
-              setMode((current) =>
-                current.kind === 'placing' ? { ...current, at: { x: snap(at.x), y: snap(at.y) } } : current,
-              )
-            }
+            onPendingEndpointMove={(at) => {
+              const to = { x: snap(at.x), y: snap(at.y) }
+              const err = endpointPlaceError(to)
+              if (err) {
+                setActionError(err)
+                return
+              }
+              setMode((current) => (current.kind === 'placing' ? { ...current, at: to } : current))
+            }}
           />
 
           {mode.kind === 'placing' ? (

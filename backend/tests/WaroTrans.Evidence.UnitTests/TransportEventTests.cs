@@ -106,4 +106,19 @@ public class TransportEventTests
         Assert.False(TransportEventTypes.IsRobotScoped(TransportEventTypes.RobotCommandLifecycle));
         Assert.False(TransportEventTypes.IsRobotScoped(TransportEventTypes.JobRobotAssignmentChanged));
     }
+
+    [Fact]
+    public void A_traffic_decision_is_accepted_robot_scoped_and_reads_as_the_decision()
+    {
+        var e = Envelope(TransportEventTypes.TrafficDecision, "deadlock-retreat",
+            new { kind = "deadlock-retreat", code = "deadlock-retreat", severity = "WARNING",
+                  detail = "job=J1:waited-for=RBT-001:to=EP-QUEUE-A", x = 1.0, y = 2.0 });
+        Assert.Null(IngestTransportEventsHandler.Problem(e));
+        Assert.True(TransportEventTypes.IsRobotScoped(TransportEventTypes.TrafficDecision));
+        var c = EventClassifier.Classify(e);
+        Assert.Equal(EvidenceEventCategory.TRAFFIC, c.Category);
+        Assert.Equal(EvidenceSeverity.WARNING, c.Severity);
+        Assert.Contains("backs off", c.Message);
+        Assert.Contains("waited-for=RBT-001", c.Message);
+    }
 }

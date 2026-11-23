@@ -34,6 +34,8 @@ export type EditorTool = 'select' | 'pan' | 'endpoint' | 'edge' | 'zone'
 export interface MapEditorCanvasProps {
   transform: MapTransformParams & { imageWidthPixels: number; frameId?: string }
   previewUrl: string | null
+  /** The map's costmap image (same pixels as the occupancy image), drawn over it when given. */
+  costmapUrl?: string | null
   endpoints: Endpoint[]
   edges: Edge[]
   zones: Zone[]
@@ -111,6 +113,7 @@ function constrainTo45(from: PixelCoord, to: PixelCoord): PixelCoord {
 export function MapEditorCanvas({
   transform,
   previewUrl,
+  costmapUrl = null,
   endpoints,
   edges,
   zones,
@@ -476,6 +479,10 @@ export function MapEditorCanvas({
           <rect x={0} y={0} width={W} height={H} fill={MAP_PAPER} />
           {previewUrl ? (
             <image href={previewUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="none" style={{ filter: MAP_IMAGE_FILTER }} />
+          ) : null}
+          {costmapUrl ? (
+            <image href={costmapUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="none" opacity={0.7}
+              style={{ pointerEvents: 'none', imageRendering: 'pixelated' }} />
           ) : null}
 
           {/* the selected zone is drawn last so it stays visible when another zone covers it */}

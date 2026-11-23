@@ -114,6 +114,17 @@ const GROUPS: GroupDefinition[] = [
       { code: 'evidence.admin', label: msg('Issue robot recording credentials, read the evidence access log') },
     ],
   },
+  {
+    id: 'incidents',
+    title: msg('AI incident investigation'),
+    items: [
+      { code: 'incident.read', label: msg('See AI incident cases') },
+      { code: 'incident.investigate', label: msg('Start an AI investigation and ask it about a case') },
+      { code: 'incident.approve', label: msg('Approve an action the AI proposed (e.g. create the issue report)') },
+      { code: 'incident.close', label: msg('Verify, close, dismiss or reopen a case') },
+      { code: 'lab.operate', label: msg('Run fault experiments in the lab (test only)') },
+    ],
+  },
 ]
 
 export interface PermissionGroup {

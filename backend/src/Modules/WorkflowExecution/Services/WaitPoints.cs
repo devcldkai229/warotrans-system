@@ -20,6 +20,11 @@ public static class WaitPoints
             return false;
         }
 
+        if (e.EndpointType == EndpointType.QUEUE)
+        {
+            return true;
+        }
+
         if (configuredCodes is not null && configuredCodes.Contains(e.Code, StringComparer.OrdinalIgnoreCase))
         {
             return true;

@@ -24,6 +24,7 @@ export const viServerErrors: Record<string, string> = {
   edge_code_exists: 'Mã đường \'{q1}\' đã tồn tại trên bản đồ này.',
   edge_not_found: 'Không tìm thấy đường \'{q1}\'.',
   endpoint_already_storage_location: 'Endpoint này đã là vị trí lưu trữ \'{q1}\'.',
+  endpoint_in_costmap_blocked: 'Không thể đặt endpoint ở đây: tâm robot không được đứng trên tường hoặc sát tường (vùng tím / xanh của costmap). Hãy đặt vào vùng trống.',
   endpoint_code_conflict: 'Mã endpoint \'{q1}\' đã tồn tại trong phiên bản bản đồ này.',
   endpoint_disabled: 'Endpoint \'{q1}\' đang bị tắt.',
   endpoint_group_code_required: 'Cần nhập mã (tối đa 100 ký tự).',

@@ -16,6 +16,12 @@ public static class RobotMqttTopics
     public const string AuthorityStateSuffix = "authority_state";
     public const string HealthSuffix = "health";
 
+    /// <summary>The robot's live Nav2 costmap (global / local), a downsampled image; view only, never acted on.</summary>
+    public const string CostmapSuffix = "costmap";
+
+    public static string CostmapFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/costmap";
+
     public static string HealthFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/health";
 
@@ -112,6 +118,7 @@ public static class RobotMqttTopics
         robotCode = rest[..slash];
         kind = rest[(slash + 1)..];
         return kind is HeartbeatSuffix
+            or CostmapSuffix
             or TelemetrySuffix
             or CommandSuffix
             or CommandAckSuffix

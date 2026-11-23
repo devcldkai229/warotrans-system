@@ -23,6 +23,12 @@ public sealed class FreeEndpointSelector(
     /// <summary>Configured extra wait points (FleetIdle:FallbackEndpointCodes), see <see cref="WaitPoints"/>.</summary>
     public string? FallbackEndpointCodes => idle.Value.FallbackEndpointCodes;
 
+    /// <summary>Goal → its queue point (FleetIdle:GoalQueueEndpoints).</summary>
+    public IReadOnlyDictionary<string, string> GoalQueues => idle.Value.GoalQueues();
+
+    /// <summary>Goal → the box robots take in turn (FleetIdle:GoalCorridors).</summary>
+    public IReadOnlyDictionary<string, (double MinX, double MinY, double MaxX, double MaxY)> GoalCorridors => idle.Value.Corridors();
+
     private static readonly JobStatus[] Live =
         [JobStatus.CREATED, JobStatus.QUEUED, JobStatus.ASSIGNED, JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.REASSIGNING, JobStatus.RECOVERY_REQUIRED];
 
