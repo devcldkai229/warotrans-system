@@ -39,6 +39,7 @@
         "Traffic__Mode": "Semantic",
         "Traffic__SemanticMapDirectory": "E:/programming/my_project/warotrans/ros2_ws/src/warotrans_navigation/maps/map_one_v019",
         "Traffic__SemanticHorizonMeters": "1.2",
+        "Traffic__StandingMarginMeters": "0.02",
         "Traffic__SemanticZoneMarginMeters": "0.05",
         "Traffic__SemanticLaneHalfWidthMeters": "0.25",
         "Traffic__SemanticPrefixGrant": "true",

@@ -325,6 +325,20 @@ public sealed class TrafficState
         {
             blocker = null;
         }
+        else if (blocker is { } standing && StandsStill(standing)
+                 && SemanticReservation.CollectResources(_semantic, request.Poses, narrow: true) is var narrow
+                 && FindPriorWaiter(robot.RobotId, narrow, request.Priority) is null
+                 && !WouldCreateWaitForCycle(robot.RobotId, narrow)
+                 && CanAcquire(narrow, robot.RobotId, out _, out _))
+        {
+            // Held only by a robot that stands still (waiting for a confirmation at an endpoint, parked): pass it in a
+            // band without the drift room. Its body (and every other robot's) still stays outside the grant, and the
+            // robot gate stops this one if it drifts out; Nav2 keeps its distance from the standing robot it sees.
+            Log($"grant-narrow-past-standing:{robot.RobotId}:{standing}");
+            resources = narrow;
+            candidate = candidate with { ResourceIds = narrow };
+            blocker = null;
+        }
         else
         {
             blocker ??= Guid.Empty;
@@ -793,6 +807,11 @@ public sealed class TrafficState
         return request with { Poses = request.Poses.Insert(0, new SemanticPlanPose(seen.X, seen.Y, first.Yaw)) };
     }
 
+    /// <summary>A robot that stands still: no grant, no command (idle, parked, or held at a service stop).</summary>
+    private bool StandsStill(Guid robotId) =>
+        _robots.TryGetValue(robotId, out var r) && r.Authority is null && r.ActiveCommandId is null
+        && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService;
+
     /// <summary>Records the heading a robot reports while it stands still (no grant).</summary>
     private static void NoteYaw(RobotRuntime robot, double? x, double? y, double? yaw, bool localizationOk)
     {
@@ -821,7 +840,7 @@ public sealed class TrafficState
         // next to it.
         // With its heading known (standing still since it reported it), the body rectangle at that heading.
         var set = new HashSet<string>(StringComparer.Ordinal);
-        SemanticReservation.StandingCells(_semantic, x, y, standingYaw, _options.LocalizationMarginMeters, set);
+        SemanticReservation.StandingCells(_semantic, x, y, standingYaw, _options.EffectiveStandingMargin, set);
         // A robot standing still does not turn before its next grant (which takes the zone if the turn needs it), so the
         // zone test uses its half length, not the any-heading circle: on MAP-ONE-V013 (2026-11-22) RBT-002 parked at
         // EP-PARKING-B, 0.245 m below ZONE-SINGLE-CENTER, held the whole zone and RBT-001 waited for it forever.
@@ -1815,7 +1834,7 @@ public sealed class TrafficState
         var radius = _semantic!.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
         var under = new HashSet<string>(StringComparer.Ordinal);
         // The same shape it holds while it stands (StandingCells), so what it seeded is what is checked here.
-        SemanticReservation.StandingCells(_semantic, x, y, StandingYaw(robot, x, y), _options.LocalizationMarginMeters, under);
+        SemanticReservation.StandingCells(_semantic, x, y, StandingYaw(robot, x, y), _options.EffectiveStandingMargin, under);
         foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, radius, z.Ring)))
         {
             under.Add($"zone:{z.Code}");
@@ -2489,7 +2508,7 @@ public sealed class TrafficState
             }
 
             var body = new HashSet<string>(StringComparer.Ordinal);
-            SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.LocalizationMarginMeters, body);
+            SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.EffectiveStandingMargin, body);
             body.ExceptWith(other.OccupiedResourceIds); // what it holds is already counted by capacity
             if (body.Count == 0)
             {

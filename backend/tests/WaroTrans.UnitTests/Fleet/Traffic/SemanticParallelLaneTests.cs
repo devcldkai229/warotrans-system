@@ -158,6 +158,32 @@ public class SemanticParallelLaneTests
     }
 
     [Fact]
+    public void A_robot_passes_one_that_stands_still_in_a_narrow_band()
+    {
+        // Discs everywhere (no lanes): the full 0.40 m disc 0.62 m from a robot standing at (0, 0) takes cells it holds;
+        // without the drift room (0.30 m) it does not, and the pass is granted.
+        var policy = Policy(laneHalfWidth: 0);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, 0, 0, localizationOk: true, poseYaw: 0).Ok);
+        Assert.True(s.MarkOnline(_r1, 0, 0, localizationOk: true, poseYaw: 0).Ok);
+        var path = Line(-1.0, 0.62, 1.0, 0.62);
+        Assert.NotEmpty(SemanticReservation.CollectResources(policy, path)
+            .Intersect(s.Snapshot().Robots.First(r => r.RobotId == _r1).OccupiedResourceIds));
+        var pass = s.AcquireSemanticPlan(Plan(policy, _r2, path));
+        Assert.True(pass.Granted, pass.Reason);
+        Assert.Empty(pass.Authority!.ResourceIds.Intersect(s.Snapshot().Robots.First(r => r.RobotId == _r1).OccupiedResourceIds));
+    }
+
+    [Fact]
+    public void A_moving_robot_is_not_passed_in_the_narrow_band()
+    {
+        var policy = Policy(laneHalfWidth: 0);
+        var s = NewState(policy);
+        Assert.True(s.AcquireSemanticPlan(Plan(policy, _r1, Line(-1.0, -0.15, 1.0, -0.15))).Granted); // r1 drives: narrow would fit, full does not
+        Assert.False(s.AcquireSemanticPlan(Plan(policy, _r2, Line(-1.0, 0.62, 1.0, 0.62))).Granted);
+    }
+
+    [Fact]
     public void The_path_tolerance_grows_from_the_start()
     {
         var policy = Policy(laneHalfWidth: 0.25);

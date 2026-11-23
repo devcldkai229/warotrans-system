@@ -239,7 +239,7 @@ public sealed partial class JobExecutionEngine
         var other = otherRobotId is { } oid ? await fleet.GetRobotAsync(oid, cancellationToken) : null;
         var codes = WaitPointCodes();
         var endpoints = await navigation.GetEndpointsOnMapAsync(job.MapVersionId, cancellationToken);
-        var margin = Math.Max(0, trafficOptions?.Value.LocalizationMarginMeters ?? 0.05);
+        var margin = trafficOptions?.Value.EffectiveStandingMargin ?? 0.05;
         var otherWay = await OtherWayResourcesAsync(policy, other, goal, margin, cancellationToken);
         bool OffWay(double x, double y, double? yaw) => !StandingResources(policy, x, y, yaw, margin).Overlaps(otherWay);
         var stopRadius = Math.Min(policy.FootprintHalfLength, policy.FootprintHalfWidth);
@@ -532,7 +532,7 @@ public sealed partial class JobExecutionEngine
         }
 
         var policy = trafficOptions!.Value.ApplySemanticOverrides(loaded);
-        var margin = Math.Max(0, trafficOptions.Value.LocalizationMarginMeters);
+        var margin = trafficOptions.Value.EffectiveStandingMargin;
         var goal = winnerGoal ?? new EndpointPoseSnapshot(Guid.Empty, robot.CurrentMapVersionId, "", winner.PoseX, winner.PoseY, winner.PoseYaw, true);
         var avoid = await OtherWayResourcesAsync(policy, winner, goal, margin, cancellationToken);
         var snapshot = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);

@@ -246,7 +246,8 @@ public static class SemanticReservation
     /// <summary>Zones and cells the robot sweeps along the first <c>HorizonMeters</c> of its proposed path.</summary>
     public static ImmutableArray<string> CollectResources(
         SemanticTrafficPolicy policy,
-        ImmutableArray<SemanticPlanPose> poses)
+        ImmutableArray<SemanticPlanPose> poses,
+        bool narrow = false)
     {
         if (poses.IsDefaultOrEmpty)
         {
@@ -255,7 +256,7 @@ public static class SemanticReservation
 
         var horizon = Math.Max(policy.EffectiveCellSize, policy.HorizonMeters);
         var resources = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var sample in SweptSamples(policy, poses, horizon))
+        foreach (var sample in SweptSamples(policy, poses, horizon, narrow))
         {
             resources.UnionWith(sample.Resources);
         }
@@ -267,7 +268,8 @@ public static class SemanticReservation
     public static List<(double X, double Y, HashSet<string> Resources)> SweptSamples(
         SemanticTrafficPolicy policy,
         ImmutableArray<SemanticPlanPose> poses,
-        double horizon)
+        double horizon,
+        bool narrow = false)
     {
         var samples = SamplePath(poses, policy.SampleStepMeters, horizon);
         var reachedEnd = samples.Count > 0
@@ -282,7 +284,9 @@ public static class SemanticReservation
                 traveled += Math.Sqrt(Math.Pow(x - samples[i - 1].X, 2) + Math.Pow(y - samples[i - 1].Y, 2));
             }
 
-            var tolerance = ToleranceAt(policy, traveled);
+            // Narrow: no room to drift off the path beyond the start's (the robot gate's stop margin). Used only to pass
+            // a robot that stands still (TrafficState.TryGrantSemantic): drifting there stops the robot, never hits.
+            var tolerance = narrow ? ToleranceAt(policy, 0) : ToleranceAt(policy, traveled);
             var resources = new HashSet<string>(StringComparer.Ordinal);
             foreach (var z in policy.SingleOccupancyZones)
             {

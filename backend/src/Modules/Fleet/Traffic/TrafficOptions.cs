@@ -54,6 +54,16 @@ public sealed class TrafficOptions
     /// </summary>
     public double LocalizationMarginMeters { get; set; } = 0.05;
 
+    /// <summary>
+    /// Margin around the body of a robot that stands still (the cells it holds at an endpoint, and its body as an
+    /// obstacle to others). Null: <see cref="LocalizationMarginMeters"/>. The footprint already carries its padding; a
+    /// robot waiting for a confirmation held a 0.6 x 0.5 m block and closed the way past it (lab 2026-11-23).
+    /// </summary>
+    public double? StandingMarginMeters { get; set; }
+
+    /// <summary>The margin actually used around a standing robot's body.</summary>
+    public double EffectiveStandingMargin => Math.Max(0, StandingMarginMeters ?? LocalizationMarginMeters);
+
     /// <summary>Telemetry older than this is not trusted to seed or reconcile occupancy.</summary>
     public double PoseMaxAgeSec { get; set; } = 5.0;
 
