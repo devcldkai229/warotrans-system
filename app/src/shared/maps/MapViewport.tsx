@@ -42,7 +42,7 @@ import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 import { Button, SegmentedControl, StatusPill, Text, ToggleSwitch } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
-import { BatteryIndicator, OnlineBadge } from '../ui/RobotBadges';
+import { BatteryIndicator } from '../ui/RobotBadges';
 import { triggerHaptic } from '../utils/haptics';
 import { worldToMapPercent } from '../utils/mapCoordinates';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
@@ -1214,6 +1214,24 @@ function MapCanvas({
                 <ChevronLeft size={18} color={colors.textPrimary} />
               </Pressable>
             ) : null}
+            {(sheet === 'endpoint' && endpoint) || (sheet === 'robot' && robot) ? (
+              <View style={styles.headerIconWell}>
+                {sheet === 'endpoint' && endpoint ? (
+                  <EndpointIcon
+                    type={endpoint.endpointType}
+                    code={endpoint.code}
+                    name={endpoint.name}
+                    size={18}
+                    isDark={isDark}
+                  />
+                ) : (
+                  <Bot
+                    size={18}
+                    color={robot?.isOnline ? colors.textPrimary : colors.textMuted}
+                  />
+                )}
+              </View>
+            ) : null}
             <View style={styles.sheetHeaderTitleGroup}>
               <Text variant="title" numberOfLines={1}>
                 {sheet === 'layers'
@@ -1225,15 +1243,27 @@ function MapCanvas({
                   : robot?.code || 'Robot Telemetry'}
               </Text>
               {sheet === 'endpoint' || sheet === 'robot' ? (
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                <Text
+                  variant="caption"
+                  color="textSecondary"
+                  numberOfLines={1}
+                  style={sheet === 'endpoint' ? styles.headerSubtitleMono : undefined}
+                >
                   {sheet === 'endpoint'
-                    ? `${endpoint?.code} · ${endpoint?.endpointType}`
-                    : robot?.isOnline
-                    ? `${t(robotStatusLabel(robot.status))} · ${t('Online')}`
+                    ? endpoint
+                      ? `${endpoint.code} · ${endpoint.endpointType}`
+                      : ''
+                    : robot
+                    ? `${t(robotStatusLabel(robot.status))}${robot.isOnline ? '' : ` · ${t('Offline')}`}`
                     : 'Offline'}
                 </Text>
               ) : null}
             </View>
+            {sheet === 'endpoint' && endpoint && !endpoint.isEnabled ? (
+              <StatusPill status="OFFLINE" label="Disabled" size="sm" dot />
+            ) : sheet === 'robot' && robot && !robot.isOnline ? (
+              <StatusPill status="OFFLINE" label="Offline" size="sm" dot />
+            ) : null}
             <Pressable
               onPress={close}
               accessibilityRole="button"
@@ -1618,33 +1648,6 @@ function MapCanvas({
             ) : sheet === 'endpoint' && endpoint ? (
               /* Station Detail View */
               <View style={styles.detailContainer}>
-                <View style={styles.detailHeroCard}>
-                  <View style={styles.detailHeroIconBox}>
-                    <EndpointIcon
-                      type={endpoint.endpointType}
-                      code={endpoint.code}
-                      name={endpoint.name}
-                      size={22}
-                      isDark={isDark}
-                    />
-                  </View>
-                  <View style={styles.detailHeroText}>
-                    <Text variant="title">{endpoint.name}</Text>
-                    <Text
-                      variant="caption"
-                      color="textSecondary"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {endpoint.code} · {endpoint.endpointType}
-                    </Text>
-                  </View>
-                  <StatusPill
-                    status={endpoint.isEnabled ? 'ACTIVE' : 'OFFLINE'}
-                    label={endpoint.isEnabled ? 'Operational' : 'Disabled'}
-                    dot
-                  />
-                </View>
-
                 <View style={styles.specBox}>
                   <View style={styles.specCell}>
                     <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
@@ -1691,74 +1694,43 @@ function MapCanvas({
                       close();
                     }}
                   />
-                  <Button
-                    title="Back to Layers"
-                    variant="ghost"
-                    size="md"
-                    icon={ChevronLeft}
-                    fullWidth
-                    onPress={backToLayers}
-                  />
                 </View>
               </View>
             ) : sheet === 'robot' && robot && state ? (
               /* Robot Detail View */
               <View style={styles.detailContainer}>
-                <View style={styles.robotHero}>
-                  <View style={styles.robotHeroTop}>
-                    <View style={styles.robotAvatar}>
-                      <Bot
-                        size={20}
-                        color={robot.isOnline ? colors.textPrimary : colors.textMuted}
-                      />
-                    </View>
-                    <View style={styles.detailHeroText}>
-                      <Text
-                        variant="title"
-                        numberOfLines={1}
-                        style={{ fontFamily: typography.fontMono }}
-                      >
-                        {robot.code}
-                      </Text>
-                      <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                        {robot.name || robot.code}
-                      </Text>
-                    </View>
-                    <OnlineBadge online={robot.isOnline} />
+                <View style={styles.robotStats}>
+                  <View style={styles.robotStat}>
+                    <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
+                      Battery
+                    </Text>
+                    <BatteryIndicator
+                      percent={robot.batteryPercent}
+                      charging={robot.status === 'CHARGING'}
+                      size="lg"
+                      bar
+                    />
                   </View>
-                  <View style={styles.robotStats}>
-                    <View style={styles.robotStat}>
-                      <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
-                        Battery
-                      </Text>
-                      <BatteryIndicator
-                        percent={robot.batteryPercent}
-                        charging={robot.status === 'CHARGING'}
-                        size="lg"
-                        bar
+                  <View style={styles.robotStatDivider} />
+                  <View style={styles.robotStat}>
+                    <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
+                      Status
+                    </Text>
+                    <View style={styles.robotStatValueRow}>
+                      <View
+                        style={[
+                          styles.robotStatusDot,
+                          { backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted },
+                        ]}
                       />
-                    </View>
-                    <View style={styles.robotStatDivider} />
-                    <View style={styles.robotStat}>
-                      <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
-                        Status
+                      <Text
+                        variant="bodyMedium"
+                        fontWeight="600"
+                        numberOfLines={1}
+                        style={styles.robotStatValue}
+                      >
+                        {robotStatusLabel(robot.status)}
                       </Text>
-                      <View style={styles.robotStatValueRow}>
-                        <View
-                          style={[
-                            styles.robotStatusDot,
-                            { backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted },
-                          ]}
-                        />
-                        <Text
-                          variant="bodyMedium"
-                          fontWeight="600"
-                          numberOfLines={1}
-                          style={styles.robotStatValue}
-                        >
-                          {robotStatusLabel(robot.status)}
-                        </Text>
-                      </View>
                     </View>
                   </View>
                 </View>
@@ -1803,14 +1775,6 @@ function MapCanvas({
                       }}
                     />
                   ) : null}
-                  <Button
-                    title="Back to Layers"
-                    variant="ghost"
-                    size="md"
-                    icon={ChevronLeft}
-                    fullWidth
-                    onPress={backToLayers}
-                  />
                 </View>
               </View>
             ) : (
@@ -1846,35 +1810,16 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     smallState: { position: 'absolute', left: 24, right: 24, justifyContent: 'center' },
     station: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 20 },
-    robotHero: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 16,
-      borderCurve: 'continuous',
-      padding: 14,
-      gap: 12,
-      backgroundColor: colors.surfaceSubtle,
-    },
-    robotHeroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    robotAvatar: {
-      width: 42,
-      height: 42,
-      borderRadius: 12,
-      borderCurve: 'continuous',
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     robotStats: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 12,
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 14,
       borderCurve: 'continuous',
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: colors.border,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
     },
     robotStat: {
       flex: 1,
@@ -2099,10 +2044,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderBottomColor: colors.border,
       gap: 12,
     },
+    headerIconWell: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
     sheetHeaderTitleGroup: {
       flex: 1,
       minWidth: 0,
       gap: 2,
+    },
+    headerSubtitleMono: {
+      fontFamily: typography.fontMono,
     },
     circleBtn: {
       width: 36,
@@ -2364,31 +2322,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     // Detail Views
     detailContainer: {
       gap: 14,
-    },
-    detailHeroCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      padding: 14,
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: 16,
-      borderCurve: 'continuous',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    detailHeroIconBox: {
-      width: 40,
-      height: 40,
-      borderRadius: 11,
-      borderCurve: 'continuous',
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    detailHeroText: {
-      flex: 1,
-      minWidth: 0,
-      gap: 2,
     },
     specBox: {
       flexDirection: 'row',
