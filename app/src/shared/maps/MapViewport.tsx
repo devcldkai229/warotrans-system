@@ -1304,7 +1304,7 @@ function MapCanvas({
                 {/* 1. Quick Presets */}
                 <View style={styles.sectionBlock}>
                   <Text variant="caption" color="textSecondary" style={styles.sectionHeaderTitle}>
-                    VIEW PRESETS
+                    View Presets
                   </Text>
                   <SegmentedControl
                     options={PRESET_OPTIONS}
@@ -1318,7 +1318,7 @@ function MapCanvas({
                 {/* 2. Inset Grouped Layers */}
                 <View style={styles.sectionBlock}>
                   <Text variant="caption" color="textSecondary" style={styles.sectionHeaderTitle}>
-                    DISPLAY LAYERS
+                    Display Layers
                   </Text>
                   <View style={styles.groupedCard}>
                     {LAYER_ITEMS.map((item, idx) => {
@@ -1414,7 +1414,7 @@ function MapCanvas({
                     <View style={styles.directoryContent}>
                       {/* AMR Fleet */}
                       <Text variant="caption" color="textSecondary" style={styles.subSectionTitle}>
-                        ACTIVE AMRs ON MAP ({mapRobots.length})
+                        Active AMRs on Map ({mapRobots.length})
                       </Text>
                       {mapRobots.length === 0 ? (
                         <View style={styles.emptyCard}>
@@ -1497,7 +1497,7 @@ function MapCanvas({
                                       ? 'Track'
                                       : 'Inspect'
                                   }
-                                  variant={isSelected ? 'primary' : 'outline'}
+                                  variant={isSelected ? 'primary' : 'secondary'}
                                   size="sm"
                                   icon={Navigation}
                                   onPress={() => {
@@ -1521,7 +1521,7 @@ function MapCanvas({
                         color="textSecondary"
                         style={[styles.subSectionTitle, { marginTop: 12 }]}
                       >
-                        STATIONS & DOCKS ({enabledEndpoints.length})
+                        Stations & Docks ({enabledEndpoints.length})
                       </Text>
                       <View style={styles.groupedCard}>
                         {enabledEndpoints.map((e, idx) => {
@@ -1567,11 +1567,7 @@ function MapCanvas({
                                     {e.code} · X {e.x.toFixed(2)}m · Y {e.y.toFixed(2)}m
                                   </Text>
                                 </Pressable>
-                                <Button
-                                  title="Locate"
-                                  variant="ghost"
-                                  size="sm"
-                                  icon={Focus}
+                                <Pressable
                                   onPress={() => {
                                     triggerHaptic('tap');
                                     const p = worldToBase(e, map, frame);
@@ -1582,7 +1578,19 @@ function MapCanvas({
                                     setEndpointId(e.id);
                                     close();
                                   }}
-                                />
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${t('Locate')} ${e.name || e.code}`}
+                                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                                  style={({ pressed }) => [
+                                    styles.locatePill,
+                                    pressed && styles.btnPressed,
+                                  ]}
+                                >
+                                  <Focus size={13} color={colors.textSecondary} />
+                                  <Text variant="caption" color={colors.textPrimary} fontWeight="600">
+                                    Locate
+                                  </Text>
+                                </Pressable>
                               </View>
                               {!isLast && <View style={styles.insetDivider} />}
                             </View>
@@ -1598,7 +1606,7 @@ function MapCanvas({
                             color="textSecondary"
                             style={[styles.subSectionTitle, { marginTop: 12 }]}
                           >
-                            OPERATIONAL ZONES ({activeZones.length})
+                            Operational Zones ({activeZones.length})
                           </Text>
                           <View style={styles.groupedCard}>
                             {activeZones.map((z, idx) => {
@@ -1785,7 +1793,7 @@ function MapCanvas({
                   {onManualDrive ? (
                     <Button
                       title="Manual Drive"
-                      variant="outline"
+                      variant="secondary"
                       size="md"
                       icon={SlidersHorizontal}
                       fullWidth
@@ -1805,7 +1813,7 @@ function MapCanvas({
                 </Text>
                 <Button
                   title="Back to Layers"
-                  variant="outline"
+                  variant="secondary"
                   icon={ChevronLeft}
                   onPress={backToLayers}
                 />
@@ -2110,15 +2118,17 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 8,
     },
     sectionHeaderTitle: {
-      fontWeight: '700',
-      letterSpacing: 0.6,
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: -0.1,
       color: colors.textSecondary,
     },
     subSectionTitle: {
-      fontWeight: '700',
-      letterSpacing: 0.5,
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: -0.1,
       color: colors.textSecondary,
       marginBottom: 4,
     },
@@ -2327,6 +2337,16 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       paddingHorizontal: 6.5,
       paddingVertical: 1.5,
       borderRadius: 999,
+    },
+    locatePill: {
+      minHeight: 32,
+      paddingHorizontal: 9,
+      borderRadius: 8,
+      borderCurve: 'continuous',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
     },
 
     // Empty Card

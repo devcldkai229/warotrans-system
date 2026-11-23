@@ -48,7 +48,7 @@ export function RobotLocalizePanel({ robotCode, isOnline, localizationStatus, ma
         {localizationStatus === 'LOCALIZED' ? `${robotCode} is localized (set at ${sentTo}).` : `Sent: ${robotCode} stands at ${sentTo}. Waiting for the robot to confirm…`}
       </Text> : null}
       {!open ? (
-        <Button title="Localize Robot Here…" variant="outline" size="md" icon={Crosshair} fullWidth disabled={!isOnline}
+        <Button title="Localize Robot Here…" variant="secondary" size="md" icon={Crosshair} fullWidth disabled={!isOnline}
           onPress={() => { setOpen(true); setError(null); }} />
       ) : (
         <>
@@ -95,7 +95,7 @@ export function RobotLocalizePanel({ robotCode, isOnline, localizationStatus, ma
           </View>
           <Button title={chosen ? `Localize At ${chosen.code}` : 'Pick A Point'} variant="primary" size="md" fullWidth
             disabled={!chosen || !isOnline} loading={busy} onPress={send} />
-          <Button title="Close" variant="ghost" size="md" fullWidth onPress={() => setOpen(false)} disabled={busy} />
+          <Button title="Close" variant="secondary" size="md" fullWidth onPress={() => setOpen(false)} disabled={busy} />
         </>
       )}
       {!isOnline ? <Text variant="caption" color={colors.textSecondary}>The robot is offline; it cannot be localized now.</Text> : null}

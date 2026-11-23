@@ -25,6 +25,7 @@ import {
   Button,
   ProgressMeter,
   StatusPill,
+  statusTone,
   Text,
 } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
@@ -112,7 +113,21 @@ export function HomeScreen() {
   const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
   const activePositionLabel = isWaitingHandover ? 'Waiting at Station' : isQueuedOrCreated ? 'Awaiting Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
   const collapsedBtnTitle = isWaitingHandover ? 'Verify' : isQueuedOrCreated ? 'Start' : 'Open';
-  const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Mission Detail';
+  const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Job Detail';
+
+  const collapsedTone = statusTone(isWaitingHandover ? 'WAITING_HANDOVER' : activeJob.status);
+  const collapsedStatusDotColor =
+    collapsedTone === 'danger'
+      ? colors.danger
+      : collapsedTone === 'warning'
+      ? colors.warning
+      : collapsedTone === 'info'
+      ? colors.primary
+      : collapsedTone === 'success'
+      ? isDark
+        ? '#30D158'
+        : '#34C759'
+      : colors.textMuted;
 
   const toggleSheetExpand = () => {
     triggerHaptic('tap');
@@ -204,15 +219,21 @@ export function HomeScreen() {
               accessibilityLabel={`Job ${activeJob.jobNo || activeJob.id}, ${activeStatusLabel}. Tap to view details.`}
             >
               <View style={styles.collapsedTopLine}>
+                <View style={[styles.collapsedStatusDot, { backgroundColor: collapsedStatusDotColor }]} />
                 <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.collapsedJobCode}>
                   {activeJob.jobNo || activeJob.id}
                 </Text>
-                <StatusPill status={activeJob.status} label={activeStatusLabel} size="sm" dot />
               </View>
               <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.collapsedTarget}>
-                {activeJob.target || 'Unknown Destination'}
+                {activeStatusLabel}
                 {' · '}
-                <Text style={styles.collapsedRobotMono}>{activeJob.robot || 'Unassigned'}</Text>
+                {activeJob.target || 'Unknown Destination'}
+                {activeJob.robot ? (
+                  <>
+                    {' · '}
+                    <Text style={styles.collapsedRobotMono}>{activeJob.robot}</Text>
+                  </>
+                ) : null}
               </Text>
             </Pressable>
 
@@ -479,9 +500,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     gap: 7,
     minWidth: 0,
   },
+  collapsedStatusDot: {
+    width: 6.5,
+    height: 6.5,
+    borderRadius: 3.25,
+    flexShrink: 0,
+  },
   collapsedJobCode: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 14.5,
+    lineHeight: 19,
     fontWeight: '700',
     letterSpacing: -0.25,
     flexShrink: 1,

@@ -431,7 +431,7 @@ export function MapLegendContent({
       {/* 1. Robots (AMR) */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          ROBOTS (AMR)
+          Robots (AMR)
         </Text>
         <View style={styles.listCard}>
           <View style={styles.flatGrid}>
@@ -463,7 +463,7 @@ export function MapLegendContent({
       {/* 2. Stations & Docks */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          STATIONS & DOCKS
+          Stations & Docks
         </Text>
         <View style={styles.listCard}>
           <View style={styles.flatGrid}>
@@ -495,7 +495,7 @@ export function MapLegendContent({
       {/* 3. Traffic Lanes & Paths */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          TRAFFIC LANES & PATHS
+          Traffic Lanes & Paths
         </Text>
         <View style={styles.listCard}>
           <View style={styles.listRow}>
@@ -549,7 +549,7 @@ export function MapLegendContent({
       {/* 4. Operational Zones */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          OPERATIONAL ZONES
+          Operational Zones
         </Text>
         <View style={styles.listCard}>
           {orderedZoneTypes.map((type, idx) => {
@@ -586,9 +586,10 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     root: { gap: 16 },
     section: { gap: 8 },
     sectionTitle: {
-      fontWeight: '700',
-      letterSpacing: 0.6,
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: -0.1,
       color: colors.textSecondary,
     },
     flatGrid: {
