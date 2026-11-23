@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Time.Testing;
 using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.UnitTests.Fleet.Traffic;
