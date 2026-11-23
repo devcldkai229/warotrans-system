@@ -6,7 +6,7 @@ const read = (query: string) => readIssueFilters(new URLSearchParams(query), tod
 
 describe('issue filters in the address', () => {
   it('reads nothing as all types, severities, statuses and any time', () => {
-    expect(read('')).toEqual({ type: '', severity: '', status: '', reported: null })
+    expect(read('')).toEqual({ type: '', severity: '', status: '', problem: '', reported: null })
     expect(hasIssueFilters(read(''))).toBe(false)
   })
 
@@ -23,11 +23,16 @@ describe('issue filters in the address', () => {
   })
 
   it('treats unknown or broken values as all, never hiding issues behind a range it cannot read', () => {
-    const filters = read('type=ROBOTS&severity=urgent&status=done&range=forever&from=2026-11-20&to=2026-11-01')
+    const filters = read('type=ROBOTS&severity=urgent&status=done&problem=BROKEN&range=forever&from=2026-11-20&to=2026-11-01')
 
-    expect(filters).toEqual({ type: '', severity: '', status: '', reported: null })
+    expect(filters).toEqual({ type: '', severity: '', status: '', problem: '', reported: null })
     expect(read('from=2026-11-01').reported).toBeNull()
     expect(read('from=2026-11-01&to=2026-12-31').reported).toBeNull() // ends after today
+  })
+
+  it('reads a container problem code', () => {
+    expect(read('problem=QUANTITY_MISMATCH').problem).toBe('QUANTITY_MISMATCH')
+    expect(hasIssueFilters(read('problem=QUANTITY_MISMATCH'))).toBe(true)
   })
 
   it('counts the type tab apart from the other filters', () => {
@@ -45,7 +50,7 @@ describe('issue filters in the address', () => {
   })
 
   it('clears every filter and the page, keeping anything else', () => {
-    const cleared = clearIssueFilters(new URLSearchParams('type=JOB&severity=LOW&status=OPEN&range=30d&page=2&x=1'))
+    const cleared = clearIssueFilters(new URLSearchParams('type=JOB&severity=LOW&status=OPEN&problem=OTHER&range=30d&page=2&x=1'))
 
     expect(cleared.toString()).toBe('x=1')
   })

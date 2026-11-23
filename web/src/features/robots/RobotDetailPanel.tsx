@@ -23,7 +23,7 @@ import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
-import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
+import { JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
 import { t } from '@/shared/i18n'
 import type { RobotHealth } from '@/shared/api/fleet'
 import { buildHealthGroups, countHealth, formatAge } from './technical/healthModel'
@@ -185,6 +185,9 @@ function lastHeard(robot: RobotView) {
     : t('Never connected')
 }
 
+/** A Job still under way on its robot (the same set the Technician page reads as the current job). */
+const ACTIVE_JOB_STATUSES: string[] = ['ASSIGNED', 'RUNNING', 'PAUSED', 'REASSIGNING', 'RECOVERY_REQUIRED']
+
 // Every section is backed by persisted data: fleet.robots, the active JobAssignment and the robot's Job assignments.
 // Status, enabled and online are in the panel header, so no section repeats them.
 function buildSections(
@@ -194,8 +197,10 @@ function buildSections(
   warehouseName: string | undefined,
   paths: ConsolePaths,
 ): Section[] {
-  const activity = robot.activity
   const recentJobs = recent.items
+  // The robot's own Jobs, newest first: the one still under way is its current job (the robot row holds no job link).
+  const activeJob = recentJobs.find((job) => ACTIVE_JOB_STATUSES.includes(job.status)) ?? null
+  const activePercent = activeJob && activeJob.totalSteps > 0 ? Math.round((activeJob.completedSteps / activeJob.totalSteps) * 100) : 0
   const hasTelemetry = Boolean(robot.lastTelemetryAt)
   // Names, not ids: the id only when the name cannot be read (no access to warehouses, or not loaded yet).
   const warehouse = warehouseName ?? dash(robot.warehouseId)
@@ -285,31 +290,28 @@ function buildSections(
     {
       id: 'job',
       label: t('Current job'),
-      summary: activity ? activity.requestCode : t('No active job'),
-      body: activity ? (
+      summary: activeJob ? activeJob.jobNo : recent.state === 'loading' ? t('Loading…') : t('No active job'),
+      body: activeJob ? (
         <dl>
-          <Field label={t('Job')}>{activity.jobNo}</Field>
-          <Field label={t('Request')}>{activity.requestCode}</Field>
+          <Field label={t('Job')}>
+            <Link to={paths.job(activeJob.id)} className="font-medium text-primary underline-offset-2 hover:underline">
+              {activeJob.jobNo}
+            </Link>
+          </Field>
+          {activeJob.requestCodes?.length ? <Field label={t('Request')}>{activeJob.requestCodes.join(', ')}</Field> : null}
           <Field label={t('Status')}>
-            <StatusBadge tone={JOB_STATUS_TONE[activity.jobStatus]}>{activity.jobStatus}</StatusBadge>
+            <StatusBadge tone={JOB_STATUS_TONE[activeJob.status]}>{activeJob.status}</StatusBadge>
           </Field>
           <Field label={t('Progress')}>
-            {activity.progressPercent}%{' '}
-            <Meter percent={activity.progressPercent} tone={activity.jobStatus === 'FAILED' ? 'red' : 'blue'} className="w-12" />
+            {activeJob.completedSteps}/{activeJob.totalSteps}{' '}
+            <Meter percent={activePercent} tone={activeJob.failureCode ? 'red' : 'blue'} className="w-12" />
           </Field>
-          {activity.routeLabel ? <Field label={t('Route')}>{activity.routeLabel}</Field> : null}
-          {activity.containers?.length ? (
-            <Field label={activity.containers.length > 1 ? t('Containers') : t('Container')}>
-              <ul className="flex flex-col items-end gap-1.5">
-                {activity.containers.map((container) => (
-                  <li key={container.barcode} className="flex items-center gap-2">
-                    {container.barcode}
-                    <StatusBadge tone={JOB_CONTAINER_STATUS_TONE[container.status]}>{container.status}</StatusBadge>
-                  </li>
-                ))}
-              </ul>
+          {activeJob.containerBarcodes?.length ? (
+            <Field label={activeJob.containerBarcodes.length > 1 ? t('Containers') : t('Container')}>
+              {activeJob.containerBarcodes.join(', ')}
             </Field>
           ) : null}
+          {activeJob.failureCode ? <Field label={t('Stopped by')}>{humanize(activeJob.failureCode)}</Field> : null}
         </dl>
       ) : (
         <p className={EMPTY}>{t('This robot has no job assigned.')}</p>

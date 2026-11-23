@@ -11,6 +11,7 @@ import { PERMISSIONS } from '@/shared/auth/permissions'
 import {
   claimJobStep,
   confirmHandoverBatch,
+  confirmInspection,
   confirmJobStep,
   failJobContainer,
   getJob,
@@ -22,7 +23,12 @@ import {
   type JobStepDto,
 } from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
+import { createIssue, listIssues, type Issue } from '@/shared/api/operations'
 import { DispatchPanel } from './DispatchPanel'
+import { ContainerProblemDialog, type ContainerProblemChoice } from './ContainerProblemDialog'
+import { IssueChip, JobContainersCard } from './JobContainersCard'
+import { isBlocking, isOpenIssue, issueCounts } from './jobContainerView'
+import { problemLabel } from '@/features/operations/containerProblems'
 import { useTrafficOverlay } from '@/features/robots/useTrafficOverlay'
 import { JobOperatorActions } from './JobOperatorActions'
 import { JobRecoveryPanel } from './JobRecoveryPanel'
@@ -157,6 +163,8 @@ function StepRow({
   defaultOpen,
   labels,
   canConfirm,
+  issues,
+  onBoard,
 }: {
   jobId: string
   step: JobStepDto
@@ -165,6 +173,10 @@ function StepRow({
   defaultOpen: boolean
   labels: Labels
   canConfirm: boolean
+  /** The issues of the Job: those about this step's container show here, and a blocking one stops the confirmation. */
+  issues: Issue[]
+  /** The containers on the robot now (an inspection looks at each of them). */
+  onBoard: string[]
 }) {
   const queryClient = useQueryClient()
   const { account, can } = useAuth()
@@ -177,14 +189,35 @@ function StepRow({
   const inputs = Object.entries(step.resolvedInputs)
   const outputs = Object.entries(step.outputValues)
   const expectedContainer = typeof step.resolvedInputs.containerId === 'string' ? step.resolvedInputs.containerId : null
+  const inspection = step.operationCode === 'INSPECTION_CONFIRM'
+  const containerIssues = expectedContainer ? issues.filter((i) => i.containerId === expectedContainer) : []
+  const blocking = containerIssues.filter(isBlocking)
+  const openOther = containerIssues.filter((i) => isOpenIssue(i) && !isBlocking(i))
+  const [problemOpen, setProblemOpen] = useState(false)
+  const [problemError, setProblemError] = useState<string | null>(null)
+  const refreshIssues = () => void queryClient.invalidateQueries({ queryKey: ['issues', 'job', jobId] })
 
   // Staff confirms the container identity; the backend enforces the order and that it is the right container.
   const confirm = useMutation({
     mutationFn: () => confirmJobStep(step.id, expectedContainer, `confirmed from web (${labels.container(expectedContainer)})`),
     onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
   })
-  const failContainer = useMutation({
-    mutationFn: (reason: string) => failJobContainer(step.id, expectedContainer as string, reason),
+  // "Container failed" at a handover, or a FAILED inspection: the container leaves the Job, held where it is under an issue.
+  const reportProblem = useMutation({
+    mutationFn: (choice: ContainerProblemChoice) =>
+      inspection
+        ? confirmInspection(step.id, 'FAILED', { containerId: choice.containerId, note: choice.note, defects: choice.codes })
+        : failJobContainer(step.id, choice.containerId, choice.note, choice.codes[0]),
+    onSuccess: (detail) => {
+      queryClient.setQueryData(['job', jobId], detail)
+      setProblemOpen(false)
+      setProblemError(null)
+      refreshIssues()
+    },
+    onError: (failure) => setProblemError(errorText(failure)),
+  })
+  const passInspection = useMutation({
+    mutationFn: () => confirmInspection(step.id, 'PASSED', { note: 'passed (web)' }),
     onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
   })
   const claim = useMutation({
@@ -217,6 +250,15 @@ function StepRow({
         <strong className="min-w-0 truncate font-medium">{step.name || step.stepKey}</strong>
         <span className="shrink-0 text-xs whitespace-nowrap text-muted">{humanize(step.stepType)}</span>
         <span className="ml-auto flex shrink-0 items-center gap-3">
+          {containerIssues.some(isOpenIssue) ? (
+            <span
+              title={containerIssues.filter(isOpenIssue).map((i) => `${i.code} ${problemLabel(i.problemCode ?? i.issueType)}`).join(', ')}
+              className={cx('flex items-center gap-1 text-xs font-medium', blocking.length > 0 ? 'text-red-ink' : 'text-amber-ink')}
+            >
+              <Icon name={blocking.length > 0 ? 'lock' : 'alert'} size={13} />
+              {blocking.length > 0 ? t('blocked') : t('issue')}
+            </span>
+          ) : null}
           {waiting && waited !== null ? (
             <span className="text-xs font-medium whitespace-nowrap text-amber-ink tabular-nums">{t('waiting {value}', { value: formatDuration(waited) })}</span>
           ) : null}
@@ -240,13 +282,53 @@ function StepRow({
             <>
               <h4 className={STEP_HEADING}>{t('Confirmation')}</h4>
               <div className="flex flex-col gap-1.5">
-                <p className="text-sm">
-                  {step.status === 'COMPLETED'
-                    ? t('Confirmed at {value}.', { value: formatClock(step.completedAt) })
-                    : waiting
-                      ? t('The robot is waiting for an operator to confirm the container identity.')
+                {step.status === 'COMPLETED' ? (
+                  <p className="flex flex-wrap items-center gap-1 text-sm text-green-ink">
+                    <Icon name="check" size={14} strokeWidth={2.5} />
+                    {t('Confirmed at {value}.', { value: formatClock(step.completedAt) })}
+                    {step.confirmedByName ? <span className="text-ink-2">{t('by {name}', { name: step.confirmedByName })}</span> : null}
+                    {typeof step.outputValues.confirmationSource === 'string' ? (
+                      <span className="text-muted">({humanize(step.outputValues.confirmationSource)})</span>
+                    ) : null}
+                    {typeof step.outputValues.scannedBarcode === 'string' ? (
+                      <span className="font-mono text-xs text-muted">· {t('scanned')} {step.outputValues.scannedBarcode}</span>
+                    ) : null}
+                    {typeof step.outputValues.inspectionResult === 'string' ? (
+                      <StatusBadge tone={step.outputValues.inspectionResult === 'PASSED' ? 'green' : 'red'}>{step.outputValues.inspectionResult}</StatusBadge>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-sm">
+                    {waiting
+                      ? inspection
+                        ? t('The robot waits at the inspection: give the result of each container on board.')
+                        : t('The robot is waiting for an operator to confirm the container identity.')
                       : t('Not confirmed yet.')}
-                </p>
+                  </p>
+                )}
+                {blocking.length > 0 && step.status !== 'COMPLETED' ? (
+                  <div role="alert" className="rounded-sm border border-red/40 bg-red-soft px-3 py-2 text-xs text-red-ink">
+                    <p className="flex items-center gap-1 font-medium">
+                      <Icon name="lock" size={13} /> {t('Cannot confirm: an issue about this container is open.')}
+                    </p>
+                    <p className="mt-0.5">{t('Find the right container and resolve the issue by scanning it, or take this container off the Job.')}</p>
+                    <span className="mt-1.5 flex flex-wrap gap-1">
+                      {blocking.map((issue) => (
+                        <IssueChip key={issue.id} issue={issue} />
+                      ))}
+                    </span>
+                  </div>
+                ) : null}
+                {openOther.length > 0 ? (
+                  <div className="rounded-sm bg-amber-soft px-3 py-2 text-xs text-amber-ink">
+                    <p className="font-medium">{t('Open issue about this container (does not block the confirmation):')}</p>
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {openOther.map((issue) => (
+                        <IssueChip key={issue.id} issue={issue} />
+                      ))}
+                    </span>
+                  </div>
+                ) : null}
                 {expectedContainer ? (
                   <p className="text-xs text-ink-2">{t('Expected container:')}{' '}<b className="font-medium text-ink">{labels.container(expectedContainer)}</b>
                   </p>
@@ -286,25 +368,55 @@ function StepRow({
                         {t('Take over')}
                       </Button>
                     ) : null}
-                    <Button variant="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending || heldByOther}>
-                      <Icon name="check" size={15} /> {confirm.isPending ? t('Confirming…') : t('Confirm')}
-                    </Button>
-                    {expectedContainer ? (
+                    {inspection ? (
+                      <>
+                        <Button variant="primary" onClick={() => passInspection.mutate()} disabled={passInspection.isPending || heldByOther}>
+                          <Icon name="check" size={15} /> {t('Passed')}
+                        </Button>
+                        <Button variant="danger" disabled={heldByOther || onBoard.length === 0} onClick={() => setProblemOpen(true)}>
+                          {t('Failed…')}
+                        </Button>
+                      </>
+                    ) : (
                       <Button
-                        variant="ghost"
-                        disabled={failContainer.isPending || heldByOther}
-                        onClick={() => {
-                          const reason = window.prompt('Why can this container not go on?')
-                          if (reason?.trim()) failContainer.mutate(reason.trim())
-                        }}
+                        variant="primary"
+                        onClick={() => confirm.mutate()}
+                        disabled={confirm.isPending || heldByOther || blocking.length > 0}
+                        title={blocking.length > 0 ? t('Resolve the open issue about this container first.') : undefined}
                       >
-                        Container failed
+                        <Icon name={blocking.length > 0 ? 'lock' : 'check'} size={15} /> {confirm.isPending ? t('Confirming…') : t('Confirm')}
+                      </Button>
+                    )}
+                    {expectedContainer && !inspection ? (
+                      <Button variant="dangerGhost" disabled={heldByOther} onClick={() => setProblemOpen(true)}>
+                        {t('Container failed…')}
                       </Button>
                     ) : null}
                   </div>
                 ) : null}
                 {confirm.error ? <p className="text-xs text-red-ink">{errorText(confirm.error)}</p> : null}
-                {failContainer.error ? <p className="text-xs text-red-ink">{errorText(failContainer.error)}</p> : null}
+                {passInspection.error ? <p className="text-xs text-red-ink">{errorText(passInspection.error)}</p> : null}
+                {problemOpen ? (
+                  <ContainerProblemDialog
+                    title={inspection ? t('Inspection failed') : t('Container failed')}
+                    subtitle={
+                      inspection
+                        ? t('That container leaves the Job here and is held at the inspection point under an issue. The robot goes on with the others.')
+                        : t('The container leaves the Job and is held where it is under an issue: on its shelf or at the gate when not picked up, set down here when on the robot.')
+                    }
+                    submitLabel={inspection ? t('Record the failure') : t('Take it off the Job')}
+                    scope={inspection ? 'INSPECTION' : 'HANDOVER'}
+                    multiple={inspection}
+                    containers={(inspection ? onBoard : expectedContainer ? [expectedContainer] : []).map((id) => ({ id, label: labels.container(id) }))}
+                    busy={reportProblem.isPending}
+                    error={problemError}
+                    onClose={() => {
+                      setProblemOpen(false)
+                      setProblemError(null)
+                    }}
+                    onSubmit={(choice) => reportProblem.mutate(choice)}
+                  />
+                ) : null}
                 {claim.error ? <p className="text-xs text-red-ink">{errorText(claim.error)}</p> : null}
                 {release.error ? <p className="text-xs text-red-ink">{errorText(release.error)}</p> : null}
                 {takeOver.error ? <p className="text-xs text-red-ink">{errorText(takeOver.error)}</p> : null}
@@ -439,6 +551,39 @@ export function JobDetailPage() {
   })
   const request = requestQuery.data ?? null
 
+  // The issues of this Job, beside its confirmations: a container issue shows on its row, its steps and the header.
+  const issuesQuery = useQuery({
+    queryKey: ['issues', 'job', jobId],
+    queryFn: () => listIssues({ jobId: jobId!, take: 100 }),
+    enabled: jobId !== null && can(PERMISSIONS.issueRead),
+    refetchInterval: job && ACTIVE_JOB_STATUSES.includes(job.status) ? 10_000 : false,
+  })
+  const jobIssues = issuesQuery.data?.items ?? []
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
+  const reportIssue = useMutation({
+    mutationFn: (choice: ContainerProblemChoice) => {
+      const code = choice.codes[0]
+      const high = ['WRONG_CONTAINER', 'MISSING_CONTAINER', 'CONTAINER_DAMAGED', 'UNSAFE_LOAD'].includes(code)
+      const container = job?.containers.find((c) => c.containerId === choice.containerId)
+      return createIssue({
+        issueType: 'CONTAINER',
+        severity: high ? 'HIGH' : 'MEDIUM',
+        description: choice.note,
+        containerId: choice.containerId,
+        jobId: jobId!,
+        transportRequestId: container?.transportRequestId,
+        problemCode: code,
+      })
+    },
+    onSuccess: () => {
+      setReportOpen(false)
+      setReportError(null)
+      void queryClient.invalidateQueries({ queryKey: ['issues', 'job', jobId] })
+    },
+    onError: (failure) => setReportError(errorText(failure)),
+  })
+
   const monitorMap = useMonitorMapVersion({
     preferredWarehouseId: request?.warehouseId ?? null,
     preferredMapVersionId: job?.mapVersionId ?? null,
@@ -538,6 +683,8 @@ export function JobDetailPage() {
     origin && destination ? [{ from: origin, to: destination, label: containerLabels[0] }] : []
   // Only the person-confirm of a waiting step is offered here; the backend refuses it in any other state.
   const canConfirm = job.status === 'RUNNING'
+  const counts = issueCounts(jobIssues)
+  const onBoard = job.containers.filter((c) => c.status === 'ONBOARD').map((c) => c.containerId)
 
   return (
     <div className="h-full overflow-auto">
@@ -563,6 +710,19 @@ export function JobDetailPage() {
                 {job.status}
               </StatusBadge>
               {waiting ? <StatusBadge tone="amber">{t('Step waiting')}</StatusBadge> : null}
+              {counts.open > 0 ? (
+                <a href="#job-containers" className="hover:underline">
+                  <StatusBadge tone={counts.blocking > 0 ? 'red' : 'amber'}>
+                    {t('{count} open issues', { count: counts.open })
+                      + (counts.blocking > 0 ? ` · ${t('{count} blocking a confirmation', { count: counts.blocking })}` : '')}
+                  </StatusBadge>
+                </a>
+              ) : null}
+              <Can permission={PERMISSIONS.issueCreate}>
+                <Button variant="outline" size="sm" onClick={() => setReportOpen(true)}>
+                  <Icon name="alert" size={14} /> {t('Report an issue')}
+                </Button>
+              </Can>
               {requestId ? (
                 <Can permission={PERMISSIONS.evidenceRead}>
                   <Link to={paths.journalOfRequest(requestId)} className={buttonClass({ variant: 'outline', size: 'sm' })}>
@@ -632,6 +792,10 @@ export function JobDetailPage() {
           </section>
         </div>
 
+        <div id="job-containers">
+          <JobContainersCard job={job} issues={jobIssues} containerLabel={labels.container} />
+        </div>
+
         <DispatchPanel job={job} />
 
         <JobRecoveryPanel job={job} endpoints={endpoints} containerLabel={labels.container} />
@@ -656,12 +820,30 @@ export function JobDetailPage() {
                   defaultOpen={step.status === 'WAITING' || step.status === 'FAILED'}
                   labels={labels}
                   canConfirm={canConfirm}
+                  issues={jobIssues}
+                  onBoard={onBoard}
                 />
               )}
             />
 
             <HandoverBatchPanel job={job} labels={labels} />
           </section>
+          {reportOpen ? (
+            <ContainerProblemDialog
+              title={t('Report an issue about a container')}
+              subtitle={t('Opens a CONTAINER issue. The container stays on the Job; a damaged or unsafe one is held where it is delivered. To take it off the Job use "Container failed" on its step.')}
+              submitLabel={t('Report')}
+              scope="HANDOVER"
+              containers={job.containers.map((c) => ({ id: c.containerId, label: labels.container(c.containerId) }))}
+              busy={reportIssue.isPending}
+              error={reportError}
+              onClose={() => {
+                setReportOpen(false)
+                setReportError(null)
+              }}
+              onSubmit={(choice) => reportIssue.mutate(choice)}
+            />
+          ) : null}
 
           {/* Stays in view while the (long) list of steps scrolls past it. */}
           <section className="sticky top-4 h-[min(680px,calc(100svh-2rem))] overflow-hidden rounded-lg border border-outline-soft bg-container shadow-float">

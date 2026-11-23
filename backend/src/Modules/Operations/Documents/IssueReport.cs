@@ -49,6 +49,9 @@ public sealed class IssueReport
     public DateTimeOffset? ResolvedAt { get; set; }
     public Guid? ResolvedBy { get; set; }
     public string? Resolution { get; set; }
+
+    /// <summary>What resolving it did with the container it held (a <c>ContainerHoldOutcomes</c> value), if any.</summary>
+    public string? ContainerOutcome { get; set; }
 }
 
 public sealed record HazardLocation(

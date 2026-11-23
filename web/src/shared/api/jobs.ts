@@ -68,6 +68,8 @@ export interface JobStepDto {
   /** SY-02 */
   deadlineAt?: string | null
   escalatedAt?: string | null
+  /** Who confirmed it (outputValues.confirmedBy), by name. */
+  confirmedByName?: string | null
   startedAt: string | null
   completedAt: string | null
 }
@@ -96,7 +98,10 @@ export interface JobContainerDto {
   status: JobContainerStatus
   loadedAt: string | null
   deliveredAt: string | null
+  /** A FAILED container: its problem code (container_reported_failed before problem codes). */
+  failureCode?: string | null
   failureMessage?: string | null
+  failedAt?: string | null
 }
 
 /** GET /api/workflow-execution/jobs/{id}. */
@@ -160,11 +165,34 @@ export function resumeJob(id: string, robotId?: string) {
   })
 }
 
-/** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
-export function failJobContainer(stepId: string, containerId: string, reason: string) {
+/**
+ * WH-10: the container of this waiting handover (or on board at the inspection) cannot go on; the Job continues with
+ * the others. It is held where it is under a CONTAINER issue with `problemCode` (none is OTHER).
+ */
+export function failJobContainer(stepId: string, containerId: string, reason: string, problemCode?: string) {
   return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/fail-container`, {
     method: 'POST',
-    body: JSON.stringify({ containerId, reason }),
+    body: JSON.stringify({ containerId, reason, problemCode: problemCode ?? null }),
+  })
+}
+
+/**
+ * The result of a waiting INSPECTION_CONFIRM step. FAILED needs a note and the problems found: that container leaves
+ * the Job at the inspection point (held there); the inspection waits for the containers still on board.
+ */
+export function confirmInspection(
+  stepId: string,
+  result: 'PASSED' | 'FAILED',
+  options: { containerId?: string | null; note?: string; defects?: string[] } = {},
+) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({
+      containerId: options.containerId ?? null,
+      note: options.note ?? null,
+      inspectionResult: result,
+      defects: options.defects ?? null,
+    }),
   })
 }
 

@@ -13,10 +13,14 @@ public sealed record HumanConfirmationSource(
     Guid? MessageId = null,
     string? Note = null,
     string? ScannedBarcode = null,
-    string? InspectionResult = null)
+    string? InspectionResult = null,
+    IReadOnlyList<string>? Defects = null)
 {
-    public static HumanConfirmationSource StaffApp(Guid userId, string? note = null, string? scannedBarcode = null, string? inspectionResult = null) =>
-        new(ConfirmationSource.STAFF_APP, UserId: userId, Note: note, ScannedBarcode: scannedBarcode, InspectionResult: inspectionResult);
+    /// <param name="defects">A FAILED inspection: every problem found (container problem codes).</param>
+    public static HumanConfirmationSource StaffApp(
+        Guid userId, string? note = null, string? scannedBarcode = null, string? inspectionResult = null, IReadOnlyList<string>? defects = null) =>
+        new(ConfirmationSource.STAFF_APP, UserId: userId, Note: note, ScannedBarcode: scannedBarcode, InspectionResult: inspectionResult,
+            Defects: defects);
 
     public static HumanConfirmationSource RobotButton(Guid robotId, Guid messageId) =>
         new(ConfirmationSource.ROBOT_BUTTON, RobotId: robotId, MessageId: messageId);

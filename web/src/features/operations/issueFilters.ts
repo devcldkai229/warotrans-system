@@ -1,4 +1,5 @@
 import type { IssueSeverity, IssueStatus, IssueType } from '@/shared/api/operations'
+import { CONTAINER_PROBLEMS } from './containerProblems'
 import { RANGE_PRESETS, presetRange, rangeProblem, type DayRange, type RangeChoice, type RangePreset } from '@/shared/lib/dateRange'
 
 export const ISSUE_TYPES: IssueType[] = ['CONTAINER', 'ROBOT', 'JOB', 'TRANSPORT', 'STORAGE', 'OTHER']
@@ -12,11 +13,13 @@ export interface IssueFilters {
   type: IssueType | ''
   severity: IssueSeverity | ''
   status: IssueStatus | ''
+  /** A container problem code. */
+  problem: string
   reported: IssueReportedRange
 }
 
 /** The address keys the filters own: changing any of them starts again from page 1. */
-export const FILTER_KEYS = ['type', 'severity', 'status', 'range', 'from', 'to'] as const
+export const FILTER_KEYS = ['type', 'severity', 'status', 'problem', 'range', 'from', 'to'] as const
 
 function oneOf<T extends string>(values: readonly T[], value: string | null): T | '' {
   return value !== null && (values as readonly string[]).includes(value) ? (value as T) : ''
@@ -42,6 +45,7 @@ export function readIssueFilters(params: URLSearchParams, today: string): IssueF
     type: oneOf(ISSUE_TYPES, params.get('type')),
     severity: oneOf(ISSUE_SEVERITIES, params.get('severity')),
     status: oneOf(ISSUE_STATUSES, params.get('status')),
+    problem: oneOf(CONTAINER_PROBLEMS.map((p) => p.code), params.get('problem')),
     reported,
   }
 }
@@ -71,5 +75,5 @@ export function clearIssueFilters(params: URLSearchParams): URLSearchParams {
 
 /** Whether a filter other than the type tab is set (the tab has its own "All"). */
 export function hasIssueFilters(filters: IssueFilters): boolean {
-  return filters.severity !== '' || filters.status !== '' || filters.reported !== null
+  return filters.severity !== '' || filters.status !== '' || filters.problem !== '' || filters.reported !== null
 }

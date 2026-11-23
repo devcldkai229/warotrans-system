@@ -22,7 +22,8 @@ public sealed record ListIssuesQuery(
     int Skip,
     int Take,
     DateTimeOffset? ReportedFrom = null,
-    DateTimeOffset? ReportedTo = null);
+    DateTimeOffset? ReportedTo = null,
+    string? ProblemCode = null);
 
 /// <summary>
 /// IssueReport lifecycle (OPS-01). Who sees what:
@@ -40,7 +41,8 @@ public sealed partial class IssueService(
     IWarehouseMapLocations mapLocations,
     IStaffOperatingWarehouse staffWarehouse,
     IWarehouseRobotLookup robotLookup,
-    TimeProvider clock) : IIssueReporter
+    TimeProvider clock,
+    IContainerHolds? containerHolds = null) : IIssueReporter
 {
     public const int MaxTake = 100;
     private const string Entity = "ISSUE";
@@ -135,7 +137,19 @@ public sealed partial class IssueService(
             await mongo.IssueReports.InsertOneAsync(issue, cancellationToken: cancellationToken);
         }
         await AfterCreatedAsync(issue, cancellationToken);
-        return Project(issue);
+
+        // Reported but still carried (damaged, inside not as declared ...): it goes on, and is held where it arrives.
+        ContainerHoldSnapshot? hold = null;
+        if (issue.ContainerId is { } containerId && containerHolds is not null
+            && ContainerProblemCodes.Find(issue.ProblemCode) is { HoldsWhenReported: true })
+        {
+            hold = await containerHolds.HoldAsync(
+                new ContainerHoldRequest(containerId, issue.ProblemCode!, issue.Id, ContainerHoldMode.ON_DELIVERY,
+                    JobId: issue.JobId, ActorAccountId: me, Note: Shorten(issue.Description)),
+                cancellationToken);
+        }
+
+        return Project(issue, hold);
     }
 
     /// <summary>WFX-05: a HUMAN REPORT_ISSUE step. Idempotent on the step, so a retried confirmation reuses the issue.</summary>
@@ -156,6 +170,36 @@ public sealed partial class IssueService(
             return issue;
         }, cancellationToken);
     }
+
+    /// <summary>
+    /// A container problem seen by a person at a handover or at inspection ("Container failed", a failed inspection):
+    /// a CONTAINER issue with its problem code. Idempotent on the source key. Holding the container is the caller's.
+    /// </summary>
+    public Task<Guid> ReportContainerProblemAsync(ContainerProblemDraft draft, CancellationToken cancellationToken = default) =>
+        CreateOnceAsync($"container:{draft.SourceKey}", draft.ReportedBy, now =>
+        {
+            var rule = ContainerProblemCodes.Find(draft.ProblemCode);
+            var issue = NewIssue(draft.ReportedBy ?? Guid.Empty, now);
+            issue.IssueType = IssueType.CONTAINER;
+            issue.Severity = rule is { High: true } ? IssueSeverity.HIGH : IssueSeverity.MEDIUM;
+            issue.ProblemCode = draft.ProblemCode;
+            issue.Description = draft.Description;
+            issue.JobId = draft.JobId;
+            issue.JobStepId = draft.JobStepId;
+            issue.ContainerId = draft.ContainerId;
+            issue.TransportRequestId = draft.TransportRequestId;
+            issue.RobotId = draft.RobotId;
+            issue.Metadata = new MongoDB.Bson.BsonDocument
+            {
+                ["jobNo"] = draft.JobNo,
+                ["stepKey"] = draft.StepKey ?? string.Empty,
+                ["defects"] = new MongoDB.Bson.BsonArray(draft.Defects.Count > 0 ? draft.Defects : [draft.ProblemCode]),
+                ["removedFromJob"] = draft.RemovedFromJob,
+                ["source"] = draft.SourceKey
+            };
+            if (draft.HeldAtEndpointId is { } at) issue.Metadata["heldAtEndpointId"] = at.ToString();
+            return issue;
+        }, cancellationToken);
 
     /// <summary>An issue the system raises (e.g. cargo on a robot of a cancelled request). Idempotent on the source key.</summary>
     public Task<Guid> ReportAsync(SystemIssueDraft draft, CancellationToken cancellationToken = default) =>
@@ -235,6 +279,7 @@ public sealed partial class IssueService(
         if (query.Mine && currentUser.AccountId is { } me) filters.Add(f.Or(f.Eq(i => i.ReportedBy, me), f.Eq(i => i.AssigneeId, me)));
         if (query.ReportedFrom is { } from) filters.Add(f.Gte(i => i.ReportedAt, from));
         if (query.ReportedTo is { } to) filters.Add(f.Lt(i => i.ReportedAt, to));
+        if (!string.IsNullOrWhiteSpace(query.ProblemCode)) filters.Add(f.Eq(i => i.ProblemCode, query.ProblemCode));
 
         // The type tabs count under every filter but the type itself.
         var allTypes = f.And(filters);
@@ -256,8 +301,21 @@ public sealed partial class IssueService(
         return new ListIssuesResponse(total, items.Select(Project).ToList(), countsByType);
     }
 
-    public async Task<IssueDto> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        Project(await LoadVisibleAsync(id, cancellationToken));
+    public async Task<IssueDto> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var issue = await LoadVisibleAsync(id, cancellationToken);
+        return Project(issue, await ContainerOfAsync(issue, cancellationToken));
+    }
+
+    /// <summary>The container the issue is about, as Warehouse has it now (held by this issue or not).</summary>
+    private async Task<ContainerHoldSnapshot?> ContainerOfAsync(IssueReport issue, CancellationToken cancellationToken) =>
+        issue.ContainerId is { } containerId && containerHolds is not null
+            ? await containerHolds.GetAsync(containerId, cancellationToken)
+            : null;
+
+    /// <summary>The container this issue holds, if it holds one.</summary>
+    private async Task<ContainerHoldSnapshot?> HeldContainerAsync(IssueReport issue, CancellationToken cancellationToken) =>
+        await ContainerOfAsync(issue, cancellationToken) is { } container && container.HoldIssueId == issue.Id ? container : null;
 
     public async Task<bool> HasBlockingHandoverIssueAsync(
         Guid jobId, IReadOnlyCollection<Guid> containerIds, CancellationToken cancellationToken = default)
@@ -316,14 +374,55 @@ public sealed partial class IssueService(
     {
         var issue = await LoadVisibleAsync(id, cancellationToken);
         var to = Enum.Parse<IssueStatus>(request.Status);
-        if (HandoverProblemCodes.Blocking.Contains(issue.ProblemCode))
+        var held = await HeldContainerAsync(issue, cancellationToken);
+        if (HandoverProblemCodes.Blocking.Contains(issue.ProblemCode) && held is null)
         {
             if (to == IssueStatus.CLOSED && issue.Status != IssueStatus.RESOLVED)
                 throw new ConflictException("Verify the expected container before closing this issue.", "issue_handover_verification_required");
             if (to == IssueStatus.RESOLVED)
                 await VerifyHandoverBarcodeAsync(issue, request.ScannedBarcode, cancellationToken);
         }
-        return await TransitionCoreAsync(issue, to, request.ExpectedVersion, request.Resolution, request.ScannedBarcode, cancellationToken);
+
+        string? outcomeNote = null;
+        if (held is not null && to is IssueStatus.RESOLVED or IssueStatus.CLOSED)
+        {
+            // The container waits on this issue: resolving it says what becomes of the container.
+            if (to == IssueStatus.CLOSED)
+                throw new ConflictException($"Resolve this issue first and say what becomes of container {held.Barcode}.", "issue_container_outcome_required");
+            if (request.ContainerOutcome is null)
+                throw new DomainValidationException($"Choose what becomes of container {held.Barcode}.", "issue_container_outcome_required");
+            if (request.ExpectedVersion != issue.Version)
+                throw new ConflictException("The issue was changed by someone else; reload it.", "issue_version_conflict");
+            EnsureOutcomeFits(issue, held, request.ContainerOutcome, request.ContentsQuantity);
+            var after = await containerHolds!.ReleaseAsync(
+                new ContainerReleaseRequest(held.ContainerId, issue.Id, request.ContainerOutcome, request.ContentsQuantity,
+                    currentUser.AccountId, request.Resolution),
+                cancellationToken);
+            outcomeNote = $"Container {held.Barcode}: {request.ContainerOutcome}"
+                + (request.ContainerOutcome == ContainerHoldOutcomes.AdjustQuantity ? $" ({request.ContentsQuantity} {after.ContentsUnit})" : string.Empty)
+                + $", now {after.Status}" + (after.HoldReasonCode is { } still ? $" ({still})" : string.Empty);
+        }
+
+        return await TransitionCoreAsync(issue, to, request.ExpectedVersion, request.Resolution, request.ScannedBarcode, cancellationToken, outcomeNote,
+            held is not null ? request.ContainerOutcome : null);
+    }
+
+    /// <summary>
+    /// The outcome must be one the problem allows (a box with the wrong product inside can only be scrapped), and a
+    /// partly damaged box keeps fewer goods than it had.
+    /// </summary>
+    public static void EnsureOutcomeFits(IssueReport issue, ContainerHoldSnapshot held, string outcome, decimal? quantity)
+    {
+        var allowed = ContainerProblemCodes.OutcomesFor(issue.ProblemCode);
+        if (!allowed.Contains(outcome))
+            throw new DomainValidationException(
+                $"{outcome} does not fit {issue.ProblemCode ?? ContainerProblemCodes.Other}: choose {string.Join(", ", allowed)}.",
+                "issue_container_outcome_not_allowed");
+        if (issue.ProblemCode == ContainerProblemCodes.ContentsDamaged && outcome == ContainerHoldOutcomes.AdjustQuantity
+            && held.ContentsQuantity is { } had && quantity is { } left && left >= had)
+            throw new DomainValidationException(
+                $"Enter the goods still good: less than the {had:0.###} the box holds.",
+                "container_quantity_not_reduced");
     }
 
     public async Task<IssueDto> ResolveOwnHandoverAsync(Guid id, ResolveOwnHandoverIssueRequest request, CancellationToken cancellationToken)
@@ -335,8 +434,18 @@ public sealed partial class IssueService(
         await using var subjectLock = await handoverVerifier.LockSubjectAsync(
             issue.JobId!.Value, issue.ContainerId!.Value, issue.JobStepId, cancellationToken);
         await VerifyHandoverBarcodeAsync(issue, request.ScannedBarcode, cancellationToken);
+        // Found and scanned: a container this issue held is back in use.
+        string? outcomeNote = null;
+        if (await HeldContainerAsync(issue, cancellationToken) is { } held)
+        {
+            await containerHolds!.ReleaseAsync(
+                new ContainerReleaseRequest(held.ContainerId, issue.Id, ContainerHoldOutcomes.Found, null, currentUser.AccountId, request.Resolution),
+                cancellationToken);
+            outcomeNote = $"Container {held.Barcode}: {ContainerHoldOutcomes.Found}";
+        }
+
         return await TransitionCoreAsync(issue, IssueStatus.RESOLVED, request.ExpectedVersion, request.Resolution,
-            request.ScannedBarcode, cancellationToken);
+            request.ScannedBarcode, cancellationToken, outcomeNote, outcomeNote is null ? null : ContainerHoldOutcomes.Found);
     }
 
     private async Task VerifyHandoverBarcodeAsync(IssueReport issue, string? barcode, CancellationToken cancellationToken)
@@ -347,7 +456,8 @@ public sealed partial class IssueService(
     }
 
     private async Task<IssueDto> TransitionCoreAsync(
-        IssueReport issue, IssueStatus to, int expectedVersion, string? resolution, string? scannedBarcode, CancellationToken cancellationToken)
+        IssueReport issue, IssueStatus to, int expectedVersion, string? resolution, string? scannedBarcode, CancellationToken cancellationToken,
+        string? containerOutcomeNote = null, string? containerOutcome = null)
     {
         if (!IssueLifecycle.CanMove(issue.Status, to))
         {
@@ -368,6 +478,10 @@ public sealed partial class IssueService(
         if (to == IssueStatus.RESOLVED && !string.IsNullOrWhiteSpace(scannedBarcode) && issue.ProblemCode is not null)
             update = update.Push(i => i.Evidence, ToEvidence(new EvidenceInput("NOTE", null, null,
                 $"Verified container barcode: {scannedBarcode.Trim()}"), currentUser.AccountId, now));
+        if (containerOutcome is not null)
+            update = update.Set(i => i.ContainerOutcome, containerOutcome);
+        if (containerOutcomeNote is not null)
+            update = update.Push(i => i.Evidence, ToEvidence(new EvidenceInput("NOTE", null, null, containerOutcomeNote), currentUser.AccountId, now));
 
         var updated = await SaveAsync(issue, expectedVersion, update, cancellationToken);
 
@@ -427,7 +541,9 @@ public sealed partial class IssueService(
 
     // ------------------------------------------------------------------ helpers
 
-    private IssueDto Project(IssueReport issue)
+    private IssueDto Project(IssueReport issue) => Project(issue, null);
+
+    private IssueDto Project(IssueReport issue, ContainerHoldSnapshot? container)
     {
         var allowed = IssueLifecycle.NextOf(issue.Status);
         var user = httpContextAccessor.HttpContext?.User ?? new ClaimsPrincipal();
@@ -435,7 +551,7 @@ public sealed partial class IssueService(
             allowed = CanResolveOwnHandover(issue) ? allowed.Where(status => status == IssueStatus.RESOLVED).ToList() : [];
         else if (HandoverProblemCodes.Blocking.Contains(issue.ProblemCode) && issue.Status != IssueStatus.RESOLVED)
             allowed = allowed.Where(status => status != IssueStatus.CLOSED).ToList();
-        return IssueDto.From(issue, allowed.Select(status => status.ToString()).ToList());
+        return IssueDto.From(issue, allowed.Select(status => status.ToString()).ToList(), container);
     }
 
     private bool CanResolveOwnHandover(IssueReport issue) =>

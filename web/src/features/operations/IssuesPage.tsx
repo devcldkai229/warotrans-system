@@ -11,10 +11,12 @@ import {
   listIssues,
   transitionIssue,
   type Issue,
+  type ContainerOutcome,
   type IssueSeverity,
   type IssueStatus,
   type IssueType,
 } from '@/shared/api/operations'
+import { CONTAINER_PROBLEMS, holdText, outcomeOptions, outcomeResult, problemLabel } from './containerProblems'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { cx } from '@/shared/lib/cx'
 import { rangeWindow, presetRange } from '@/shared/lib/dateRange'
@@ -76,7 +78,7 @@ export function IssuesPage() {
   const [params, setParams] = useSearchParams()
   const today = appToday()
   const filters = readIssueFilters(params, today)
-  const { type, severity, status, reported } = filters
+  const { type, severity, status, problem, reported } = filters
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1)
 
   // A new filter starts again from page 1.
@@ -99,7 +101,7 @@ export function IssuesPage() {
   const open = (id?: string) => navigate({ pathname: paths.issues(id), search: params.toString() })
 
   const list = useQuery({
-    queryKey: ['issues', type, severity, status, reported?.range.from ?? '', reported?.range.to ?? '', page],
+    queryKey: ['issues', type, severity, status, problem, reported?.range.from ?? '', reported?.range.to ?? '', page],
     // The window is built when the request is sent, so a range that reaches today counts up to "now" on every refresh.
     queryFn: () => {
       const window = reported ? rangeWindow(reported.range) : null
@@ -107,6 +109,7 @@ export function IssuesPage() {
         issueType: type,
         severity,
         status,
+        problemCode: problem || undefined,
         reportedFrom: window?.from,
         reportedTo: window?.to,
         skip: (page - 1) * PAGE_SIZE,
@@ -218,6 +221,19 @@ export function IssuesPage() {
                 </option>
               ))}
             </select>
+            <select
+              className={controlClass('pill')}
+              aria-label={t('Filter by container problem')}
+              value={problem}
+              onChange={(event) => setParam('problem', event.target.value)}
+            >
+              <option value="">{t('All container problems')}</option>
+              {CONTAINER_PROBLEMS.map((p) => (
+                <option key={p.code} value={p.code}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
             {hasIssueFilters(filters) ? (
               <Button size="sm" variant="ghost" onClick={() => chooseRange(clearIssueFilters(params))}>
                 {t('Clear filters')}
@@ -248,7 +264,10 @@ export function IssuesPage() {
                         {issue.code}
                       </button>
                     </Td>
-                    <Td>{TYPE_LABEL[issue.issueType] ?? issue.issueType}</Td>
+                    <Td>
+                      {TYPE_LABEL[issue.issueType] ?? issue.issueType}
+                      {issue.problemCode ? <span className="block text-xs text-muted">{problemLabel(issue.problemCode)}</span> : null}
+                    </Td>
                     <Td>
                       <StatusBadge tone={SEVERITY_TONE[issue.severity]}>{SEVERITY_LABEL[issue.severity] ?? issue.severity}</StatusBadge>
                     </Td>
@@ -281,7 +300,8 @@ export function IssuesPage() {
           ) : null}
         </section>
         {issueId ? (
-          <aside className="order-first self-start xl:sticky xl:top-4 xl:order-none">
+          <aside className="order-first self-start xl:sticky xl:top-4 xl:order-none xl:max-h-[calc(100svh-7rem)] xl:overflow-y-auto xl:rounded-md">
+
             <IssueDetail id={issueId} onClose={() => open()} />
           </aside>
         ) : null}
@@ -295,6 +315,9 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const queryClient = useQueryClient()
   const { account, can } = useAuth()
   const [resolution, setResolution] = useState('')
+  const [outcome, setOutcome] = useState<ContainerOutcome | ''>('')
+  const [quantity, setQuantity] = useState('')
+  const [scanned, setScanned] = useState('')
   const [error, setError] = useState<string | null>(null)
   const issue = useQuery({ queryKey: ['issue', id], queryFn: () => getIssue(id) })
 
@@ -307,6 +330,9 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
     onSuccess: () => {
       setError(null)
       setResolution('')
+      setOutcome('')
+      setQuantity('')
+      setScanned('')
       refresh()
     },
     onError: (failure) => {
@@ -319,6 +345,19 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
   if (!issue.data) return <p className="text-sm text-muted">{t('This issue is not available to you.')}</p>
   const current = issue.data
   const mayManage = can(PERMISSIONS.issueManage)
+  const hold = current.containerHold ?? null
+  // This issue holds the container: resolving it says what becomes of it.
+  const holdsContainer = hold !== null && hold.holdIssueId === current.id
+  const quantityValue = Number.parseFloat(quantity)
+  const options = outcomeOptions(current.problemCode, current.containerOutcomes ?? [])
+  // Partly damaged goods: what is left is less than the box held.
+  const partly = current.problemCode === 'CONTENTS_DAMAGED'
+  const quantityBad =
+    outcome === 'ADJUST_QUANTITY' &&
+    (!(quantityValue > 0) || (partly && hold?.contentsQuantity != null && quantityValue >= hold.contentsQuantity))
+  const outcomeMissing = holdsContainer && (outcome === '' || quantityBad)
+  // A wrong / missing container issue is resolved by scanning the expected container.
+  const scanNeeded = Boolean(current.blocksHandover) && !holdsContainer
 
   return (
     <div className="rounded-md bg-surface p-5 shadow-float">
@@ -337,6 +376,33 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
         <dd>{current.issueType}</dd>
         <dt className="text-muted">{t('Severity')}</dt>
         <dd>{current.severity}</dd>
+        {current.problemCode ? (
+          <>
+            <dt className="text-muted">{t('Problem')}</dt>
+            <dd>
+              {(current.defects?.length ? current.defects : [current.problemCode]).map(problemLabel).join(', ')}
+              {current.blocksHandover ? <span className="ml-1.5 text-xs text-red-ink">{t('blocks confirm')}</span> : null}
+              {current.removedFromJob ? <span className="block text-xs text-muted">{t('Taken off its Job')}</span> : null}
+            </dd>
+          </>
+        ) : null}
+        {hold ? (
+          <>
+            <dt className="text-muted">{t('Container')}</dt>
+            <dd>
+              <span className="font-mono">{hold.barcode}</span> · {holdText(hold.status, hold.holdReasonCode, current.containerOutcome)}
+              <span className="block text-xs text-muted">
+                {hold.storageLocationId
+                  ? t('on its shelf (level {level})', { level: hold.levelNo ?? 1 })
+                  : hold.holdEndpointId
+                    ? t('at the point it was set down')
+                    : t('on no shelf')}
+                {hold.contentsQuantity !== null ? ` · ${hold.contentsQuantity} ${hold.contentsUnit ?? ''}` : ''}
+                {holdsContainer ? ` · ${t('held by this issue')}` : ''}
+              </span>
+            </dd>
+          </>
+        ) : null}
         <dt className="text-muted">{t('Reported')}</dt>
         <dd>{formatIsoDateTime(current.reportedAt)}</dd>
         <dt className="text-muted">{t('Assignee')}</dt>
@@ -347,6 +413,12 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <dd>
               <Link className="underline" to={paths.job(current.jobId)}>{t('open job')}</Link>
             </dd>
+          </>
+        ) : null}
+        {current.containerOutcome ? (
+          <>
+            <dt className="text-muted">{t('Package')}</dt>
+            <dd>{outcomeResult(current.containerOutcome, current.problemCode)}</dd>
           </>
         ) : null}
         {current.resolution ? (
@@ -379,6 +451,58 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {current.assigneeId !== account?.id && current.status !== 'CLOSED' ? (
             <Button size="sm" variant="surface" disabled={change.isPending} onClick={() => change.mutate((i) => assignIssue(i, account?.id ?? null))}>{t('Assign to me')}</Button>
           ) : null}
+          {current.allowedTransitions.includes('RESOLVED') && holdsContainer ? (
+            <fieldset className="rounded-sm border border-outline-soft p-3">
+              <legend className="px-1 text-xs font-medium">{t('Deal with package {code}', { code: hold!.barcode })}</legend>
+              <div className="flex flex-col gap-1.5">
+                {options.map((o) => (
+                  <label key={o.value} className="flex cursor-pointer items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="container-outcome"
+                      className="mt-1"
+                      checked={outcome === o.value}
+                      onChange={() => setOutcome(o.value)}
+                    />
+                    <span>
+                      {o.label}
+                      <span className="block text-xs text-muted">{o.hint}</span>
+                    </span>
+                  </label>
+                ))}
+                {outcome === 'ADJUST_QUANTITY' ? (
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    className={controlClass('sm')}
+                    placeholder={
+                      partly && hold!.contentsQuantity != null
+                        ? t('Goods still good ({unit}), less than {count}', { unit: hold!.contentsUnit ?? '', count: hold!.contentsQuantity })
+                        : t('Counted quantity ({unit})', { unit: hold!.contentsUnit ?? '' })
+                    }
+                    value={quantity}
+                    onChange={(event) => setQuantity(event.target.value)}
+                  />
+                ) : null}
+                {outcome === 'ADJUST_QUANTITY' && quantity !== '' && quantityBad ? (
+                  <p className="text-xs text-red-ink">
+                    {partly
+                      ? t('Enter fewer goods than the {count} the box holds.', { count: hold!.contentsQuantity ?? 0 })
+                      : t('Enter a quantity above 0.')}
+                  </p>
+                ) : null}
+              </div>
+            </fieldset>
+          ) : null}
+          {current.allowedTransitions.includes('RESOLVED') && scanNeeded ? (
+            <input
+              className={controlClass('md')}
+              placeholder={t('Scan the expected container (barcode)')}
+              value={scanned}
+              onChange={(event) => setScanned(event.target.value)}
+            />
+          ) : null}
           {current.allowedTransitions.includes('RESOLVED') ? (
             <textarea
               className={controlClass('md')}
@@ -394,8 +518,28 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 key={next}
                 size="sm"
                 variant={next === 'RESOLVED' ? 'primary' : 'surface'}
-                disabled={change.isPending || (next === 'RESOLVED' && resolution.trim() === '')}
-                onClick={() => change.mutate((i) => transitionIssue(i, next, next === 'RESOLVED' ? resolution.trim() : undefined))}
+                disabled={
+                  change.isPending ||
+                  (next === 'RESOLVED' && (resolution.trim() === '' || outcomeMissing || (scanNeeded && scanned.trim() === ''))) ||
+                  (next === 'CLOSED' && holdsContainer)
+                }
+                title={next === 'CLOSED' && holdsContainer ? t('Resolve it first and say what becomes of the container.') : undefined}
+                onClick={() =>
+                  change.mutate((i) =>
+                    transitionIssue(
+                      i,
+                      next,
+                      next === 'RESOLVED' ? resolution.trim() : undefined,
+                      next === 'RESOLVED'
+                        ? {
+                            containerOutcome: holdsContainer && outcome ? outcome : undefined,
+                            contentsQuantity: holdsContainer && outcome === 'ADJUST_QUANTITY' ? quantityValue : null,
+                            scannedBarcode: scanNeeded ? scanned.trim() : undefined,
+                          }
+                        : undefined,
+                    ),
+                  )
+                }
               >
                 {next === 'IN_PROGRESS' && current.status === 'RESOLVED' ? t('Reopen') : next.replace('_', ' ').toLowerCase()}
               </Button>
