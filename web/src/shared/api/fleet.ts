@@ -180,6 +180,13 @@ export async function getRobotLiveCostmap(robotId: string, kind: 'global' | 'loc
   return res ?? null
 }
 
+/** The map's own Nav2 costmap (map.pgm + inflation, optionally + the planner keep-out): no robot, no traffic. */
+export function getStaticCostmap(keepout: boolean) {
+  return apiFetch<import('../map/costmap').LiveCostmapBody & { source: string; inscribedRadius: number; inflationRadius: number }>(
+    `/api/fleet/traffic/static-costmap?keepout=${keepout}`,
+  )
+}
+
 export function getTrafficSnapshot() {
   return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
 }

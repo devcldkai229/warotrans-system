@@ -23,6 +23,18 @@ export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCost
           className={`${CHIP} ${view.costmapRobot == null ? ON : OFF}`}>
           {t('Off')}
         </button>
+        <button type="button" aria-pressed={view.costmapRobot === 'MAP'} onClick={() => update({ costmapRobot: 'MAP' })}
+          title={t("The map's own costmap: walls + inflation, as Nav2 plans right after mapping (no robot, no traffic)")}
+          className={`${CHIP} ${view.costmapRobot === 'MAP' ? ON : OFF}`}>
+          {t('Map')}
+        </button>
+        {view.costmapRobot === 'MAP' ? (
+          <label className={`${CHIP} cursor-pointer ${view.keepout ? ON : OFF}`} title={t('Add the planner keep-out mask (lethal)')}>
+            <input type="checkbox" className="size-3" checked={view.keepout} onChange={(e) => update({ keepout: e.target.checked })} />
+            {t('Keep-out')}
+          </label>
+        ) : null}
+        <span className="px-1 text-muted">{t('Live from robot')}</span>
         {costmap.robotCodes.map((code) => (
           <button key={code} type="button" aria-pressed={view.costmapRobot === code} onClick={() => update({ costmapRobot: code })}
             title={t("This robot's own Nav2 global costmap: what its planner plans on")}
@@ -30,7 +42,7 @@ export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCost
             {code}
           </button>
         ))}
-        <label className={`${CHIP} cursor-pointer ${view.local ? ON : OFF} ${view.costmapRobot == null ? 'pointer-events-none opacity-40' : ''}`}
+        <label className={`${CHIP} cursor-pointer ${view.local ? ON : OFF} ${view.costmapRobot == null || view.costmapRobot === 'MAP' ? 'pointer-events-none opacity-40' : ''}`}
           title={t('The local costmap around the robot: obstacles its LiDAR sees now')}>
           <input type="checkbox" className="size-3" checked={view.local} onChange={(e) => update({ local: e.target.checked })} />
           {t('Local')}
@@ -54,6 +66,16 @@ export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCost
               {t(l.label)}
             </span>
           ))}
+          {costmap.staticInfo ? (
+            <span>
+              {t('{source}; inscribed {ins} m, inflation {inf} m', {
+                source: costmap.staticInfo.source,
+                ins: costmap.staticInfo.inscribedRadius,
+                inf: costmap.staticInfo.inflationRadius,
+              })}
+            </span>
+          ) : null}
+          {costmap.staticError ? <span className="text-red">{t('No semantic bundle on this Host')}</span> : null}
           {costmap.noCostmap ? (
             <span className="text-amber-ink">{t('{code} sends no costmap (offline or old gateway)', { code: view.costmapRobot })}</span>
           ) : costmap.receivedAt ? (
