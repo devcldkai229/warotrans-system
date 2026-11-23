@@ -232,6 +232,10 @@ public sealed partial class JobExecutionEngine
         Job job, RobotSnapshot robot, EndpointPoseSnapshot goal, Guid? otherRobotId, SemanticTrafficPolicy policy,
         CancellationToken cancellationToken)
     {
+        // Traffic holds the robot we wait for because of US (its blocker is this robot): standing here is in its way,
+        // whatever the straight-line test says. Lab 2026-11-24: RBT-002 waited at PARKING-B for EP-INBOUND, RBT-001's
+        // real Nav2 path out of PARKING-A ran past it, and both waited for ever (Capacity, blocker RBT-002).
+        var blocksOther = otherRobotId is { } waitedFor && await BlocksTrafficOfAsync(robot.Id, waitedFor, cancellationToken);
         var other = otherRobotId is { } oid ? await fleet.GetRobotAsync(oid, cancellationToken) : null;
         var codes = WaitPointCodes();
         var endpoints = await navigation.GetEndpointsOnMapAsync(job.MapVersionId, cancellationToken);
@@ -248,7 +252,8 @@ public sealed partial class JobExecutionEngine
         // that comes out, whatever the cells say.
         var standsClear = Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y) >= QueueGoalClearanceMeters
                           && MayStop(robot.PoseX, robot.PoseY) && OffWay(robot.PoseX, robot.PoseY, robot.PoseYaw)
-                          && !InGoalCorridor(goal.Code, robot.PoseX, robot.PoseY);
+                          && !InGoalCorridor(goal.Code, robot.PoseX, robot.PoseY)
+                          && !blocksOther;
         if (standsClear && !goalHasQueue)
         {
             return null;
@@ -338,6 +343,19 @@ public sealed partial class JobExecutionEngine
         }
 
         return null;
+    }
+
+    /// <summary>True when traffic holds <paramref name="otherId"/> and names <paramref name="robotId"/> as the blocker.</summary>
+    private async Task<bool> BlocksTrafficOfAsync(Guid robotId, Guid otherId, CancellationToken cancellationToken)
+    {
+        if (segmentedTraffic is null)
+        {
+            return false;
+        }
+
+        var snap = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);
+        return snap.Robots.Any(r => r.RobotId == otherId && r.BlockingOwner == robotId
+                                    && r.WaitingReason != TrafficWaitingReason.None);
     }
 
     /// <summary>Inside the box robots take in turn for <paramref name="goalCode"/> (FleetIdle:GoalCorridors); false without one.</summary>
