@@ -3,7 +3,6 @@ import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
 import type { MapVersionDto } from '@/shared/api/navigation'
 import { t } from '@/shared/i18n'
 import { cx } from '@/shared/lib/cx'
-import { humanize } from '@/shared/lib/format'
 import type { MapBounds } from '@/shared/lib/mapView'
 import { formatTrafficAlertReason } from '@/shared/map/ottoArchitecture'
 import { findEndpointByName } from '@/shared/map/scene'
@@ -15,16 +14,6 @@ import { RobotPreviewCard } from './RobotPreviewCard'
 import { shownRobotStatus } from './robotStatus'
 import { useCostmapOverlay } from './useCostmapOverlay'
 import { summarizeTrafficWait, useTrafficOverlay } from './useTrafficOverlay'
-
-interface FleetMapToolbarProps {
-  warehouses: { id: string; code: string; name: string }[]
-  warehouseId: string
-  onWarehouseChange: (id: string) => void
-  maps: MapVersionDto[]
-  mapVersionId: string
-  onMapVersionChange: (id: string) => void
-  activeMapId?: string | null
-}
 
 interface FleetMapProps {
   robots: RobotView[]
@@ -44,8 +33,6 @@ interface FleetMapProps {
   enableTrafficOverlay?: boolean
   /** Active MapVersion meta for VITE_MAP_ALIGN_DEBUG overlay (origin/resolution). */
   mapVersion?: MapVersionDto | null
-  /** Monitor map warehouse/version selector mounted into the unified OTTO top bar. */
-  mapToolbar?: FleetMapToolbarProps
 }
 
 interface FleetTrafficAlert {
@@ -76,16 +63,11 @@ export function FleetMap({
   occupancyImageUrl = null,
   enableTrafficOverlay = true,
   mapVersion = null,
-  mapToolbar,
 }: FleetMapProps) {
   const alignDebug = isMapAlignDebugEnabled()
   const { snap, overlay: trafficOverlay } = useTrafficOverlay(robots, enableTrafficOverlay)
   const costmap = useCostmapOverlay(snap, robots, enableTrafficOverlay)
   const [alertsExpanded, setAlertsExpanded] = useState(false)
-
-  const mapLabel = mapVersion
-    ? `${mapVersion.code} · v${mapVersion.versionNo}${mapVersion.status === 'PUBLISHED' ? '' : ` · ${humanize(String(mapVersion.status))}`}`
-    : t('No map selected')
 
   const mapRobots = useMemo<MapRobot[]>(
     () =>
@@ -226,27 +208,11 @@ export function FleetMap({
         }
       />
 
-      {mapToolbar ? (
-        <FleetMapTopBar
-          warehouses={mapToolbar.warehouses}
-          warehouseId={mapToolbar.warehouseId}
-          onWarehouseChange={mapToolbar.onWarehouseChange}
-          maps={mapToolbar.maps}
-          mapVersionId={mapToolbar.mapVersionId}
-          onMapVersionChange={mapToolbar.onMapVersionChange}
-          activeMapId={mapToolbar.activeMapId}
-          trafficLive={Boolean(snap)}
-          trafficEpoch={snap?.epoch ?? null}
-        />
-      ) : (
-        <div
-          data-map-ui
-          className="pointer-events-auto absolute top-3 left-3 z-5 flex h-9 items-center gap-2 rounded-full border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] px-3 text-xs text-ink-2 shadow-float backdrop-blur-md"
-        >
-          <span className={cx('size-2 rounded-full', snap ? 'bg-green' : 'bg-amber')} />
-          <span>{snap ? t('{mapLabel} · traffic e{epoch}', { mapLabel, epoch: snap.epoch }) : mapLabel}</span>
-        </div>
-      )}
+      <FleetMapTopBar
+        mapVersion={mapVersion}
+        trafficLive={Boolean(snap)}
+        trafficEpoch={snap?.epoch ?? null}
+      />
 
       {enableTrafficOverlay ? (
         <FleetMapTools
