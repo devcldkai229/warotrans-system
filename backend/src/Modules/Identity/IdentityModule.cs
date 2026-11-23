@@ -14,6 +14,7 @@ using WaroTrans.Identity.Features.CreateAccount;
 using WaroTrans.Identity.Features.GetAccount;
 using WaroTrans.Identity.Features.GetCurrentAccount;
 using WaroTrans.Identity.Features.GetMyCapabilities;
+using WaroTrans.Identity.Features.Introspect;
 using WaroTrans.Identity.Features.ListAccounts;
 using WaroTrans.Identity.Features.ListRoles;
 using WaroTrans.Identity.Features.Login;
@@ -73,6 +74,7 @@ public static class IdentityModule
         group.MapLogout();
         group.MapGetCurrentAccount();
         group.MapGetMyCapabilities();
+        group.MapIntrospect();
         group.MapChangeOwnPassword();
         group.MapListAccounts();
         group.MapListRoles();

@@ -15,6 +15,8 @@ public sealed class TrafficState
     private readonly Dictionary<string, List<Waiter>> _queues = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, AcquireResult> _idempotency = new();
     private readonly Queue<string> _events;
+    private readonly Queue<TrafficDecision> _decisions;
+    private long _decisionSeq;
     private readonly int _eventCap;
     private CompiledTrafficGraph? _graph;
     private SemanticTrafficPolicy? _semantic;
@@ -35,6 +37,7 @@ public sealed class TrafficState
         _clock = clock ?? TimeProvider.System;
         _eventCap = Math.Max(16, options.EventLogCapacity);
         _events = new Queue<string>(_eventCap);
+        _decisions = new Queue<TrafficDecision>(_eventCap);
         _open = !options.RequireCoordinatorLease;
         Epoch = 1;
         Phase = "Reconciling";
@@ -259,7 +262,7 @@ public sealed class TrafficState
         // to a corridor) and a robot in the corridor each hold a strip the other needs — a wait-for cycle no one
         // could break, though the two were 0.9 m apart with a wall between them.
         var standingStill = previous is null && robot.Phase is TrafficRobotPhase.Waiting or TrafficRobotPhase.Idle;
-        ReleaseSemanticOccupancyOutside(robot, standingStill ? ResourcesUnder(request.Poses[0].X, request.Poses[0].Y) : resources);
+        ReleaseSemanticOccupancyOutside(robot, standingStill ? ResourcesUnder(request.Poses[0].X, request.Poses[0].Y, StandingYaw(robot, request.Poses[0].X, request.Poses[0].Y)) : resources);
 
         EnsureSemanticCapacities(resources);
 
@@ -379,6 +382,7 @@ public sealed class TrafficState
             request.PlanHash,
             request.CommandId);
         robot.Authority = authority;
+        robot.YawAt = null; // it may turn now: the standing heading is known again once it reports it
         robot.Phase = TrafficRobotPhase.Authorized;
         StateVersion++;
         Log($"grant-semantic:{robot.RobotId}:auth:{authority.AuthorityId}:rev:{request.PlanRevision}:n={resources.Length}");
@@ -495,7 +499,10 @@ public sealed class TrafficState
         var ownSeq = own?.EnqueueSeq ?? long.MaxValue;
         foreach (var rid in resources)
         {
-            if (!_queues.TryGetValue(rid, out var q))
+            // Only single-occupancy zones keep their queue order. A waiter is queued on every cell of its whole horizon;
+            // ordering on cells made a robot standing still at a wait point the "blocker" of cells nobody held, and those
+            // made-up wait-for edges ended in DEADLOCK_RISK and needless retreats (MAP-ONE-V013, 2026-11-22).
+            if (!rid.StartsWith("zone:", StringComparison.Ordinal) || !_queues.TryGetValue(rid, out var q))
             {
                 continue;
             }
@@ -732,7 +739,7 @@ public sealed class TrafficState
                 continue;
             }
 
-            if (!TryOccupy(robot, ResourcesUnder(x, y), out var reason))
+            if (!TryOccupy(robot, ResourcesUnder(x, y, StandingYaw(robot, x, y)), out var reason))
             {
                 Quarantine(robot, $"RECONCILE_CONFLICT:{reason}");
                 continue;
@@ -750,8 +757,26 @@ public sealed class TrafficState
         }
     }
 
-    /// <summary>What a robot standing at (x, y) occupies: graph resources, or Stage-3 zones/cells (any heading).</summary>
-    private ImmutableArray<string> ResourcesUnder(double x, double y)
+    /// <summary>
+    /// The heading of a robot that stands still at (x, y): the one it reported there with no grant since (a grant lets it
+    /// turn). Null when unknown, stale, or the robot may move: callers then use the any-heading circle.
+    /// </summary>
+    private static double? StandingYaw(RobotRuntime robot, double x, double y) =>
+        robot.Authority is null && robot.YawAt is { } at && Math.Abs(at.X - x) <= 0.03 && Math.Abs(at.Y - y) <= 0.03
+            ? at.Yaw
+            : null;
+
+    /// <summary>Records the heading a robot reports while it stands still (no grant).</summary>
+    private static void NoteYaw(RobotRuntime robot, double? x, double? y, double? yaw, bool localizationOk)
+    {
+        if (robot.Authority is null && localizationOk && x is double px && y is double py && yaw is double h && double.IsFinite(h))
+        {
+            robot.YawAt = (px, py, h);
+        }
+    }
+
+    /// <summary>What a robot standing at (x, y) occupies: graph resources, or Stage-3 zones/cells (heading when known).</summary>
+    private ImmutableArray<string> ResourcesUnder(double x, double y, double? standingYaw = null)
     {
         if (_graph is not null)
         {
@@ -767,9 +792,9 @@ public sealed class TrafficState
         // and sample spacing of CollectResources are for a robot that drives; adding them made a parked robot hold
         // ~0.45 m around itself, so two homes 0.85 m apart seeded into each other and a parked robot blocked the lane
         // next to it.
-        var radius = _semantic.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
+        // With its heading known (standing still since it reported it), the body rectangle at that heading.
         var set = new HashSet<string>(StringComparer.Ordinal);
-        SemanticReservation.DiscCells(x, y, radius, _semantic.EffectiveCellSize, set);
+        SemanticReservation.StandingCells(_semantic, x, y, standingYaw, _options.LocalizationMarginMeters, set);
         // A robot standing still does not turn before its next grant (which takes the zone if the turn needs it), so the
         // zone test uses its half length, not the any-heading circle: on MAP-ONE-V013 (2026-11-22) RBT-002 parked at
         // EP-PARKING-B, 0.245 m below ZONE-SINGLE-CENTER, held the whole zone and RBT-001 waited for it forever.
@@ -881,6 +906,7 @@ public sealed class TrafficState
             candidate.GraphHash,
             maneuvers);
         robot.Authority = authority;
+        robot.YawAt = null; // it may turn now: the standing heading is known again once it reports it
         robot.Phase = TrafficRobotPhase.Authorized;
         robot.JobStepId = candidate.JobStepId;
         robot.WaitingReason = TrafficWaitingReason.None;
@@ -1093,6 +1119,12 @@ public sealed class TrafficState
         {
             robot.X = px;
             robot.Y = py;
+            // Arrived: it stands at the goal heading (within the goal's yaw tolerance, which the margin covers).
+            if (succeeded && robot.RouteGoal is { } arrived
+                && Math.Sqrt(Math.Pow(px - arrived.X, 2) + Math.Pow(py - arrived.Y, 2)) <= 0.15)
+            {
+                robot.YawAt = (px, py, arrived.Yaw);
+            }
         }
         else if (_graph is null)
         {
@@ -1103,6 +1135,11 @@ public sealed class TrafficState
         }
 
         ClearRoute(robot);
+        // The route is over: it waits for nothing any more. A queue entry left behind (a cancelled NAVIGATE that was
+        // waiting for cells) made the robot look like it still waited for the robot holding them: a wait-for cycle with
+        // a robot standing still, DEADLOCK_RISK for the other one forever (MAP-ONE-V016 sim, 2026-11-23).
+        RemoveFromAllQueues(robot.RobotId);
+        robot.BlockingOwner = null;
         if (!succeeded)
         {
             Quarantine(robot, $"NAVIGATE:{reason ?? "FAILED"}");
@@ -1296,6 +1333,7 @@ public sealed class TrafficState
             candidate.GraphHash,
             maneuvers);
         robot.Authority = authority;
+        robot.YawAt = null; // it may turn now: the standing heading is known again once it reports it
         robot.Phase = TrafficRobotPhase.Authorized;
         StateVersion++;
         Log($"extend:{robot.RobotId}:auth:{authority.AuthorityId}:seq:{authority.Seq}");
@@ -1567,7 +1605,7 @@ public sealed class TrafficState
         }
 
         robot.HoldGrantsUntil = _clock.GetUtcNow().AddSeconds(Math.Max(0, holdSeconds));
-        ReleaseSemanticOccupancyOutside(robot, ResourcesUnder(x, y));
+        ReleaseSemanticOccupancyOutside(robot, ResourcesUnder(x, y, StandingYaw(robot, x, y)));
         StateVersion++;
         Log($"release-unentered:{robotId}:{reason}");
         return TrafficOpResult.Success();
@@ -1621,9 +1659,11 @@ public sealed class TrafficState
     /// stands inside what it holds (or, holding nothing, its spot can be seeded): it may have been pushed or have
     /// driven while unreachable. Otherwise it stays quarantined as RECONNECT_UNVERIFIED (operator / robot reconcile).
     /// </summary>
-    public TrafficOpResult MarkOnline(Guid robotId, double? poseX = null, double? poseY = null, bool localizationOk = false)
+    public TrafficOpResult MarkOnline(
+        Guid robotId, double? poseX = null, double? poseY = null, bool localizationOk = false, double? poseYaw = null)
     {
         var robot = GetOrCreate(robotId);
+        NoteYaw(robot, poseX, poseY, poseYaw, localizationOk);
         if (robot.Phase != TrafficRobotPhase.Quarantined)
         {
             SeedIfHoldingNothing(robot, poseX, poseY, localizationOk);
@@ -1679,7 +1719,7 @@ public sealed class TrafficState
         robot.X = x;
         robot.Y = y;
         robot.LocalizationOk = true;
-        var under = ResourcesUnder(x, y);
+        var under = ResourcesUnder(x, y, StandingYaw(robot, x, y));
         if (!TryOccupy(robot, under, out var reason))
         {
             Quarantine(robot, $"SEED_CONFLICT:{reason}");
@@ -1700,7 +1740,9 @@ public sealed class TrafficState
     /// </summary>
     private void FollowIdlePose(RobotRuntime robot, double? poseX, double? poseY, bool localizationOk)
     {
-        if (!_ready || _semantic is null || robot.Phase != TrafficRobotPhase.Idle || robot.Authority is not null
+        // Also while it holds a service resource (stopped at a pick/drop stop inside a Job): it stands still there.
+        if (!_ready || _semantic is null || robot.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService)
+            || robot.Authority is not null
             || robot.ActiveCommandId is not null || robot.OccupiedResourceIds.Count == 0
             || !localizationOk || poseX is not double x || poseY is not double y)
         {
@@ -1709,7 +1751,7 @@ public sealed class TrafficState
 
         robot.X = x;
         robot.Y = y;
-        var under = ResourcesUnder(x, y);
+        var under = ResourcesUnder(x, y, StandingYaw(robot, x, y));
         var keep = under.Concat(robot.ServiceHoldIds).ToHashSet(StringComparer.Ordinal);
         var released = robot.OccupiedResourceIds
             .Where(rid => !keep.Contains(rid) && IsPhysicallyClear(robot, rid, x, y))
@@ -1740,7 +1782,8 @@ public sealed class TrafficState
 
         var radius = _semantic!.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
         var under = new HashSet<string>(StringComparer.Ordinal);
-        SemanticReservation.DiscCells(x, y, radius, _semantic.EffectiveCellSize, under);
+        // The same shape it holds while it stands (StandingCells), so what it seeded is what is checked here.
+        SemanticReservation.StandingCells(_semantic, x, y, StandingYaw(robot, x, y), _options.LocalizationMarginMeters, under);
         foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, radius, z.Ring)))
         {
             under.Add($"zone:{z.Code}");
@@ -1749,7 +1792,7 @@ public sealed class TrafficState
         if (robot.OccupiedResourceIds.Count == 0)
         {
             // Held nothing: its spot must still be free to seed.
-            if (!TryOccupy(robot, ResourcesUnder(x, y), out _))
+            if (!TryOccupy(robot, ResourcesUnder(x, y, StandingYaw(robot, x, y)), out _))
             {
                 return false;
             }
@@ -1770,7 +1813,7 @@ public sealed class TrafficState
     /// from its previous move or station hold stays held. A robot the coordinator has not seen yet (host restart,
     /// first move) is seeded with the resources under its footprint so its physical spot is reserved.
     /// </summary>
-    public TrafficOpResult EnsureTracked(Guid robotId, double? poseX, double? poseY, bool localizationOk)
+    public TrafficOpResult EnsureTracked(Guid robotId, double? poseX, double? poseY, bool localizationOk, double? poseYaw = null)
     {
         if (!_open)
         {
@@ -1785,6 +1828,7 @@ public sealed class TrafficState
         }
 
         var robot = GetOrCreate(robotId);
+        NoteYaw(robot, poseX, poseY, poseYaw, localizationOk);
         if (robot.Phase == TrafficRobotPhase.Quarantined)
         {
             return TrafficOpResult.Fail($"QUARANTINED:{robot.QuarantineReason}");
@@ -1808,7 +1852,7 @@ public sealed class TrafficState
         if (robot.OccupiedResourceIds.Count == 0)
         {
             // Seed what the robot physically stands on, so another robot cannot be granted into it.
-            var under = ResourcesUnder(x, y);
+            var under = ResourcesUnder(x, y, StandingYaw(robot, x, y));
             if (!TryOccupy(robot, under, out var reason))
             {
                 Quarantine(robot, $"SEED_CONFLICT:{reason}");
@@ -1864,7 +1908,7 @@ public sealed class TrafficState
             return TrafficOpResult.Success();
         }
 
-        var keep = ResourcesUnder(poseX, poseY)
+        var keep = ResourcesUnder(poseX, poseY, StandingYaw(robot, poseX, poseY))
             .Concat(occupiedEdges.Length > 0 && _graph is not null ? _graph.ResourcesCovering(occupiedEdges) : [])
             .Concat(robot.ServiceHoldIds)
             .ToHashSet(StringComparer.Ordinal);
@@ -2097,8 +2141,14 @@ public sealed class TrafficState
             resourceViews,
             waits,
             cycles,
-            _events.ToImmutableArray());
+            _events.ToImmutableArray())
+        {
+            Decisions = _decisions.ToImmutableArray(),
+        };
     }
+
+    /// <summary>A decision taken outside the coordinator about a robot's movement (deadlock retreat, goal wait).</summary>
+    public void RecordDecision(Guid robotId, string code, string detail) => Log($"{code}:{robotId}:{detail}");
 
     /// <summary>
     /// What the map draws of a robot's Nav2 plan: the part still ahead of its pose (thinned to ~5 cm steps) while it
@@ -2407,7 +2457,7 @@ public sealed class TrafficState
             }
 
             var body = new HashSet<string>(StringComparer.Ordinal);
-            SemanticReservation.DiscCells(ox, oy, radius, _semantic.EffectiveCellSize, body);
+            SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.LocalizationMarginMeters, body);
             body.ExceptWith(other.OccupiedResourceIds); // what it holds is already counted by capacity
             if (body.Count == 0)
             {
@@ -2419,7 +2469,7 @@ public sealed class TrafficState
                 own = new HashSet<string>(StringComparer.Ordinal);
                 if (_robots.TryGetValue(robotId, out var me) && me.X is double mx && me.Y is double my)
                 {
-                    SemanticReservation.DiscCells(mx, my, radius, _semantic.EffectiveCellSize, own);
+                    SemanticReservation.DiscCells(mx, my, radius, _semantic.EffectiveCellSize, own); // it may turn: any heading
                 }
             }
 
@@ -2546,7 +2596,8 @@ public sealed class TrafficState
         {
             // Footprint at any heading, grown by the localization uncertainty (fail closed: too small releases early).
             return SemanticReservation.IsPhysicallyClearOfResources(
-                _semantic, x, y, [resourceId], margin: Math.Max(0, _options.LocalizationMarginMeters));
+                _semantic, x, y, [resourceId], margin: Math.Max(0, _options.LocalizationMarginMeters),
+                standingYaw: StandingYaw(robot, x, y));
         }
 
         if (_graph is null || !_graph.ResourceById.TryGetValue(resourceId, out var res))
@@ -2617,7 +2668,9 @@ public sealed class TrafficState
 
         foreach (var r in _robots.Values)
         {
-            if (r.BlockingOwner is Guid b)
+            // A robot with no route (idle, holding a service stop, quarantined) waits for nobody: an idle robot's leftover BlockingOwner made a fake
+            // cycle (R2 idle, R1 waiting for its cells) and R1 backed off on the spot for ever (sim 2026-11-23, V017).
+            if (r.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined) && r.BlockingOwner is Guid b)
             {
                 AddEdge(r.RobotId, b);
             }
@@ -2642,7 +2695,7 @@ public sealed class TrafficState
         var edges = new Dictionary<Guid, HashSet<Guid>>();
         foreach (var r in _robots.Values)
         {
-            if (r.BlockingOwner is Guid b)
+            if (r.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined) && r.BlockingOwner is Guid b)
             {
                 if (!edges.TryGetValue(r.RobotId, out var set))
                 {
@@ -2818,7 +2871,17 @@ public sealed class TrafficState
             _events.Dequeue();
         }
 
-        _events.Enqueue($"{_clock.GetUtcNow():O}|{message}");
+        var now = _clock.GetUtcNow();
+        _events.Enqueue($"{now:O}|{message}");
+        if (TrafficDecisionClassifier.TryClassify(message, out var d))
+        {
+            if (_decisions.Count >= _eventCap)
+            {
+                _decisions.Dequeue();
+            }
+
+            _decisions.Enqueue(new TrafficDecision(++_decisionSeq, now, d.RobotId, d.Kind, d.Code, d.Severity, d.Detail));
+        }
     }
 
     private sealed class RobotRuntime(Guid robotId)
@@ -2831,6 +2894,8 @@ public sealed class TrafficState
         public int? NodeId { get; set; }
         public double? X { get; set; }
         public double? Y { get; set; }
+        /// <summary>Heading reported at a pose while standing still (null after any grant: it may turn).</summary>
+        public (double X, double Y, double Yaw)? YawAt { get; set; }
         public bool LocalizationOk { get; set; } = true;
         public HashSet<string> OccupiedResourceIds { get; } = new(StringComparer.Ordinal);
         public MotionAuthority? Authority { get; set; }

@@ -49,6 +49,11 @@ export const PERMISSIONS = {
   evidenceAnnotate: 'evidence.annotate',
   evidenceExport: 'evidence.export',
   evidenceAdmin: 'evidence.admin',
+  incidentRead: 'incident.read',
+  incidentInvestigate: 'incident.investigate',
+  incidentApprove: 'incident.approve',
+  incidentClose: 'incident.close',
+  labOperate: 'lab.operate',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]

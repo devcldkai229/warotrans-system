@@ -146,6 +146,47 @@ export interface TrafficSnapshot {
   recentEvents: string[]
 }
 
+/** One static costmap mask of the semantic bundle (base64 grey values, first row = top). */
+export interface SemanticMaskLayer {
+  id: string
+  label: string
+  mode: string
+  resolution: number
+  originX: number
+  originY: number
+  width: number
+  height: number
+  data: string
+}
+
+export interface SemanticLayers {
+  mapCode?: string | null
+  mapVersionId?: string | null
+  fingerprint?: string | null
+  cellSizeMeters: number
+  layers: SemanticMaskLayer[]
+}
+
+/** Keep-out / speed masks of the bundle traffic is bound to, and its cell size (admin costmap overlay). */
+export function getSemanticLayers() {
+  return apiFetch<SemanticLayers>('/api/fleet/traffic/semantic-layers')
+}
+
+/** The robot's latest live Nav2 costmap; null when it sends none (204) or it is older than 30 s. */
+export async function getRobotLiveCostmap(robotId: string, kind: 'global' | 'local') {
+  const res = await apiFetch<{ robotCode: string; kind: string; receivedAt: string; costmap: import('../map/costmap').LiveCostmapBody } | null>(
+    `/api/fleet/robots/${robotId}/costmap?kind=${kind}`,
+  )
+  return res ?? null
+}
+
+/** The map's own Nav2 costmap (map.pgm + inflation, optionally + the planner keep-out): no robot, no traffic. */
+export function getStaticCostmap(keepout: boolean) {
+  return apiFetch<import('../map/costmap').LiveCostmapBody & { source: string; inscribedRadius: number; inflationRadius: number }>(
+    `/api/fleet/traffic/static-costmap?keepout=${keepout}`,
+  )
+}
+
 export function getTrafficSnapshot() {
   return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
 }

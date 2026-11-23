@@ -66,7 +66,9 @@ public sealed record EndpointPoseSnapshot(
     bool IsEnabled,
     double PositionTolerance = 0.25);
 
-public sealed record EndpointPoseWithType(Guid Id, string Code, string Name, EndpointType EndpointType, bool IsEnabled, double X, double Y, double PositionTolerance);
+public sealed record EndpointPoseWithType(
+    Guid Id, string Code, string Name, EndpointType EndpointType, bool IsEnabled, double X, double Y, double PositionTolerance,
+    double? Yaw = null);
 
 public sealed record MapVersionSnapshot(Guid Id, Guid WarehouseId, int VersionNo, MapStatus Status, string? Code = null);
 

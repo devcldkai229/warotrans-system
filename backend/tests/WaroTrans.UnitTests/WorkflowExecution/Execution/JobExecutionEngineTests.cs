@@ -2681,26 +2681,48 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
-    public async Task A_robot_standing_elsewhere_waits_for_its_goal_at_the_free_wait_point_clear_of_the_other_robot()
+    public async Task A_robot_out_of_the_other_robots_way_waits_for_its_goal_where_it_stands()
+    {
+        // User, 2026-11-23: a queue point only when the robot cannot wait where it is.
+        var first = await ProvisionAsync();
+        var second = await ProvisionAnotherAsync();
+        var r2 = _fleet.AddRobot(_mapVersionId);
+        AddStandAside("EP-QUEUE-2", WaroTrans.Navigation.Enums.EndpointType.QUEUE, 3, 4);
+        PlaceRobot(_fleet.RobotId, 1, 0);
+        PlaceRobot(r2, 5, 6);
+
+        await SemanticEngine().StartAsync(first, _fleet.RobotId);
+        var commands = _fleet.Commands.Count;
+        await SemanticEngine().StartAsync(second, r2);
+
+        Assert.Equal(commands, _fleet.Commands.Count);
+        var waiting = await _db.JobSteps.AsNoTracking()
+            .SingleAsync(s => s.Status == JobStepStatus.WAITING && s.StepType == StepType.MOVE);
+        Assert.Equal("GOAL:EP-1", waiting.OutputValues[JobExecutionEngine.AreaQueueZoneKey].GetString());
+    }
+
+    [Fact]
+    public async Task A_robot_in_the_other_robots_way_waits_for_its_goal_at_the_queue_point_nearest_the_goal()
     {
         var first = await ProvisionAsync();
         var second = await ProvisionAnotherAsync();
         var r2 = _fleet.AddRobot(_mapVersionId);
-        AddStandAside("EP-WAIT", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 1.2, 0.6);     // on R1's way: not this one
-        AddStandAside("EP-QUEUE-2", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 3, 4);
+        AddStandAside("EP-WAIT", WaroTrans.Navigation.Enums.EndpointType.QUEUE, 1.2, 0.6);        // on R1's way: not this one
+        AddStandAside("EP-QUEUE-FAR", WaroTrans.Navigation.Enums.EndpointType.QUEUE, 6, 6);       // farther from the goal
+        AddStandAside("EP-QUEUE-2", WaroTrans.Navigation.Enums.EndpointType.QUEUE, 2.2, 2.6);   // 1.34 m from the goal: it serves it
         AddStandAside("EP-SHELF-X", WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 2.5, 3.5);   // not a wait point
         PlaceRobot(_fleet.RobotId, 1, 0);
-        PlaceRobot(r2, 5, 6);
+        PlaceRobot(r2, 1.0, 1.1); // on R1's straight way to EP-1 (1, 2)
 
         await SemanticEngine().StartAsync(first, _fleet.RobotId);
         await SemanticEngine().StartAsync(second, r2);
 
         var toWait = _fleet.Commands[^1];
         Assert.Equal(r2, toWait.RobotId);
-        Assert.Equal((3.0, 4.0), (toWait.X, toWait.Y));
+        Assert.Equal((2.2, 2.6), (toWait.X, toWait.Y));
 
         // There: the MOVE is not done, it waits at the wait point for its goal.
-        PlaceRobot(r2, 3, 4);
+        PlaceRobot(r2, 2.2, 2.6);
         await SemanticResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
             toWait.CommandId, r2, "RBT-SIM-02", "NAVIGATE_TO_POSE", "COMPLETED", null, toWait.JobStepId, "SUCCEEDED", null,
             RobotCommandLifecycleChanged.Phases.Result));
@@ -2739,6 +2761,7 @@ public sealed class JobExecutionEngineTests
     [InlineData("EP-WAIT-CHARGE", "Wait", "CHARGER", false)]   // a charger never
     [InlineData("EP-SHELF-A-1", "Shelf A 1", "WAYPOINT", false)]
     [InlineData("EP-PARKING-A", "Parking A", "PARK", false)]     // parking: stand-aside, not a wait point
+    [InlineData("EP-LANE-STOP", "Lane stop", "QUEUE", true)]     // the QUEUE type is a wait point whatever its code
     public void One_rule_says_what_a_wait_point_is(string code, string name, string type, bool waitPoint)
     {
         var e = new EndpointPoseWithType(Guid.NewGuid(), code, name, Enum.Parse<WaroTrans.Navigation.Enums.EndpointType>(type), true, 0, 0, 0.1);

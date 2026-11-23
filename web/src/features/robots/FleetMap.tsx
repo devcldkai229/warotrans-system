@@ -8,6 +8,8 @@ import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '
 import { findEndpointByName } from '@/shared/map/scene'
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
 import { summarizeTrafficWait, useTrafficOverlay } from './useTrafficOverlay'
+import { CostmapToggles } from './CostmapToggles'
+import { useCostmapOverlay } from './useCostmapOverlay'
 import { RobotPreviewCard } from './RobotPreviewCard'
 import { t } from '@/shared/i18n'
 interface FleetMapProps {
@@ -55,6 +57,7 @@ export function FleetMap({
 }: FleetMapProps) {
   const alignDebug = isMapAlignDebugEnabled()
   const { snap, overlay: trafficOverlay } = useTrafficOverlay(robots, enableTrafficOverlay)
+  const costmap = useCostmapOverlay(snap, robots, enableTrafficOverlay)
   // The map version the Fleet page is showing; a draft or archived one is said so, since robots run on the published map.
   const mapLabel = mapVersion
     ? `${mapVersion.code} · v${mapVersion.versionNo}${mapVersion.status === 'PUBLISHED' ? '' : ` · ${humanize(String(mapVersion.status))}`}`
@@ -156,12 +159,14 @@ export function FleetMap({
         bounds={bounds}
         occupancyImageUrl={occupancyImageUrl}
         robots={mapRobots}
-        layers={{ occupancy: true }}
+        layers={{ occupancy: costmap.view.traffic, zones: costmap.view.zones, edges: costmap.view.lanes }}
         labels="all"
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
         movements={movements}
-        trafficOverlay={trafficOverlay}
+        trafficOverlay={costmap.view.traffic ? trafficOverlay : null}
+        costmapImages={costmap.costmapImages}
+        cellSets={costmap.cellSets}
         callouts={callouts}
         selected={{ robotCode: detail ? (selectedCode ?? undefined) : (previewCode ?? undefined) }}
         onRobotClick={(code) => (detail ? onSelect(code) : onPreview?.(previewCode === code ? null : code))}
@@ -175,6 +180,7 @@ export function FleetMap({
         <span className={`size-1.5 rounded-full ${snap ? 'bg-green' : 'bg-amber'}`} />
         {snap ? t('{mapLabel} · traffic e{epoch}', { mapLabel, epoch: snap.epoch }) : mapLabel}
       </div>
+      {enableTrafficOverlay ? <CostmapToggles costmap={costmap} /> : null}
       {alignDebug ? (
         <MapAlignDebugOverlay
           robots={robots}

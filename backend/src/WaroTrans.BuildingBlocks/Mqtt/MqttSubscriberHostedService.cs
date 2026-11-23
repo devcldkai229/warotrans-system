@@ -134,6 +134,7 @@ public sealed class MqttSubscriberHostedService(
             (RobotMqttTopics.TrafficPlanFilter(prefix), reliable),
             (RobotMqttTopics.AuthorityStateFilter(prefix), reliable),
             (RobotMqttTopics.HealthFilter(prefix), sample),
+            (RobotMqttTopics.CostmapFilter(prefix), sample),
         ];
         return all.Chunk(MaxFiltersPerSubscribe).Select(c => (IReadOnlyList<(string, MqttQualityOfServiceLevel)>)c).ToList();
     }
@@ -215,6 +216,10 @@ public sealed class MqttSubscriberHostedService(
                                  ?? throw new InvalidOperationException($"Invalid health JSON on {topic}");
                     health.RobotCode = MatchTopicRobotCode(health.RobotCode, robotCodeFromTopic);
                     await ingress.HandleHealthAsync(health, cancellationToken).ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.CostmapSuffix:
+                    // View-only: the newest image per robot and kind, for the admin map. Nothing acts on it.
+                    scope.ServiceProvider.GetService<LiveCostmapStore>()?.Put(robotCodeFromTopic, payload);
                     break;
                 case RobotMqttTopics.AuthorityStateSuffix:
                     await HandleAuthorityStateAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)

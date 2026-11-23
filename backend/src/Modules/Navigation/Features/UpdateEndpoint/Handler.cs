@@ -10,7 +10,8 @@ namespace WaroTrans.Navigation.Features.UpdateEndpoint;
 public sealed class UpdateEndpointHandler(
     NavigationDbContext dbContext,
     EndpointStorage endpointStorage,
-    IValidator<UpdateEndpointRequest> validator)
+    IValidator<UpdateEndpointRequest> validator,
+    MapCostmapService costmaps)
 {
     public async Task<UpdateEndpointResponse> HandleAsync(
         Guid id,
@@ -48,6 +49,12 @@ public sealed class UpdateEndpointHandler(
             throw new DomainValidationException(
                 $"Endpoints can only be updated on DRAFT map versions (current status: {mapStatus}).",
                 "map_version_not_draft");
+        }
+
+        // Only a move is checked: an endpoint already on the map keeps its other edits (name, type, tolerance).
+        if (Math.Abs(request.X - endpoint.X) > 1e-6 || Math.Abs(request.Y - endpoint.Y) > 1e-6)
+        {
+            await costmaps.EnsureEndpointPlaceableAsync(mapVersion!, request.X, request.Y, cancellationToken);
         }
 
         endpoint.Name = request.Name.Trim();

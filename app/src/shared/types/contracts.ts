@@ -116,7 +116,7 @@ export interface ListWarehousesResponse {
 export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
 /** `Navigation/Enums/EndpointType.cs`. */
-export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK';
+export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK' | 'QUEUE';
 
 /** `Navigation/Enums/ZoneType.cs`. */
 export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY' | 'JUNCTION';

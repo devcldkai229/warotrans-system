@@ -192,4 +192,10 @@ export const vi_management: Record<string, string> = {
   'Counts are Containers, not units.': 'Số lượng tính theo Container, không phải theo đơn vị sản phẩm.',
   'Quantities are Containers, not units.': 'Số lượng tính theo Container, không phải theo đơn vị sản phẩm.',
   'How stock vouchers work': 'Cách phiếu nhập/xuất hoạt động',
+  'AI incident investigation': 'Điều tra sự cố bằng AI',
+  'See AI incident cases': 'Xem các sự cố do AI phân tích',
+  'Start an AI investigation and ask it about a case': 'Cho AI điều tra và hỏi AI về một sự cố',
+  'Approve an action the AI proposed (e.g. create the issue report)': 'Duyệt hành động AI đề xuất (ví dụ tạo báo cáo sự cố)',
+  'Verify, close, dismiss or reopen a case': 'Kiểm chứng, đóng, bỏ qua hoặc mở lại sự cố',
+  'Run fault experiments in the lab (test only)': 'Chạy thí nghiệm gây lỗi trong phòng lab (chỉ để kiểm thử)',
 }

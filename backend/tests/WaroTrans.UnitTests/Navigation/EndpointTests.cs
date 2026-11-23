@@ -90,11 +90,59 @@ public class EndpointTests
         return endpoint;
     }
 
-    private static CreateEndpointHandler CreateHandler(NavigationDbContext dbContext, IBusinessCodeGenerator? codeGenerator = null) =>
-        new(dbContext, new EndpointStorage(dbContext, new NoStorageLocations()), codeGenerator ?? new FakeCodeGenerator(), new CreateEndpointValidator());
+    private static CreateEndpointHandler CreateHandler(NavigationDbContext dbContext, IBusinessCodeGenerator? codeGenerator = null,
+        IMapAssetStore? assets = null) =>
+        new(dbContext, new EndpointStorage(dbContext, new NoStorageLocations()), codeGenerator ?? new FakeCodeGenerator(),
+            new CreateEndpointValidator(), new MapCostmapService(assets ?? new FakeMapAssets(null)));
 
-    private static UpdateEndpointHandler UpdateHandler(NavigationDbContext dbContext) =>
-        new(dbContext, new EndpointStorage(dbContext, new NoStorageLocations()), new UpdateEndpointValidator());
+    private static UpdateEndpointHandler UpdateHandler(NavigationDbContext dbContext, IMapAssetStore? assets = null) =>
+        new(dbContext, new EndpointStorage(dbContext, new NoStorageLocations()), new UpdateEndpointValidator(),
+            new MapCostmapService(assets ?? new FakeMapAssets(null)));
+
+    /// <summary>An occupancy image for the costmap guard; null = the map has none (the guard is skipped).</summary>
+    private sealed class FakeMapAssets(byte[]? pgm) : IMapAssetStore
+    {
+        public string ProviderName => "Fake";
+
+        public Task<MapAssetUris> SaveImportedAsync(Guid warehouseId, Guid mapVersionId, byte[] pgmBytes, string yamlText,
+            byte[] previewPngBytes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<byte[]?> TryReadMapPgmAsync(string mapUri, Guid warehouseId, Guid mapVersionId,
+            CancellationToken cancellationToken = default) => Task.FromResult(pgm);
+    }
+
+    /// <summary>20 x 20 cells of 0.05 m (1 m square), origin (0, 0), wall along the left column (x 0..0.05).</summary>
+    private static byte[] RoomWithLeftWall()
+    {
+        var header = System.Text.Encoding.ASCII.GetBytes("P5\n20 20\n255\n");
+        var px = Enumerable.Repeat((byte)254, 400).ToArray();
+        for (var row = 0; row < 20; row++)
+        {
+            px[row * 20] = 0;
+        }
+
+        return header.Concat(px).ToArray();
+    }
+
+    [Fact]
+    public async Task An_endpoint_next_to_a_wall_is_refused_and_one_in_the_free_area_is_placed()
+    {
+        await using var dbContext = CreateDbContext();
+        var map = AddMap(dbContext);
+        await dbContext.SaveChangesAsync();
+        var assets = new FakeMapAssets(RoomWithLeftWall());
+
+        // 0.10 m from the wall centre line: inside the inscribed radius (0.152 m) -> cyan, refused
+        var nearWall = new CreateEndpointRequest("At the wall", "WAYPOINT", 0.125, 0.5, 0, 0.1, 0.2, true);
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() => CreateHandler(dbContext, assets: assets)
+            .HandleAsync(map.Id, nearWall));
+        Assert.Equal("endpoint_in_costmap_blocked", ex.Code);
+
+        // 0.5 m from the wall: free -> placed
+        var free = new CreateEndpointRequest("In the room", "WAYPOINT", 0.525, 0.5, 0, 0.1, 0.2, true);
+        var created = await CreateHandler(dbContext, assets: assets).HandleAsync(map.Id, free);
+        Assert.Equal(0.525, created.X);
+    }
 
     private static CreateEndpointRequest ValidCreateRequest(string type = "WAYPOINT", bool? isEnabled = null) =>
         new("Receiving dock 1", type, 12.5, 3.25, 1.57, 0.1, 0.2, isEnabled);

@@ -56,6 +56,7 @@ internal static class EventClassifier
             TransportEventTypes.RobotGatewayRestarted => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.WARNING,
                 $"{e.RobotCode} gateway restarted", null, null),
             TransportEventTypes.TrafficWaitChanged => Traffic(e),
+            TransportEventTypes.TrafficDecision => Decision(e),
             _ => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.INFO, e.EventType, null, null)
         };
     }
@@ -105,6 +106,34 @@ internal static class EventClassifier
             ? $"{e.RobotCode} stops waiting ({Str(e.Payload, "previousReason")})"
             : $"{e.RobotCode} waits: {reason}{(owner is null ? "" : $" behind {owner}")}";
         return new(EvidenceEventCategory.TRAFFIC, severity, text, Num(e.Payload, "x"), Num(e.Payload, "y"));
+    }
+
+    /// <summary>"RBT-002 plan refused (deadlock-reject-semantic)"; severity as the coordinator rated it.</summary>
+    private static Classification Decision(TransportEventEnvelope e)
+    {
+        var kind = Str(e.Payload, "kind") ?? e.SourceStatusCode ?? "decision";
+        var code = Str(e.Payload, "code");
+        var detail = Str(e.Payload, "detail");
+        var severity = Str(e.Payload, "severity") switch
+        {
+            "ERROR" => EvidenceSeverity.ERROR,
+            "WARNING" => EvidenceSeverity.WARNING,
+            _ => EvidenceSeverity.INFO
+        };
+        var text = kind switch
+        {
+            "plan-granted" => $"{e.RobotCode} plan granted",
+            "plan-rejected" => $"{e.RobotCode} plan refused",
+            "revoked" => $"{e.RobotCode} grant revoked",
+            "safe-stop" => $"{e.RobotCode} safe stop",
+            "quarantined" => $"{e.RobotCode} quarantined by traffic",
+            "deadlock-retreat" => $"{e.RobotCode} backs off to break a deadlock",
+            "goal-wait" => $"{e.RobotCode} waits for its goal",
+            _ => $"{e.RobotCode} traffic {kind}"
+        };
+        var why = string.IsNullOrEmpty(detail) ? code : $"{code}: {detail}";
+        return new(EvidenceEventCategory.TRAFFIC, severity, string.IsNullOrEmpty(why) ? text : $"{text} ({why})",
+            Num(e.Payload, "x"), Num(e.Payload, "y"));
     }
 
     private static string Suffix(string? code) => string.IsNullOrEmpty(code) ? "" : $" ({code})";

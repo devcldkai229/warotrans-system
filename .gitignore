@@ -78,3 +78,9 @@ samples/**/*.token
 
 # Local design notes, never pushed (2026-11-22)
 /WaroTrans_AWS_Deployment_Architecture_Terraform.md
+
+# WaroTrans.AI design and local work, kept in the monorepo folder but never pushed (2026-11-23)
+/backend/src/Warotrans.AI/
+
+# Personal learning notes (domain, system to motor), kept local, never pushed (2026-11-23)
+/docs/learning/

@@ -46,6 +46,55 @@ public sealed class FleetIdleOptions
     /// <summary>The robot itself counts as already parked within this distance, so it is not sent to park again and again.</summary>
     public double ParkedRadiusMeters { get; set; } = 0.25;
 
+    /// <summary>
+    /// Which queue point serves which goal, <c>GOAL=QUEUE</c> pairs, comma separated (MAP-ONE-V017:
+    /// <c>EP-INBOUND=EP-QUEUE-B</c>). A robot whose goal is taken drives to that queue point and waits there, even when
+    /// it is farther than a queue point is normally looked for: a dead-end bay (INBOUND) has no room to wait inside, so its
+    /// queue stands on the way in, outside the bay. Lab 2026-11-24: without it the second robot wandered off to free floor.
+    /// </summary>
+    public string GoalQueueEndpoints { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Goals at the end of a narrow way (a dead-end bay and the one strip that leads to it), <c>GOAL=minX,minY,maxX,maxY</c>
+    /// boxes, separated by <c>;</c> (MAP-ONE-V017: <c>EP-INBOUND=1.10,-1.15,2.65,1.60</c>). Robots take such a goal in
+    /// turn: it stays taken while another robot with work is inside the box, and a robot waiting for it waits outside
+    /// the box, where it stands when that is clear (lab 2026-11-24: robots met head-on in the INBOUND strip).
+    /// </summary>
+    public string GoalCorridors { get; set; } = string.Empty;
+
+    /// <summary>Goal endpoint code → its corridor box, from <see cref="GoalCorridors"/>.</summary>
+    public IReadOnlyDictionary<string, (double MinX, double MinY, double MaxX, double MaxY)> Corridors()
+    {
+        var map = new Dictionary<string, (double, double, double, double)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in (GoalCorridors ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var kv = entry.Split('=', 2, StringSplitOptions.TrimEntries);
+            if (kv.Length != 2 || kv[0].Length == 0)
+            {
+                continue;
+            }
+
+            var n = kv[1].Split(',', StringSplitOptions.TrimEntries)
+                .Select(v => double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : double.NaN)
+                .ToArray();
+            if (n.Length == 4 && n.All(double.IsFinite) && n[0] < n[2] && n[1] < n[3])
+            {
+                map.TryAdd(kv[0], (n[0], n[1], n[2], n[3]));
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>Goal endpoint code → queue endpoint code, from <see cref="GoalQueueEndpoints"/>.</summary>
+    public IReadOnlyDictionary<string, string> GoalQueues() =>
+        (GoalQueueEndpoints ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(pair => pair.Split('=', 2, StringSplitOptions.TrimEntries))
+            .Where(kv => kv.Length == 2 && kv[0].Length > 0 && kv[1].Length > 0)
+            .GroupBy(kv => kv[0], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First()[1], StringComparer.OrdinalIgnoreCase);
+
     internal IReadOnlyList<string> FallbackCodes() =>
         (FallbackEndpointCodes ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
@@ -77,6 +126,9 @@ public sealed class RobotCareService(
 
     /// <summary>A robot that made way is not moved again for this long (no ping-pong between two waiting robots).</summary>
     public const double YieldCooldownSeconds = 60;
+
+    /// <summary>An idle robot making way stops at least this far from the waiting robot's way (then: the closest such place).</summary>
+    public const double MakeWayClearMeters = 0.6;
 
     private static readonly Dictionary<(Guid Waiter, Guid Blocker), DateTimeOffset> BlockedSince = [];
     private static readonly Dictionary<Guid, DateTimeOffset> LastYield = [];
@@ -372,12 +424,20 @@ public sealed class RobotCareService(
                             && s.JobTask.Job.Status == JobStatus.RUNNING)
                 .Select(s => s.TargetEndpointId!.Value)
                 .ToListAsync(cancellationToken);
+            // Its own way there must not pass the waiting robot (sim 2026-11-24: the closest place, PARKING-A, lay
+            // behind the waiting robot; driving there through it locked both).
+            bool RouteClear(EndpointPoseWithType e) =>
+                DistanceToSegment(waiter.PoseX, waiter.PoseY, blocker.PoseX, blocker.PoseY, e.X, e.Y) >= MakeWayClearMeters;
             EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool) => pool
+                .Where(RouteClear)
                 .Where(e => Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
                             && !targets.Contains(e.Id)
                             && others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)))
                 .OrderByDescending(e => OffItsPath(e))
-                .ThenByDescending(Away)
+                // Clear enough of the waiting robot, then the CLOSEST such place: lab 2026-11-24 an idle robot at
+                // PARKING-B was sent to the farthest endpoint (EP-SHELF-A-2, 3 m) to let the other one leave PARKING-A.
+                .ThenByDescending(e => Away(e) >= MakeWayClearMeters)
+                .ThenBy(e => Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)))
                 .FirstOrDefault();
             // A parking place or wait point first; on a map with too few, any free endpoint off the waiting robot's way
             // that no live Job is headed to (a charger never).

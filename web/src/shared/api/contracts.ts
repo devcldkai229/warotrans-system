@@ -119,7 +119,7 @@ export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 
 export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY' | 'JUNCTION'
 
-export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK'
+export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK' | 'QUEUE'
 
 export type EdgeDirection = 'ONE_WAY' | 'BIDIRECTIONAL'
 
