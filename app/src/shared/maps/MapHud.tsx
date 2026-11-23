@@ -1,5 +1,15 @@
-import React from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { AlertTriangle, BookOpen, Focus, Layers, LocateFixed, Minus, Plus } from 'lucide-react-native';
 import { ThemeColors } from '../theme/colors';
@@ -87,6 +97,16 @@ function ClusterButton({
   );
 }
 
+const PULSE_EASE_OUT = Easing.out(Easing.cubic);
+
+function formatMapBaseCode(mapCode: string, versionNo: number): string {
+  const trimmed = mapCode.trim();
+  if (!trimmed || !Number.isFinite(versionNo) || versionNo < 0) return mapCode;
+  const suffixPattern = new RegExp(`[-_\\s]*v0*${Math.trunc(versionNo)}$`, 'i');
+  const stripped = trimmed.replace(suffixPattern, '').trim();
+  return stripped || trimmed;
+}
+
 export function MapTopStatusPill({
   mapCode,
   versionNo,
@@ -100,8 +120,50 @@ export function MapTopStatusPill({
   zonesVisible: boolean;
   onPressZonesHidden?: () => void;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (active) setReducedMotion(enabled);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReducedMotion);
+    return () => {
+      active = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (updateMode !== 'live' || reducedMotion) {
+      pulseAnim.setValue(0);
+      return;
+    }
+    pulseAnim.setValue(0);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1800,
+          easing: PULSE_EASE_OUT,
+          useNativeDriver: true,
+        }),
+        Animated.delay(600),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [updateMode, reducedMotion, pulseAnim]);
 
   const dotColor =
     updateMode === 'live'
@@ -121,40 +183,85 @@ export function MapTopStatusPill({
       ? 'Offline'
       : 'Polling · 5s';
 
+  const baseCode = formatMapBaseCode(mapCode, versionNo);
+
+  const webGlassStyle: ViewStyle | null =
+    Platform.OS === 'web'
+      ? ({
+          backdropFilter: 'blur(16px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        } as unknown as ViewStyle)
+      : null;
+
   return (
     <View style={styles.topLeftStack} pointerEvents="box-none">
       <View
-        style={[
-          styles.statusPill,
-          isDark && updateMode === 'live' && styles.statusPillLiveDark,
-        ]}
+        style={[styles.statusPill, webGlassStyle]}
         pointerEvents="none"
       >
-        <View style={[styles.liveHalo, { backgroundColor: `${dotColor}33` }]}>
-          <View style={[styles.liveDot, { backgroundColor: dotColor }]} />
+        <View style={styles.statusGroup}>
+          <View style={styles.beaconSlot}>
+            {updateMode === 'live' && !reducedMotion ? (
+              <Animated.View
+                style={[
+                  styles.pulseRing,
+                  {
+                    backgroundColor: dotColor,
+                    opacity: pulseAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.45, 0],
+                    }),
+                    transform: [
+                      {
+                        scale: pulseAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.55, 1.45],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            ) : (
+              <View style={[styles.pulseRing, { backgroundColor: dotColor, opacity: 0.22 }]} />
+            )}
+            <View style={[styles.liveDot, { backgroundColor: dotColor }]} />
+          </View>
+          <Text
+            variant="caption"
+            color="textPrimary"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.25}
+            style={styles.statusLabel}
+          >
+            {statusText}
+          </Text>
         </View>
-        <Text
-          variant="caption"
-          fontWeight="700"
-          color="textPrimary"
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.25}
-        >
-          {statusText}
-        </Text>
-        <Text variant="caption" color="textMuted" maxFontSizeMultiplier={1.25}>
-          ·
-        </Text>
-        <Text
-          variant="caption"
-          fontWeight="600"
-          color="textSecondary"
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.25}
-          style={styles.mapTagText}
-        >
-          {mapCode} · V{versionNo}
-        </Text>
+
+        <View style={styles.statusDivider} />
+
+        <View style={styles.mapIdentityGroup}>
+          <Text
+            variant="caption"
+            color="textSecondary"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.25}
+            style={styles.mapTagText}
+          >
+            {baseCode}
+          </Text>
+          <View style={styles.versionChip}>
+            <Text
+              variant="caption"
+              color="textSecondary"
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.2}
+              style={styles.versionChipText}
+            >
+              {`v${versionNo}`}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {!zonesVisible ? (
@@ -391,7 +498,7 @@ export function MapOrientationBox({
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     control: {
       width: 48,
@@ -416,34 +523,80 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     statusPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 8,
+      height: 36,
       maxWidth: '100%',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
+      paddingLeft: 11,
+      paddingRight: 6,
       borderRadius: 999,
-      backgroundColor: colors.mapHudBg,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.82)' : 'rgba(255, 255, 255, 0.86)',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       ...shadows.sm,
     },
-    statusPillLiveDark: {
-      backgroundColor: 'rgba(13, 30, 22, 0.90)',
-      borderColor: 'rgba(69, 189, 98, 0.58)',
+    statusGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
-    liveHalo: {
-      width: 13,
-      height: 13,
-      borderRadius: 6.5,
+    beaconSlot: {
+      width: 14,
+      height: 14,
       alignItems: 'center',
       justifyContent: 'center',
+      position: 'relative',
+    },
+    pulseRing: {
+      position: 'absolute',
+      width: 12,
+      height: 12,
+      borderRadius: 6,
     },
     liveDot: {
       width: 6.5,
       height: 6.5,
       borderRadius: 3.25,
     },
+    statusLabel: {
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+    },
+    statusDivider: {
+      width: 1,
+      height: 12,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(18, 19, 23, 0.11)',
+    },
+    mapIdentityGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexShrink: 1,
+      minWidth: 0,
+    },
     mapTagText: {
       flexShrink: 1,
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: '600',
+      fontFamily: typography.fontMono,
+      letterSpacing: 0.15,
+    },
+    versionChip: {
+      height: 22,
+      paddingHorizontal: 7,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)',
+    },
+    versionChipText: {
+      fontSize: 10.5,
+      lineHeight: 13,
+      fontWeight: '600',
+      fontFamily: typography.fontMono,
+      fontVariant: ['tabular-nums'],
     },
     zonesWarningChip: {
       flexDirection: 'row',
