@@ -146,6 +146,32 @@ export interface TrafficSnapshot {
   recentEvents: string[]
 }
 
+/** One static costmap mask of the semantic bundle (base64 grey values, first row = top). */
+export interface SemanticMaskLayer {
+  id: string
+  label: string
+  mode: string
+  resolution: number
+  originX: number
+  originY: number
+  width: number
+  height: number
+  data: string
+}
+
+export interface SemanticLayers {
+  mapCode?: string | null
+  mapVersionId?: string | null
+  fingerprint?: string | null
+  cellSizeMeters: number
+  layers: SemanticMaskLayer[]
+}
+
+/** Keep-out / speed masks of the bundle traffic is bound to, and its cell size (admin costmap overlay). */
+export function getSemanticLayers() {
+  return apiFetch<SemanticLayers>('/api/fleet/traffic/semantic-layers')
+}
+
 export function getTrafficSnapshot() {
   return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
 }

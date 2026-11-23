@@ -133,6 +133,7 @@ public static class FleetModule
         WaroTrans.Fleet.Features.RobotHealth.RobotHealthEndpoint.MapRobotHealth(group);
         group.MapStreamRobotCamera();
         group.MapGetTrafficSnapshot();
+        WaroTrans.Fleet.Features.GetSemanticLayers.Endpoint.MapGetSemanticLayers(group);
         group.MapTrafficOperatorEndpoints();
         return endpoints;
     }

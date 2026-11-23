@@ -1,3 +1,4 @@
+import type { MapCellSet, MapCostmapImage } from './costmap'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { Edge, EdgeDirection, Endpoint, Point, RobotStatus, Zone } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
@@ -157,6 +158,10 @@ export interface WarehouseMapProps {
   onUserPan?: () => void
   /** Edge being drawn in the editor. */
   drawing?: { points: Point[]; direction: EdgeDirection }
+  /** Costmap masks (keep-out, speed) drawn over the occupancy image, in map metres. */
+  costmapImages?: MapCostmapImage[]
+  /** Traffic cells per robot (held = solid tint, granted = outline). */
+  cellSets?: MapCellSet[]
   /** Occupancy preview PNG (MapVersion.previewImageUri), stretched to map bounds. */
   occupancyImageUrl?: string | null
   className?: string
@@ -210,6 +215,8 @@ export function WarehouseMap({
   onUserPan,
   drawing,
   occupancyImageUrl,
+  costmapImages = [],
+  cellSets = [],
   className,
   children,
 }: WarehouseMapProps) {
@@ -378,6 +385,41 @@ export function WarehouseMap({
           ) : (
             <rect x={0} y={0} width={width} height={height} fill="url(#wmap-dots)" />
           )}
+
+          {/* Costmap: the bundle's keep-out / speed masks, then the traffic cells each robot holds or was granted. */}
+          {costmapImages.map((img) => (
+            <image
+              key={`costmap-${img.id}`}
+              href={img.url}
+              x={X(img.originX)}
+              y={Y(img.originY + img.heightM)}
+              width={img.widthM}
+              height={img.heightM}
+              preserveAspectRatio="none"
+              opacity={img.opacity ?? 1}
+              style={{ pointerEvents: 'none', imageRendering: 'pixelated' }}
+            />
+          ))}
+          {cellSets.length > 0 ? (
+            <g pointerEvents="none">
+              {cellSets.map((set) =>
+                set.cells.map((c) => (
+                  <rect
+                    key={`cell-${set.robotCode}-${set.kind}-${c.x}-${c.y}`}
+                    x={X(c.x)}
+                    y={Y(c.y + set.size)}
+                    width={set.size}
+                    height={set.size}
+                    fill={set.kind === 'held' ? set.color : 'none'}
+                    fillOpacity={set.kind === 'held' ? 0.28 : 0}
+                    stroke={set.color}
+                    strokeOpacity={set.kind === 'held' ? 0.5 : 0.85}
+                    strokeWidth={0.012}
+                  />
+                )),
+              )}
+            </g>
+          ) : null}
 
           {/* Zones: soft tinted areas with a thin edge and a coloured anchor dot (names are HTML callouts). */}
           {show.zones ? (
