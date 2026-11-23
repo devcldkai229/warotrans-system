@@ -22,12 +22,12 @@ describe('costmap helpers', () => {
 import { costPixel } from './costmap'
 
 describe('live Nav2 costmap colours (RViz "costmap" scheme)', () => {
-  it('matches RViz: free transparent, 99 cyan, 100 magenta, inflation blue -> red', () => {
+  it('shows only what blocks: 100 magenta, 99 cyan; free and inflation transparent', () => {
     expect(costPixel(0)[3]).toBe(0)
     expect(costPixel(99)).toEqual([0, 255, 255, 255])
     expect(costPixel(100)).toEqual([255, 0, 255, 255])
-    expect(costPixel(10)).toEqual([25, 0, 230, 255])
-    expect(costPixel(90)).toEqual([229, 0, 26, 255])
+    expect(costPixel(10)[3]).toBe(0)
+    expect(costPixel(98)[3]).toBe(0)
     expect(costPixel(255)[3]).toBeLessThan(255)
   })
 })

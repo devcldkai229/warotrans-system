@@ -81,17 +81,16 @@ export interface LiveCostmapBody {
 }
 
 /**
- * RViz "costmap" colour scheme (rviz_default_plugins MapDisplay), the one Nav2 users read every day:
- * 0 free = transparent, 1..98 = blue → red by cost, 99 inscribed = cyan, 100 lethal = magenta, unknown = grey-green.
+ * RViz "costmap" colours for what blocks a robot: 100 lethal = magenta (wall), 99 inscribed = cyan (the robot's
+ * centre may not enter); free and inflation (1..98, a cost the planner may pay) stay transparent.
  * The layer itself is drawn at RViz's default alpha (0.7).
  */
 export function costPixel(cost: number): [number, number, number, number] {
   if (cost === 255) return [112, 137, 134, 90]
   if (cost >= 100) return [255, 0, 255, 255]
   if (cost === 99) return [0, 255, 255, 255]
-  if (cost <= 0) return [0, 0, 0, 0]
-  const v = Math.floor((255 * cost) / 100)
-  return [v, 0, 255 - v, 255]
+  // Inflation (1..98) is a cost, not a barrier: left out so the map shows only where a robot's centre may not go.
+  return [0, 0, 0, 0]
 }
 
 /** RViz MapDisplay default alpha for a costmap. */

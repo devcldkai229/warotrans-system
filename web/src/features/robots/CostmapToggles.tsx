@@ -9,7 +9,6 @@ const OFF = 'text-ink-2 hover:bg-container-high'
 const LEGEND: { swatch: string; label: string }[] = [
   { swatch: 'bg-[#ff00ff]', label: 'lethal (wall / keep-out)' },
   { swatch: 'bg-[#00ffff]', label: 'inscribed: robot centre may not enter' },
-  { swatch: 'bg-gradient-to-r from-[#0000ff] to-[#ff0000]', label: 'inflation: low → high cost' },
 ]
 
 /** Fleet map view: which robot's live Nav2 costmap to draw, and which traffic layers to keep. */
