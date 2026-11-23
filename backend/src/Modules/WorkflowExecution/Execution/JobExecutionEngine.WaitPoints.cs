@@ -359,8 +359,11 @@ public sealed partial class JobExecutionEngine
             && await YieldSpotAsync(robot, other, goal, robots, cancellationToken, maxRadius: GoalYieldSpotMaxMeters) is { } spot
             && !InGoalCorridor(goal.Code, spot.X, spot.Y))
         {
+            // Its own small arrival tolerance, never the retreat's 0.35 m: a spot is often only ~0.3 m away, and with 0.35
+            // the robot already counted as there and never moved (lab 2026-11-23, R231126008: RBT-001 at PARKING-A was
+            // sent to a spot 0.30 m west, stayed, and RBT-002 at PARKING-B waited for it for ever, Capacity blocker RBT-001).
             return new EndpointPoseSnapshot(Guid.Empty, job.MapVersionId,
-                FormattableString.Invariant($"spot ({spot.X:F2}, {spot.Y:F2})"), spot.X, spot.Y, spot.Yaw, true, RetreatArrivalToleranceMeters);
+                FormattableString.Invariant($"spot ({spot.X:F2}, {spot.Y:F2})"), spot.X, spot.Y, spot.Yaw, true, GoalYieldSpotToleranceMeters);
         }
 
         return null;
@@ -386,6 +389,9 @@ public sealed partial class JobExecutionEngine
 
     /// <summary>How far a robot waiting for its goal looks for free floor to step aside to (out of a dead end).</summary>
     public const double GoalYieldSpotMaxMeters = 2.0;
+
+    /// <summary>Arrival tolerance at a goal-wait yield spot (free floor, no bay): well below how far a spot can be.</summary>
+    public const double GoalYieldSpotToleranceMeters = 0.10;
 
     /// <summary>Cells and zones a robot standing at (x, y) takes (the traffic's own rule, see TrafficState.ResourcesUnder).</summary>
     private static HashSet<string> StandingResources(SemanticTrafficPolicy policy, double x, double y, double? yaw, double margin)
