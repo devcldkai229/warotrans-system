@@ -713,3 +713,62 @@ test('detectPerimeterShelfWalls expands 1:1 map framing when opposite wall has n
     assert.ok(bay.x >= 2 && bay.y >= 2);
   }
 });
+
+test('computeStationArchitecture prevents adjacent wall shelf bays from overlapping', () => {
+  const models = require('../src/shared/maps/rosMapModels.json');
+  const load = createLoader({ './rosMapModels.json': models });
+  const { createMapFrame, worldToBase } = load('src/shared/maps/mapTransform.ts');
+  const { computeStationArchitecture } = load('src/shared/maps/mapArchitecture.ts');
+
+  const endpoints = [
+    {
+      id: 'ep-s1',
+      mapVersionId: 'map-1',
+      code: 'EP-SHELF-1',
+      name: 'Shelf 1',
+      endpointType: 'WAYPOINT',
+      x: 4.0,
+      y: 4.55,
+      yaw: Math.PI / 2,
+      isEnabled: true,
+    },
+    {
+      id: 'ep-s2',
+      mapVersionId: 'map-1',
+      code: 'EP-SHELF-2',
+      name: 'Shelf 2',
+      endpointType: 'WAYPOINT',
+      x: 4.5,
+      y: 4.55,
+      yaw: Math.PI / 2,
+      isEnabled: true,
+    },
+  ];
+  const map = { ...BASE_MAP, endpoints };
+  const frame = createMapFrame(map, 500, 320, { top: 56, right: 32, bottom: 32, left: 32 });
+  assert.ok(frame);
+
+  const items = endpoints.flatMap(ep => {
+    const p = worldToBase(ep, map, frame);
+    return p ? [{ ...p, endpoint: ep }] : [];
+  });
+  const arch = computeStationArchitecture(map, frame, items);
+  assert.equal(arch.shelfBays.length, 2);
+
+  const [leftBay, rightBay] = arch.shelfBays;
+  assert.equal(leftBay.wall, 'top');
+  assert.equal(rightBay.wall, 'top');
+  assert.ok(
+    leftBay.x + leftBay.width + 2 < rightBay.x,
+    `Expected non-overlapping shelves, got ${leftBay.x + leftBay.width} vs ${rightBay.x}`,
+  );
+
+  for (const bay of arch.shelfBays) {
+    assert.ok(bay.x >= frame.left && bay.x + bay.width <= frame.left + frame.mapWidth);
+    assert.equal(bay.opening.x1, bay.x);
+    assert.equal(bay.opening.x2, bay.x + bay.width);
+    if (bay.connector) {
+      assert.ok(bay.connector.x2 >= bay.x && bay.connector.x2 <= bay.x + bay.width);
+    }
+  }
+});
