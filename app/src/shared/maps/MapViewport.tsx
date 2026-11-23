@@ -10,7 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import Animated from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
 import {
   AlertTriangle,
@@ -145,6 +145,8 @@ const PRESET_OPTIONS = [
   { label: 'Minimal', value: 'minimal' },
   { label: 'SLAM / Grid', value: 'technical' },
 ] as const;
+
+const MAX_ENDPOINT_SCALE = 2.6;
 
 const WEB_HUD_GLASS_STYLE: ViewStyle | null =
   Platform.OS === 'web'
@@ -373,6 +375,22 @@ function MapCanvas({
   }, []);
 
   const camera = useMapCamera(frame, identity, reducedMotion, stopFollowing, handleSingleTap);
+  const cameraZoom = camera.zoom;
+
+  const endpointZoomStyle = useAnimatedStyle(() => {
+    const s = Math.min(MAX_ENDPOINT_SCALE, Math.max(1, cameraZoom.get()));
+    return { transform: [{ scale: s }] };
+  }, [cameraZoom]);
+
+  const labelBelowOffsetStyle = useAnimatedStyle(() => {
+    const s = Math.min(MAX_ENDPOINT_SCALE, Math.max(1, cameraZoom.get()));
+    return { transform: [{ translateY: (s - 1) * 19 }] };
+  }, [cameraZoom]);
+
+  const labelAboveOffsetStyle = useAnimatedStyle(() => {
+    const s = Math.min(MAX_ENDPOINT_SCALE, Math.max(1, cameraZoom.get()));
+    return { transform: [{ translateY: -(s - 1) * 19 }] };
+  }, [cameraZoom]);
 
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
@@ -911,16 +929,18 @@ function MapCanvas({
                       height={44}
                       style={styles.station}
                     >
-                      <EndpointTile
-                        type={item.endpointType}
-                        code={item.code}
-                        name={item.name}
-                        headingDeg={mapHeading(item.yaw, map.originYaw, frame.rotated) - 90}
-                        selected={endpointId === item.id}
-                        isDark={isDark}
-                        surface={colors.surface}
-                        jobRole={endpointJobRole(item, jobContext)}
-                      />
+                      <Animated.View pointerEvents="none" style={endpointZoomStyle}>
+                        <EndpointTile
+                          type={item.endpointType}
+                          code={item.code}
+                          name={item.name}
+                          headingDeg={mapHeading(item.yaw, map.originYaw, frame.rotated) - 90}
+                          selected={endpointId === item.id}
+                          isDark={isDark}
+                          surface={colors.surface}
+                          jobRole={endpointJobRole(item, jobContext)}
+                        />
+                      </Animated.View>
                     </MapControl>
                   </MapAnchor>
                 ))
@@ -937,10 +957,11 @@ function MapCanvas({
                   height={66}
                   passThrough
                 >
-                  <View
-                    style={
-                      placement === 'above' ? styles.stationLabelAbove : styles.stationLabelBelow
-                    }
+                  <Animated.View
+                    style={[
+                      placement === 'above' ? styles.stationLabelAbove : styles.stationLabelBelow,
+                      placement === 'above' ? labelAboveOffsetStyle : labelBelowOffsetStyle,
+                    ]}
                   >
                     {role ? (
                       <View style={[styles.jobRolePill, { backgroundColor: roleAccent! }]}>
@@ -970,7 +991,7 @@ function MapCanvas({
                         {displayText}
                       </Text>
                     </View>
-                  </View>
+                  </Animated.View>
                 </MapAnchor>
               );
             })}
