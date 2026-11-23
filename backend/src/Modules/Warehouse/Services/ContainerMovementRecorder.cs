@@ -16,7 +16,7 @@ namespace WaroTrans.Warehouse.Services;
 /// off its accounting slot right there. Every delivery or recovery that finishes the last open line of a CONFIRMED
 /// voucher completes it. A movement's unique key, its balance changes and the voucher completion commit together.
 /// </summary>
-public sealed class ContainerMovementRecorder(
+public sealed partial class ContainerMovementRecorder(
     WarehouseDbContext dbContext,
     ILogger<ContainerMovementRecorder> logger) : IContainerMovementRecorder
 {
@@ -71,6 +71,14 @@ public sealed class ContainerMovementRecorder(
                 "container_not_recoverable");
         }
 
+        // A container held for a problem is released by resolving its issue, which says what becomes of it.
+        if (container.HeldForProblem)
+        {
+            throw new ConflictException(
+                $"Container {container.Barcode} is held for {container.HoldReasonCode}: resolve its issue first.",
+                "container_held_for_issue");
+        }
+
         var now = DateTimeOffset.UtcNow;
         var fromStatus = container.Status;
         if (HasAdmissionOrBalance(container))
@@ -80,6 +88,7 @@ public sealed class ContainerMovementRecorder(
         container.Status = ContainerStatus.STORED;
         container.CurrentStorageLocationId = storageLocationId;
         container.CurrentLevelNo = levelNo;
+        ClearHold(container);
         container.UpdatedAt = now;
         dbContext.ContainerMovements.Add(new ContainerMovement
         {
@@ -207,11 +216,21 @@ public sealed class ContainerMovementRecorder(
 
         if (delivery.OutboundEndpointId.HasValue && destination is null)
         {
-            await IssueAtOutboundGateAsync(delivery, container, movement, now, cancellationToken);
+            if (container.HeldForProblem)
+                HoldAtOutboundGate(delivery, container, now);
+            else
+                await IssueAtOutboundGateAsync(delivery, container, movement, now, cancellationToken);
         }
         else
         {
             await DeliverToStorageOrOffShelfAsync(delivery, container, movement, level, now, cancellationToken);
+            // Reported on the way: it arrives, but is held there until its issue is resolved.
+            if (container.HeldForProblem && container.Status == ContainerStatus.STORED)
+            {
+                container.Status = ContainerStatus.HOLD;
+                container.HeldAt = now;
+                movement.Note = $"Held on delivery: {container.HoldReasonCode}";
+            }
         }
 
         await CompleteFinishedVouchersAsync(container, now, cancellationToken);
@@ -262,6 +281,7 @@ public sealed class ContainerMovementRecorder(
             container.Status = ContainerStatus.HOLD;
             container.CurrentStorageLocationId = null;
             container.CurrentLevelNo = null;
+            MarkOffShelf(container, now);
         }
         else if (await IsOnConfirmedOutboundVoucherAsync(container.Id, cancellationToken))
         {
@@ -280,6 +300,7 @@ public sealed class ContainerMovementRecorder(
             container.Status = NeverShelved.Contains(before) ? before : ContainerStatus.HOLD;
             container.CurrentStorageLocationId = null;
             container.CurrentLevelNo = null;
+            if (container.Status == ContainerStatus.HOLD) MarkOffShelf(container, now);
             logger.LogWarning(
                 "Container {Barcode} dropped off-shelf without an outbound voucher: now {Status}",
                 container.Barcode,
@@ -302,6 +323,7 @@ public sealed class ContainerMovementRecorder(
         if (!await IsOnConfirmedOutboundVoucherAsync(container.Id, ct))
         {
             container.Status = ContainerStatus.HOLD;
+            MarkOffShelf(container, now, delivery.OutboundEndpointId);
             logger.LogWarning("Container {Barcode} delivered to an Outbound gate without a confirmed phiếu xuất: now HOLD", container.Barcode);
             return;
         }

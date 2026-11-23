@@ -65,7 +65,8 @@ public sealed partial class JobExecutionEngine(
     IOptions<RecoveryOptions>? recoveryOptions = null,
     TimeProvider? clock = null,
     StockHandoverDispatcher? stockHandovers = null,
-    WaroTrans.WorkflowExecution.Services.FreeEndpointSelector? freeEndpoints = null)
+    WaroTrans.WorkflowExecution.Services.FreeEndpointSelector? freeEndpoints = null,
+    IContainerHolds? containerHolds = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -633,6 +634,11 @@ public sealed partial class JobExecutionEngine(
 
         var note = source.Note;
         var inspectionResult = InspectionResultFor(operation, source.InspectionResult, note);
+        if (inspectionResult == "FAILED")
+        {
+            // A failed inspection takes that container off the Job and leaves it at the inspection point.
+            return await FailAtInspectionAsync(job, task, step, workflowStep, containerId, source, now, transaction, cancellationToken);
+        }
         var handoverType = operation switch
         {
             nameof(HumanActionCode.PICKUP_CONFIRM) => HandoverType.PICKUP,
@@ -745,6 +751,8 @@ public sealed partial class JobExecutionEngine(
             ["confirmedAt"] = JsonSerializer.SerializeToElement(now),
             ["note"] = JsonSerializer.SerializeToElement(source.Note ?? string.Empty)
         };
+        if (!string.IsNullOrWhiteSpace(source.ScannedBarcode))
+            step.OutputValues["scannedBarcode"] = JsonSerializer.SerializeToElement(source.ScannedBarcode.Trim());
         // INSPECTION_CONFIRM declares the output inspectionResult (PASSED / FAILED) in the step registry.
         if (inspectionResult is not null)
             step.OutputValues["inspectionResult"] = JsonSerializer.SerializeToElement(inspectionResult);
@@ -1517,26 +1525,25 @@ public sealed partial class JobExecutionEngine(
     public const string ContainerReportedFailedCode = "container_reported_failed";
 
     /// <summary>
-    /// WH-10: this Container cannot go on (missing, damaged), the others can. At its waiting handover step the Container
-    /// is FAILED, what only served it is skipped, and the Job goes on: what was delivered stays delivered. Cargo on the
-    /// robot is not treated as returned: it stays IN_TRANSIT for a person to recover and an issue says so. With no
-    /// Container delivered and none left to carry, the Job itself has failed.
+    /// WH-10: this Container cannot go on, the others can. At its waiting handover step (or at the inspection) the
+    /// Container is FAILED with its problem code, what only served it is skipped, and the Job goes on: what was delivered
+    /// stays delivered. A CONTAINER issue always says so (who, what, where), and Warehouse holds the container where it
+    /// is: on its shelf or at the gate when it was not picked up yet, set down at this stop when it was on the robot.
+    /// With no Container delivered and none left to carry, the Job itself has failed.
     /// </summary>
+    /// <param name="problemCode">A <see cref="ContainerProblemCodes"/> code; none is OTHER (older clients send a reason only).</param>
     public async Task FailContainerAtStepAsync(
         Guid jobStepId,
         Guid containerId,
         string reason,
         CancellationToken cancellationToken = default,
-        Guid? actorId = null)
+        Guid? actorId = null,
+        string? problemCode = null)
     {
-        var stepRef = await db.JobSteps.AsNoTracking()
-            .Where(s => s.Id == jobStepId)
-            .Select(s => new { s.JobTask.JobId })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException($"JobStep '{jobStepId}' was not found.", "job_step_not_found");
-
-        var job = await LoadJobAsync(stepRef.JobId, cancellationToken);
-        var (_, step) = OrderedSteps(job).First(x => x.Step.Id == jobStepId);
+        var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        var (task, step) = OrderedSteps(job).First(x => x.Step.Id == jobStepId);
         if (job.Status != JobStatus.RUNNING)
         {
             throw new ConflictException($"Job {job.JobNo} is {job.Status}, not RUNNING.", "job_not_running");
@@ -1548,11 +1555,18 @@ public sealed partial class JobExecutionEngine(
         }
 
         EnsureNotClaimedByAnother(step, actorId, DateTimeOffset.UtcNow);
+        var workflowStep = await db.WorkflowSteps.AsNoTracking().SingleAsync(s => s.Id == step.WorkflowStepId, cancellationToken);
+        var inspection = workflowStep.Config.OperationCode == nameof(HumanActionCode.INSPECTION_CONFIRM);
+        var code = ContainerProblemFor(problemCode, inspection);
 
         var expected = step.ResolvedInputs.TryGetValue("containerId", out var c) && c.ValueKind == JsonValueKind.String
             ? c.GetGuid()
             : (Guid?)null;
-        if (expected != containerId)
+        // The inspection looks at every container on board; a handover only at its own.
+        var mine = inspection
+            ? job.JobContainers.Any(jc => jc.ContainerId == containerId && jc.Status == JobContainerStatus.ONBOARD)
+            : expected == containerId;
+        if (!mine)
         {
             throw new DomainValidationException(
                 $"Container '{containerId}' is not the container of this step.",
@@ -1560,13 +1574,32 @@ public sealed partial class JobExecutionEngine(
         }
 
         var now = DateTimeOffset.UtcNow;
+        var failure = await FailContainerCoreAsync(job, step, containerId, code, reason, now, cancellationToken);
+        if (inspection) CloseInspectionWithNothingLeft(job, task, step, workflowStep, actorId, reason, now);
+        await SaveAndPublishAsync(cancellationToken, transaction);
+        logger.LogWarning("Job {JobNo}: container {ContainerId} reported failed ({Code}): {Reason}", job.JobNo, containerId, code, reason);
+
+        await ReportFailedContainerAsync(job, task, step, workflowStep, failure, [code], actorId, cancellationToken);
+        await AdvanceAsync(job.Id, cancellationToken);
+    }
+
+    /// <summary>What a failed container leaves behind for its issue and its hold.</summary>
+    private sealed record ContainerFailure(JobContainer Container, string Code, string Reason, bool OnBoard);
+
+    /// <summary>
+    /// Fails the container in memory: FAILED with its code, what only served it skipped, and the Job FAILED when nothing
+    /// is left to carry and nothing was delivered. The caller saves.
+    /// </summary>
+    private async Task<ContainerFailure> FailContainerCoreAsync(
+        Job job, JobStep step, Guid containerId, string code, string reason, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var keys = await db.WorkflowSteps.AsNoTracking()
             .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
             .ToDictionaryAsync(s => s.Id, s => s.StepKey, cancellationToken);
         var jobContainer = job.JobContainers.First(jc => jc.ContainerId == containerId);
         var onBoard = jobContainer.Status == JobContainerStatus.ONBOARD;
 
-        jobContainer.FailureCode = ContainerReportedFailedCode;
+        jobContainer.FailureCode = code;
         jobContainer.FailureMessage = reason.Length > 500 ? reason[..500] : reason;
         jobContainer.FailedAt = now;
         SetContainerStatus(job, jobContainer, JobContainerStatus.FAILED, now);
@@ -1601,27 +1634,7 @@ public sealed partial class JobExecutionEngine(
             _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), AssignedRobot(job), job.FailureCode));
         }
 
-        await SaveAndPublishAsync(cancellationToken);
-        logger.LogWarning("Job {JobNo}: container {ContainerId} reported failed: {Reason}", job.JobNo, containerId, reason);
-
-        if (onBoard && issueReporter is not null)
-        {
-            await issueReporter.ReportAsync(
-                new SystemIssueDraft(
-                    $"container-failed-onboard:{job.Id}:{containerId}",
-                    job.Id,
-                    job.JobNo,
-                    null,
-                    AssignedRobot(job),
-                    containerId,
-                    $"A container reported failed in Job {job.JobNo} is still on the robot. Reason: {jobContainer.FailureMessage}. "
-                    + "Unload it and recover it to the shelf it is on.",
-                    High: true,
-                    TransportRequestId: jobContainer.TransportRequestId),
-                cancellationToken);
-        }
-
-        await AdvanceAsync(job.Id, cancellationToken);
+        return new ContainerFailure(jobContainer, code, jobContainer.FailureMessage, onBoard);
     }
 
     /// <summary>

@@ -11,7 +11,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace WaroTrans.WorkflowExecution.Features.FailJobContainer;
 
-public sealed record FailJobContainerRequest(Guid ContainerId, string? Reason);
+/// <param name="ProblemCode">What is wrong (a container problem code seen from outside, or at the inspection anything);
+/// none is OTHER. The container is held where it is under a CONTAINER issue.</param>
+public sealed record FailJobContainerRequest(Guid ContainerId, string? Reason, string? ProblemCode = null);
 
 public sealed class FailJobContainerHandler(JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db, ICurrentUser currentUser)
 {
@@ -22,7 +24,8 @@ public sealed class FailJobContainerHandler(JobExecutionEngine engine, JobQuerie
             throw new DomainValidationException("Say why this container cannot go on.", "container_failure_reason_required");
         }
 
-        await engine.FailContainerAtStepAsync(jobStepId, request.ContainerId, request.Reason.Trim(), cancellationToken, currentUser.AccountId);
+        await engine.FailContainerAtStepAsync(jobStepId, request.ContainerId, request.Reason.Trim(), cancellationToken, currentUser.AccountId,
+            request.ProblemCode);
 
         var jobId = await db.JobSteps.AsNoTracking()
             .Where(s => s.Id == jobStepId)

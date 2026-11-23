@@ -50,10 +50,14 @@ public static class IssueEndpoints
                 bool? mine,
                 int? skip,
                 int? take,
+                DateTimeOffset? reportedFrom,
+                DateTimeOffset? reportedTo,
+                string? problemCode,
                 IssueService issues,
                 CancellationToken cancellationToken) =>
                 Results.Ok(await issues.ListAsync(
-                    new ListIssuesQuery(status, issueType, severity, assigneeId, jobId, robotId, mine ?? false, skip ?? 0, take ?? 30),
+                    new ListIssuesQuery(status, issueType, severity, assigneeId, jobId, robotId, mine ?? false, skip ?? 0, take ?? 30,
+                        reportedFrom, reportedTo, problemCode),
                     cancellationToken)))
             .RequirePermission(Permissions.IssueRead)
             .WithName("ListIssues")

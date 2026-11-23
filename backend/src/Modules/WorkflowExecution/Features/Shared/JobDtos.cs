@@ -122,7 +122,8 @@ public sealed record JobStepDto(
     string? ClaimedByName = null,
     DateTimeOffset? ClaimExpiresAt = null,
     DateTimeOffset? DeadlineAt = null,
-    DateTimeOffset? EscalatedAt = null);
+    DateTimeOffset? EscalatedAt = null,
+    string? ConfirmedByName = null);
 
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
 public sealed class JobQueries(
@@ -152,7 +153,9 @@ public sealed class JobQueries(
         var orderedSteps = job.JobTasks.OrderBy(t => t.SequenceNo).SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo)).ToList();
         var current = orderedSteps.FirstOrDefault(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
         var now = DateTimeOffset.UtcNow;
-        var holders = orderedSteps.Where(s => s.ClaimExpiresAt > now).Select(s => s.ClaimedBy).OfType<Guid>().Distinct().ToList();
+        var holders = orderedSteps.Where(s => s.ClaimExpiresAt > now).Select(s => s.ClaimedBy).OfType<Guid>()
+            .Concat(orderedSteps.Select(s => Id(s.OutputValues, "confirmedBy")).OfType<Guid>())
+            .Distinct().ToList();
         var claimants = holders.Count == 0 || accountNames is null
             ? new Dictionary<Guid, string>()
             : new Dictionary<Guid, string>(await accountNames.GetNamesAsync(holders, cancellationToken));
@@ -228,7 +231,8 @@ public sealed class JobQueries(
                                 s.ClaimExpiresAt > now && s.ClaimedBy is { } holder ? claimants.GetValueOrDefault(holder) : null,
                                 s.ClaimExpiresAt > now ? s.ClaimExpiresAt : null,
                                 s.DeadlineAt,
-                                s.EscalatedAt);
+                                s.EscalatedAt,
+                                Id(s.OutputValues, "confirmedBy") is { } confirmer ? claimants.GetValueOrDefault(confirmer) : null);
                         })
                         .ToList()))
                 .ToList(),
