@@ -38,7 +38,7 @@ import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
-import { Button, SegmentedControl, StatusPill, Text } from '../ui';
+import { Button, SegmentedControl, StatusPill, Text, ToggleSwitch } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
 import { BatteryIndicator, OnlineBadge } from '../ui/RobotBadges';
 import { triggerHaptic } from '../utils/haptics';
@@ -143,37 +143,6 @@ const PRESET_OPTIONS = [
   { label: 'Minimal', value: 'minimal' },
   { label: 'SLAM / Grid', value: 'technical' },
 ] as const;
-
-function AppleSwitch({
-  value,
-  onToggle,
-  accessibilityLabel,
-}: {
-  value: boolean;
-  onToggle: () => void;
-  accessibilityLabel: string;
-}) {
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
-      accessibilityLabel={accessibilityLabel}
-      style={[
-        styles.switchTrack,
-        value ? styles.switchTrackActive : styles.switchTrackInactive,
-      ]}
-    >
-      <View
-        style={[
-          styles.switchThumb,
-          value ? styles.switchThumbActive : styles.switchThumbInactive,
-        ]}
-      />
-    </Pressable>
-  );
-}
 
 function SheetContainer({
   inline,
@@ -1331,11 +1300,11 @@ function MapCanvas({
                                 {item.label}
                               </Text>
                             </View>
-                            <AppleSwitch
+                            <ToggleSwitch
                               value={isActive}
-                              onToggle={() => {
+                              onValueChange={(next) => {
                                 triggerHaptic('tap');
-                                setLayers(prev => ({ ...prev, [item.key]: !prev[item.key] }));
+                                setLayers(prev => ({ ...prev, [item.key]: next }));
                               }}
                               accessibilityLabel={`Toggle ${item.label}`}
                             />
@@ -2195,39 +2164,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       height: 1,
       backgroundColor: colors.border,
       marginLeft: 56,
-    },
-
-    // Tactile Switch
-    switchTrack: {
-      width: 44,
-      height: 26,
-      borderRadius: 13,
-      padding: 2,
-      justifyContent: 'center',
-    },
-    switchTrackActive: {
-      backgroundColor: isDark ? '#e4e6eb' : '#1c1c1e',
-    },
-    switchTrackInactive: {
-      backgroundColor: isDark ? colors.borderStrong : '#dcdfe4',
-    },
-    switchThumb: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: '#ffffff',
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.18,
-      shadowRadius: 2.5,
-      elevation: 2,
-    },
-    switchThumbActive: {
-      alignSelf: 'flex-end',
-      backgroundColor: isDark ? '#18191a' : '#ffffff',
-    },
-    switchThumbInactive: {
-      alignSelf: 'flex-start',
     },
 
     // Operational Zones in Directory
