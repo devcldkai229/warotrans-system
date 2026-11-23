@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getSemanticLayers, type TrafficSnapshot } from '@/shared/api/fleet'
-import { cellCorner, maskToDataUrl, type MapCellSet, type MapCostmapImage, type MaskStyle } from '@/shared/map/costmap'
+import { useQueries, useQuery } from '@tanstack/react-query'
+import { getRobotLiveCostmap, getSemanticLayers, type TrafficSnapshot } from '@/shared/api/fleet'
+import { cellCorner, liveCostmapToDataUrl, maskToDataUrl, type MapCellSet, type MapCostmapImage, type MaskStyle } from '@/shared/map/costmap'
 import { PLAN_COLORS } from './useTrafficOverlay'
 
-export type CostmapLayerKey = 'keepout' | 'speed' | 'cells'
+export type CostmapLayerKey = 'keepout' | 'speed' | 'cells' | 'liveGlobal' | 'liveLocal'
 
 const STORAGE_KEY = 'warotrans.fleetMap.costmap'
 
 function readSaved(): Record<CostmapLayerKey, boolean> {
-  const fallback = { keepout: false, speed: false, cells: false }
+  const fallback = { keepout: false, speed: false, cells: false, liveGlobal: false, liveLocal: false }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<Record<CostmapLayerKey, boolean>>) } : fallback
@@ -58,9 +58,51 @@ export function useCostmapOverlay(
     return out
   }, [layers])
 
+  // The robots' own live Nav2 costmaps (sent by each gateway): global every ~3 s, local every ~1 s.
+  const liveKinds = [...(shown.liveGlobal ? (['global'] as const) : []), ...(shown.liveLocal ? (['local'] as const) : [])]
+  const live = useQueries({
+    queries: liveKinds.flatMap((kind) =>
+      robots.map((robot) => ({
+        queryKey: ['fleet-live-costmap', robot.id, kind],
+        queryFn: () => getRobotLiveCostmap(robot.id, kind),
+        refetchInterval: kind === 'global' ? 3000 : 1000,
+        enabled,
+        retry: false,
+      })),
+    ),
+  })
+  const liveStamp = live.map((q) => q.data?.receivedAt ?? '').join('|')
+  const liveImages = useMemo<MapCostmapImage[]>(
+    () =>
+      live.flatMap((q) => {
+        const body = q.data?.costmap
+        if (!body) return []
+        const url = liveCostmapToDataUrl(body)
+        if (!url) return []
+        return [
+          {
+            id: `live-${body.kind}-${body.robotCode}`,
+            url,
+            originX: body.originX,
+            originY: body.originY,
+            widthM: body.width * body.resolution,
+            heightM: body.height * body.resolution,
+            opacity: 0.85,
+          },
+        ]
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-render only when a new sample arrived
+    [liveStamp],
+  )
+  const liveCount = live.filter((q) => q.data?.costmap).length
+
   const costmapImages = useMemo(
-    () => (['keepout', 'speed'] as const).filter((k) => shown[k]).flatMap((k) => (images[k] ? [images[k]!] : [])),
-    [images, shown],
+    () => [
+      ...liveImages.filter((img) => img.id.startsWith('live-global')),
+      ...(['keepout', 'speed'] as const).filter((k) => shown[k]).flatMap((k) => (images[k] ? [images[k]!] : [])),
+      ...liveImages.filter((img) => img.id.startsWith('live-local')),
+    ],
+    [images, shown, liveImages],
   )
 
   const cellSets = useMemo<MapCellSet[]>(() => {
@@ -98,6 +140,7 @@ export function useCostmapOverlay(
     costmapImages,
     cellSets,
     available: { keepout: Boolean(images.keepout), speed: Boolean(images.speed) },
+    liveCount,
     error: query.isError,
     fingerprint: layers?.fingerprint ?? null,
   }

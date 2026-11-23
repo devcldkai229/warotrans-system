@@ -5,6 +5,8 @@ const LAYERS: { key: CostmapLayerKey; label: string; swatch: string; hint: strin
   { key: 'keepout', label: 'Keep-out', swatch: 'bg-[#e53935]', hint: 'Costmap keep-out mask the robots plan with' },
   { key: 'speed', label: 'Speed limits', swatch: 'bg-[#f7b928]', hint: 'Costmap speed mask (darker = slower)' },
   { key: 'cells', label: 'Traffic cells', swatch: 'bg-[#2d88ff]', hint: 'Cells each robot holds (solid) or was granted (outline)' },
+  { key: 'liveGlobal', label: 'Live global', swatch: 'bg-[#4a148c]', hint: "Each robot's own Nav2 global costmap (sent by the robot)" },
+  { key: 'liveLocal', label: 'Live local', swatch: 'bg-[#1e88e5]', hint: "Each robot's Nav2 local costmap around it: obstacles the LiDAR sees now" },
 ]
 
 /** On/off chips for the costmap overlays of the Fleet map (admin). */
@@ -14,7 +16,10 @@ export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCost
       <span className="px-1 font-medium text-ink-2">{t('Costmap')}</span>
       {LAYERS.map((layer) => {
         const on = costmap.shown[layer.key]
-        const missing = layer.key !== 'cells' && on && !costmap.available[layer.key as 'keepout' | 'speed']
+        const live = layer.key === 'liveGlobal' || layer.key === 'liveLocal'
+        const missing = live
+          ? on && costmap.liveCount === 0
+          : layer.key !== 'cells' && on && !costmap.available[layer.key as 'keepout' | 'speed']
         return (
           <button
             key={layer.key}
@@ -28,7 +33,7 @@ export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCost
           >
             <span className={`size-2 rounded-sm ${layer.swatch} ${on ? '' : 'opacity-40'}`} />
             {t(layer.label)}
-            {missing ? <span className="text-muted">({t('empty')})</span> : null}
+            {missing ? <span className="text-muted">({t(live ? 'no robot sends it yet' : 'empty')})</span> : null}
           </button>
         )
       })}

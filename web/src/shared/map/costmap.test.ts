@@ -18,3 +18,14 @@ describe('costmap helpers', () => {
     expect(maskPixel('speed', 30, 'raw')[3]).toBeGreaterThan(maskPixel('speed', 70, 'raw')[3])
   })
 })
+
+import { costPixel } from './costmap'
+
+describe('live Nav2 costmap colours', () => {
+  it('shows lethal strongest, free as nothing, unknown faint', () => {
+    expect(costPixel(100)[3]).toBeGreaterThan(costPixel(99)[3])
+    expect(costPixel(0)[3]).toBe(0)
+    expect(costPixel(255)[3]).toBeLessThan(costPixel(50)[3])
+    expect(costPixel(90)[3]).toBeGreaterThan(costPixel(10)[3])
+  })
+})

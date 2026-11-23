@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Authorization;
+using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Mqtt;
+using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet.Features.GetSemanticLayers;
@@ -61,6 +64,27 @@ public static class Endpoint
             .RequirePermission(Permissions.TrafficRead)
             .WithName("GetSemanticLayers")
             .WithSummary("Static costmap layers of the bound semantic bundle (keepout, speed) for the map overlay")
+            .WithTags("Traffic");
+
+        // The robot's own live Nav2 costmap (sent by its gateway every 1-3 s), for the admin map overlay.
+        group.MapGet("/robots/{id:guid}/costmap", async (Guid id, string? kind, FleetDbContext db, LiveCostmapStore store,
+                CancellationToken ct) =>
+            {
+                var code = await db.Robots.AsNoTracking().Where(r => r.Id == id).Select(r => r.Code).FirstOrDefaultAsync(ct);
+                if (code is null)
+                {
+                    return Results.NotFound();
+                }
+
+                var live = store.Get(code, kind is "local" ? "local" : "global");
+                return live is null
+                    ? Results.NoContent()
+                    : Results.Ok(new { live.RobotCode, live.Kind, live.ReceivedAt, costmap = live.Body });
+            })
+            .RequirePermission(Permissions.RobotRead)
+            .RequireRobotScope()
+            .WithName("GetRobotLiveCostmap")
+            .WithSummary("The robot's latest Nav2 costmap image (global or local); 204 when it sends none")
             .WithTags("Traffic");
         return group;
     }

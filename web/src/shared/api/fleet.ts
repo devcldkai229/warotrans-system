@@ -172,6 +172,14 @@ export function getSemanticLayers() {
   return apiFetch<SemanticLayers>('/api/fleet/traffic/semantic-layers')
 }
 
+/** The robot's latest live Nav2 costmap; null when it sends none (204) or it is older than 30 s. */
+export async function getRobotLiveCostmap(robotId: string, kind: 'global' | 'local') {
+  const res = await apiFetch<{ robotCode: string; kind: string; receivedAt: string; costmap: import('../map/costmap').LiveCostmapBody } | null>(
+    `/api/fleet/robots/${robotId}/costmap?kind=${kind}`,
+  )
+  return res ?? null
+}
+
 export function getTrafficSnapshot() {
   return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
 }
