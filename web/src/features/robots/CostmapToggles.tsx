@@ -1,43 +1,66 @@
 import { t } from '@/shared/i18n'
-import type { CostmapLayerKey, useCostmapOverlay } from './useCostmapOverlay'
+import type { useCostmapOverlay } from './useCostmapOverlay'
 
-const LAYERS: { key: CostmapLayerKey; label: string; swatch: string; hint: string }[] = [
-  { key: 'keepout', label: 'Keep-out', swatch: 'bg-[#e53935]', hint: 'Costmap keep-out mask the robots plan with' },
-  { key: 'speed', label: 'Speed limits', swatch: 'bg-[#f7b928]', hint: 'Costmap speed mask (darker = slower)' },
-  { key: 'cells', label: 'Traffic cells', swatch: 'bg-[#2d88ff]', hint: 'Cells each robot holds (solid) or was granted (outline)' },
-  { key: 'liveGlobal', label: 'Live global', swatch: 'bg-[#4a148c]', hint: "Each robot's own Nav2 global costmap (sent by the robot)" },
-  { key: 'liveLocal', label: 'Live local', swatch: 'bg-[#1e88e5]', hint: "Each robot's Nav2 local costmap around it: obstacles the LiDAR sees now" },
+const CHIP = 'flex h-7 items-center gap-1.5 rounded-full px-2.5 transition-colors duration-200'
+const ON = 'bg-primary-soft text-primary-ink'
+const OFF = 'text-ink-2 hover:bg-container-high'
+
+/** RViz costmap legend: what each colour means. */
+const LEGEND: { swatch: string; label: string }[] = [
+  { swatch: 'bg-[#ff00ff]', label: 'lethal (wall / keep-out)' },
+  { swatch: 'bg-[#00ffff]', label: 'inscribed: robot centre may not enter' },
+  { swatch: 'bg-gradient-to-r from-[#0000ff] to-[#ff0000]', label: 'inflation: low → high cost' },
 ]
 
-/** On/off chips for the costmap overlays of the Fleet map (admin). */
+/** Fleet map view: which robot's live Nav2 costmap to draw, and which traffic layers to keep. */
 export function CostmapToggles({ costmap }: { costmap: ReturnType<typeof useCostmapOverlay> }) {
+  const { view, update } = costmap
   return (
-    <div className="absolute top-3 left-3 z-5 flex flex-wrap items-center gap-1.5 rounded-2xl bg-surface/95 px-2 py-1.5 text-xs shadow-float">
-      <span className="px-1 font-medium text-ink-2">{t('Costmap')}</span>
-      {LAYERS.map((layer) => {
-        const on = costmap.shown[layer.key]
-        const live = layer.key === 'liveGlobal' || layer.key === 'liveLocal'
-        const missing = live
-          ? on && costmap.liveCount === 0
-          : layer.key !== 'cells' && on && !costmap.available[layer.key as 'keepout' | 'speed']
-        return (
-          <button
-            key={layer.key}
-            type="button"
-            aria-pressed={on}
-            title={t(layer.hint)}
-            onClick={() => costmap.toggle(layer.key)}
-            className={`flex h-7 items-center gap-1.5 rounded-full px-2.5 transition-colors duration-200 ${
-              on ? 'bg-primary-soft text-primary-ink' : 'text-ink-2 hover:bg-container-high'
-            }`}
-          >
-            <span className={`size-2 rounded-sm ${layer.swatch} ${on ? '' : 'opacity-40'}`} />
-            {t(layer.label)}
-            {missing ? <span className="text-muted">({t(live ? 'no robot sends it yet' : 'empty')})</span> : null}
+    <div className="absolute top-3 left-3 z-5 flex max-w-[min(560px,calc(100%-1.5rem))] flex-col gap-1.5 rounded-2xl bg-surface/95 px-2.5 py-2 text-xs shadow-float">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="px-1 font-medium text-ink-2">{t('Costmap')}</span>
+        <button type="button" aria-pressed={view.costmapRobot == null} onClick={() => update({ costmapRobot: null })}
+          className={`${CHIP} ${view.costmapRobot == null ? ON : OFF}`}>
+          {t('Off')}
+        </button>
+        {costmap.robotCodes.map((code) => (
+          <button key={code} type="button" aria-pressed={view.costmapRobot === code} onClick={() => update({ costmapRobot: code })}
+            title={t("This robot's own Nav2 global costmap: what its planner plans on")}
+            className={`${CHIP} ${view.costmapRobot === code ? ON : OFF}`}>
+            {code}
           </button>
-        )
-      })}
-      {costmap.error ? <span className="px-1 text-red">{t('No semantic bundle on this Host')}</span> : null}
+        ))}
+        <label className={`${CHIP} cursor-pointer ${view.local ? ON : OFF} ${view.costmapRobot == null ? 'pointer-events-none opacity-40' : ''}`}
+          title={t('The local costmap around the robot: obstacles its LiDAR sees now')}>
+          <input type="checkbox" className="size-3" checked={view.local} onChange={(e) => update({ local: e.target.checked })} />
+          {t('Local')}
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="px-1 font-medium text-ink-2">{t('Show')}</span>
+        {(['zones', 'lanes', 'traffic'] as const).map((key) => (
+          <label key={key} className={`${CHIP} cursor-pointer ${view[key] ? ON : OFF}`}>
+            <input type="checkbox" className="size-3" checked={view[key]} onChange={(e) => update({ [key]: e.target.checked })} />
+            {t(key === 'zones' ? 'Zones' : key === 'lanes' ? 'Lanes' : 'Traffic')}
+          </label>
+        ))}
+        <span className="px-1 text-muted">{t('Endpoints always shown')}</span>
+      </div>
+      {view.costmapRobot ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-muted">
+          {LEGEND.map((l) => (
+            <span key={l.label} className="flex items-center gap-1">
+              <span className={`inline-block h-2 w-3 rounded-sm opacity-70 ${l.swatch}`} />
+              {t(l.label)}
+            </span>
+          ))}
+          {costmap.noCostmap ? (
+            <span className="text-amber-ink">{t('{code} sends no costmap (offline or old gateway)', { code: view.costmapRobot })}</span>
+          ) : costmap.receivedAt ? (
+            <span>{t('received {time}', { time: new Date(costmap.receivedAt).toLocaleTimeString() })}</span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

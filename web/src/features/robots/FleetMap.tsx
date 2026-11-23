@@ -159,12 +159,12 @@ export function FleetMap({
         bounds={bounds}
         occupancyImageUrl={occupancyImageUrl}
         robots={mapRobots}
-        layers={{ occupancy: true }}
+        layers={{ occupancy: costmap.view.traffic, zones: costmap.view.zones, edges: costmap.view.lanes }}
         labels="all"
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
         movements={movements}
-        trafficOverlay={trafficOverlay}
+        trafficOverlay={costmap.view.traffic ? trafficOverlay : null}
         costmapImages={costmap.costmapImages}
         cellSets={costmap.cellSets}
         callouts={callouts}

@@ -80,14 +80,22 @@ export interface LiveCostmapBody {
   data: string
 }
 
-/** Nav2 cost → RGBA: lethal dark purple, inscribed magenta, inflation blue (stronger near obstacles), unknown faint. */
+/**
+ * RViz "costmap" colour scheme (rviz_default_plugins MapDisplay), the one Nav2 users read every day:
+ * 0 free = transparent, 1..98 = blue → red by cost, 99 inscribed = cyan, 100 lethal = magenta, unknown = grey-green.
+ * The layer itself is drawn at RViz's default alpha (0.7).
+ */
 export function costPixel(cost: number): [number, number, number, number] {
-  if (cost === 255) return [120, 120, 120, 40]
-  if (cost >= 100) return [74, 20, 140, 210]
-  if (cost >= 99) return [216, 27, 96, 170]
+  if (cost === 255) return [112, 137, 134, 90]
+  if (cost >= 100) return [255, 0, 255, 255]
+  if (cost === 99) return [0, 255, 255, 255]
   if (cost <= 0) return [0, 0, 0, 0]
-  return [30, 136, 229, Math.round(30 + (cost / 98) * 140)]
+  const v = Math.floor((255 * cost) / 100)
+  return [v, 0, 255 - v, 255]
 }
+
+/** RViz MapDisplay default alpha for a costmap. */
+export const COSTMAP_ALPHA = 0.7
 
 /** A live costmap → PNG data URL, flipped so the image's first row is the top of the map. */
 export function liveCostmapToDataUrl(body: LiveCostmapBody): string | null {

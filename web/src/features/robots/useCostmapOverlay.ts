@@ -1,131 +1,103 @@
 import { useMemo, useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { getRobotLiveCostmap, getSemanticLayers, type TrafficSnapshot } from '@/shared/api/fleet'
-import { cellCorner, liveCostmapToDataUrl, maskToDataUrl, type MapCellSet, type MapCostmapImage, type MaskStyle } from '@/shared/map/costmap'
+import { cellCorner, COSTMAP_ALPHA, liveCostmapToDataUrl, type MapCellSet, type MapCostmapImage } from '@/shared/map/costmap'
 import { PLAN_COLORS } from './useTrafficOverlay'
 
-export type CostmapLayerKey = 'keepout' | 'speed' | 'cells' | 'liveGlobal' | 'liveLocal'
+/** What the Fleet map shows besides robots and endpoints (endpoints always stay). */
+export interface MapViewState {
+  /** Robot whose own Nav2 costmap is drawn (exactly what its planner uses); null = no costmap. */
+  costmapRobot: string | null
+  /** Also the robot's local costmap (rolling window, live LiDAR obstacles). */
+  local: boolean
+  zones: boolean
+  lanes: boolean
+  /** Plans, granted edges, traffic cells, quarantine alerts. */
+  traffic: boolean
+}
 
-const STORAGE_KEY = 'warotrans.fleetMap.costmap'
+const STORAGE_KEY = 'warotrans.fleetMap.view'
+const DEFAULT_VIEW: MapViewState = { costmapRobot: null, local: false, zones: true, lanes: true, traffic: true }
 
-function readSaved(): Record<CostmapLayerKey, boolean> {
-  const fallback = { keepout: false, speed: false, cells: false, liveGlobal: false, liveLocal: false }
+function readSaved(): MapViewState {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<Record<CostmapLayerKey, boolean>>) } : fallback
+    return raw ? { ...DEFAULT_VIEW, ...(JSON.parse(raw) as Partial<MapViewState>) } : DEFAULT_VIEW
   } catch {
-    return fallback
+    return DEFAULT_VIEW
   }
 }
 
+function toImage(body: Parameters<typeof liveCostmapToDataUrl>[0] | undefined, id: string): MapCostmapImage | null {
+  if (!body) return null
+  const url = liveCostmapToDataUrl(body)
+  return url
+    ? { id, url, originX: body.originX, originY: body.originY, widthM: body.width * body.resolution,
+        heightM: body.height * body.resolution, opacity: COSTMAP_ALPHA }
+    : null
+}
+
 /**
- * Admin map costmap: the bundle's keep-out and speed masks (what Nav2 plans with on every robot) and the traffic
- * cells each robot holds (solid) or was granted ahead of it (outline). Off by default; the choice is remembered.
+ * The Fleet map's view: a robot's own live Nav2 costmap (what its planner plans on, as RViz draws it) and which traffic
+ * layers stay visible, so an operator can look at endpoints + costmap alone. The choice is remembered per viewer.
  */
 export function useCostmapOverlay(
   snap: TrafficSnapshot | undefined,
   robots: ReadonlyArray<{ id: string; code: string }>,
   enabled: boolean,
 ) {
-  const [shown, setShown] = useState<Record<CostmapLayerKey, boolean>>(readSaved)
-  const anyMask = shown.keepout || shown.speed
-  const query = useQuery({
-    queryKey: ['fleet-semantic-layers'],
-    queryFn: getSemanticLayers,
-    enabled: enabled && (anyMask || shown.cells),
-    staleTime: 5 * 60_000,
+  const [view, setView] = useState<MapViewState>(readSaved)
+  const robot = robots.find((r) => r.code === view.costmapRobot) ?? null
+
+  const global = useQuery({
+    queryKey: ['fleet-live-costmap', robot?.id, 'global'],
+    queryFn: () => getRobotLiveCostmap(robot!.id, 'global'),
+    enabled: enabled && robot != null,
+    refetchInterval: 3000,
     retry: false,
   })
-  const layers = query.data
-
-  const images = useMemo<Record<string, MapCostmapImage | null>>(() => {
-    const out: Record<string, MapCostmapImage | null> = {}
-    for (const layer of layers?.layers ?? []) {
-      const style: MaskStyle | null = layer.id === 'speed' ? 'speed' : layer.id === 'keepout' ? 'keepout' : null
-      if (!style) continue
-      const url = maskToDataUrl(layer, style)
-      out[layer.id] = url
-        ? {
-            id: layer.id,
-            url,
-            originX: layer.originX,
-            originY: layer.originY,
-            widthM: layer.width * layer.resolution,
-            heightM: layer.height * layer.resolution,
-          }
-        : null
-    }
-    return out
-  }, [layers])
-
-  // The robots' own live Nav2 costmaps (sent by each gateway): global every ~3 s, local every ~1 s.
-  const liveKinds = [...(shown.liveGlobal ? (['global'] as const) : []), ...(shown.liveLocal ? (['local'] as const) : [])]
-  const live = useQueries({
-    queries: liveKinds.flatMap((kind) =>
-      robots.map((robot) => ({
-        queryKey: ['fleet-live-costmap', robot.id, kind],
-        queryFn: () => getRobotLiveCostmap(robot.id, kind),
-        refetchInterval: kind === 'global' ? 3000 : 1000,
-        enabled,
-        retry: false,
-      })),
-    ),
+  const local = useQuery({
+    queryKey: ['fleet-live-costmap', robot?.id, 'local'],
+    queryFn: () => getRobotLiveCostmap(robot!.id, 'local'),
+    enabled: enabled && robot != null && view.local,
+    refetchInterval: 1000,
+    retry: false,
   })
-  const liveStamp = live.map((q) => q.data?.receivedAt ?? '').join('|')
-  const liveImages = useMemo<MapCostmapImage[]>(
-    () =>
-      live.flatMap((q) => {
-        const body = q.data?.costmap
-        if (!body) return []
-        const url = liveCostmapToDataUrl(body)
-        if (!url) return []
-        return [
-          {
-            id: `live-${body.kind}-${body.robotCode}`,
-            url,
-            originX: body.originX,
-            originY: body.originY,
-            widthM: body.width * body.resolution,
-            heightM: body.height * body.resolution,
-            opacity: 0.85,
-          },
-        ]
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-render only when a new sample arrived
-    [liveStamp],
-  )
-  const liveCount = live.filter((q) => q.data?.costmap).length
+  // Cell size of the traffic grid, for drawing held / granted cells.
+  const layers = useQuery({ queryKey: ['fleet-semantic-layers'], queryFn: getSemanticLayers, enabled: enabled && view.traffic,
+    staleTime: 5 * 60_000, retry: false })
 
-  const costmapImages = useMemo(
-    () => [
-      ...liveImages.filter((img) => img.id.startsWith('live-global')),
-      ...(['keepout', 'speed'] as const).filter((k) => shown[k]).flatMap((k) => (images[k] ? [images[k]!] : [])),
-      ...liveImages.filter((img) => img.id.startsWith('live-local')),
-    ],
-    [images, shown, liveImages],
-  )
+  const globalStamp = global.data?.receivedAt ?? ''
+  const localStamp = local.data?.receivedAt ?? ''
+  const costmapImages = useMemo<MapCostmapImage[]>(() => {
+    if (!robot) return []
+    const g = toImage(global.data?.costmap, `live-global-${robot.code}`)
+    const l = view.local ? toImage(local.data?.costmap, `live-local-${robot.code}`) : null
+    return [g, l].filter((x): x is MapCostmapImage => x != null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw only when a new sample arrived
+  }, [robot?.code, globalStamp, localStamp, view.local])
 
   const cellSets = useMemo<MapCellSet[]>(() => {
-    if (!shown.cells || !snap) return []
-    const size = layers?.cellSizeMeters ?? 0.1
+    if (!view.traffic || !snap) return []
+    const size = layers.data?.cellSizeMeters ?? 0.1
     const codes = robots.map((r) => r.code).sort()
     return snap.robots.flatMap((r) => {
-      const robot = robots.find((item) => item.id === r.robotId)
-      if (!robot) return []
-      const color = PLAN_COLORS[codes.indexOf(robot.code) % PLAN_COLORS.length]
+      const rb = robots.find((item) => item.id === r.robotId)
+      if (!rb) return []
+      const color = PLAN_COLORS[codes.indexOf(rb.code) % PLAN_COLORS.length]
       const held = new Set(r.occupiedResourceIds ?? [])
       const granted = (r.authority?.resourceIds ?? []).filter((id) => !held.has(id))
       const toCells = (ids: Iterable<string>) => [...ids].flatMap((id) => (cellCorner(id, size) ? [cellCorner(id, size)!] : []))
       return [
-        { robotCode: robot.code, color, kind: 'held' as const, size, cells: toCells(held) },
-        { robotCode: robot.code, color, kind: 'granted' as const, size, cells: toCells(granted) },
+        { robotCode: rb.code, color, kind: 'held' as const, size, cells: toCells(held) },
+        { robotCode: rb.code, color, kind: 'granted' as const, size, cells: toCells(granted) },
       ].filter((set) => set.cells.length > 0)
     })
-  }, [shown.cells, snap, robots, layers?.cellSizeMeters])
+  }, [view.traffic, snap, robots, layers.data?.cellSizeMeters])
 
-  const toggle = (key: CostmapLayerKey) =>
-    setShown((prev) => {
-      const next = { ...prev, [key]: !prev[key] }
+  const update = (patch: Partial<MapViewState>) =>
+    setView((prev) => {
+      const next = { ...prev, ...patch }
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       } catch {
@@ -135,13 +107,13 @@ export function useCostmapOverlay(
     })
 
   return {
-    shown,
-    toggle,
+    view,
+    update,
     costmapImages,
     cellSets,
-    available: { keepout: Boolean(images.keepout), speed: Boolean(images.speed) },
-    liveCount,
-    error: query.isError,
-    fingerprint: layers?.fingerprint ?? null,
+    /** The chosen robot sends no costmap (gateway without uplink, offline, or older than 30 s). */
+    noCostmap: robot != null && global.isFetched && !global.data,
+    receivedAt: global.data?.receivedAt ?? null,
+    robotCodes: robots.map((r) => r.code).sort(),
   }
 }
