@@ -154,6 +154,7 @@ public sealed class TrafficState
         }
 
         var robot = GetOrCreate(request.RobotId);
+        request = AnchoredAtSeenPose(robot, request);
 
         // OFFLINE / LOCALIZATION_LOSS must NOT clear from traffic_plan alone — only verified
         // progress / health evidence may recover those faults (Stage-3 safety).
@@ -765,6 +766,32 @@ public sealed class TrafficState
         robot.Authority is null && robot.YawAt is { } at && Math.Abs(at.X - x) <= 0.03 && Math.Abs(at.Y - y) <= 0.03
             ? at.Yaw
             : null;
+
+    /// <summary>Largest gap between the plan's first pose and the reported pose that is bridged (more is a fault).</summary>
+    public const double PlanStartBridgeMaxMeters = 0.30;
+
+    /// <summary>
+    /// The plan as reserved: starting where the robot last reported itself, when Nav2's path starts a little elsewhere.
+    /// The robot gate checks the body at the reported pose; Nav2 plans from its own TF pose. Lab 2026-11-23: RBT-001 at
+    /// EP-QUEUE-B reported (2.24, 0.47) while every plan started at (2.21, 0.38); with the path tolerance growing from
+    /// the start, the two cells in front of its body were not granted and the gate held it (OUTSIDE_RESERVATION).
+    /// </summary>
+    private SemanticPlanProposeRequest AnchoredAtSeenPose(RobotRuntime robot, SemanticPlanProposeRequest request)
+    {
+        if (robot.SeenAt is not { } seen || _clock.GetUtcNow() - seen.At > TimeSpan.FromSeconds(5))
+        {
+            return request;
+        }
+
+        var first = request.Poses[0];
+        var gap = Math.Sqrt(Math.Pow(first.X - seen.X, 2) + Math.Pow(first.Y - seen.Y, 2));
+        if (gap < 0.01 || gap > PlanStartBridgeMaxMeters)
+        {
+            return request;
+        }
+
+        return request with { Poses = request.Poses.Insert(0, new SemanticPlanPose(seen.X, seen.Y, first.Yaw)) };
+    }
 
     /// <summary>Records the heading a robot reports while it stands still (no grant).</summary>
     private static void NoteYaw(RobotRuntime robot, double? x, double? y, double? yaw, bool localizationOk)
@@ -1664,6 +1691,11 @@ public sealed class TrafficState
     {
         var robot = GetOrCreate(robotId);
         NoteYaw(robot, poseX, poseY, poseYaw, localizationOk);
+        if (localizationOk && poseX is double seenX && poseY is double seenY)
+        {
+            robot.SeenAt = (seenX, seenY, _clock.GetUtcNow());
+        }
+
         if (robot.Phase != TrafficRobotPhase.Quarantined)
         {
             SeedIfHoldingNothing(robot, poseX, poseY, localizationOk);
@@ -2896,6 +2928,8 @@ public sealed class TrafficState
         public double? Y { get; set; }
         /// <summary>Heading reported at a pose while standing still (null after any grant: it may turn).</summary>
         public (double X, double Y, double Yaw)? YawAt { get; set; }
+        /// <summary>Last fresh localized pose from a heartbeat (the pose the robot gate checks), with when it came.</summary>
+        public (double X, double Y, DateTimeOffset At)? SeenAt { get; set; }
         public bool LocalizationOk { get; set; } = true;
         public HashSet<string> OccupiedResourceIds { get; } = new(StringComparer.Ordinal);
         public MotionAuthority? Authority { get; set; }

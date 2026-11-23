@@ -139,6 +139,25 @@ public class SemanticParallelLaneTests
     }
 
     [Fact]
+    public void The_grant_covers_the_body_at_the_reported_pose_when_the_plan_starts_elsewhere()
+    {
+        // Lab 2026-11-23: RBT-001 at EP-QUEUE-B reported (2.243, 0.469) facing +y; Nav2's plan to a spot south started
+        // at (2.207, 0.383). The robot gate checks the body (+0.05 m) at the reported pose.
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, 2.243, 0.469, localizationOk: true, poseYaw: 1.56).Ok);
+        Assert.True(s.MarkOnline(_r1, 2.243, 0.469, localizationOk: true, poseYaw: 1.56).Ok);
+        ImmutableArray<SemanticPlanPose> south =
+            [new(2.207, 0.383, 1.6), new(2.22, 0.1, -1.48), new(2.22, -0.16, -1.48), new(2.33, -0.58, -1.48)];
+        var result = s.AcquireSemanticPlan(Plan(policy, _r1, south));
+        Assert.True(result.Granted);
+        var gate = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.RectCellsExact(2.243, 0.469, 1.56, policy.FootprintHalfLength + 0.05, policy.FootprintHalfWidth + 0.05,
+            policy.EffectiveCellSize, gate);
+        Assert.Empty(gate.Except(result.Authority!.ResourceIds));
+    }
+
+    [Fact]
     public void The_path_tolerance_grows_from_the_start()
     {
         var policy = Policy(laneHalfWidth: 0.25);
