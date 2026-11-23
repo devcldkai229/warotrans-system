@@ -99,7 +99,7 @@ export function getMapVersion(id: string) {
 /** The map version's own costmap (occupancy + Nav2 inflation); null when it has no occupancy image yet (204). */
 export async function getMapVersionCostmap(id: string) {
   const body = await apiFetch<import('../map/costmap').LiveCostmapBody & { inscribedRadius: number } | undefined>(
-    `/api/navigation/map-versions/${id}/costmap`,
+    `/api/navigation/maps/${id}/costmap`,
   )
   return body ?? null
 }

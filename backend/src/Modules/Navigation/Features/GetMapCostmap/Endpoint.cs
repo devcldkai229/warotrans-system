@@ -12,7 +12,7 @@ namespace WaroTrans.Navigation.Features.GetMapCostmap;
 public static class GetMapCostmapEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
-        group.MapGet("/map-versions/{id:guid}/costmap", async (Guid id, NavigationDbContext db, MapCostmapService costmaps,
+        group.MapGet("/maps/{id:guid}/costmap", async (Guid id, NavigationDbContext db, MapCostmapService costmaps,
                 CancellationToken ct) =>
             {
                 var map = await db.MapVersions.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
