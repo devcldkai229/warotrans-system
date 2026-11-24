@@ -45,7 +45,7 @@ New-Item -ItemType Directory -Force $logs | Out-Null
 
 # Real robots upload trajectory, plans and camera clips to the Recorder from the LAN (lab 2026-11-24: the "http" profile
 # listened on localhost only, every robot upload timed out and the journals had no path).
-$recorderProfile = if ($HostProfile -eq "RealRobot") { "lan" } else { "http" }
+$recorderProfile = if ($HostProfile -like "RealRobot*") { "lan" } else { "http" }
 
 $services = @(
   @{ Name = "host";     Project = "backend\src\WaroTrans.Host";                   Match = "WaroTrans.Host";              Port = 5090; Profile = $HostProfile; Evidence = $false },

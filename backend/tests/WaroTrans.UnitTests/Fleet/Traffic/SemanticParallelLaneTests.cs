@@ -99,13 +99,103 @@ public class SemanticParallelLaneTests
     }
 
     [Fact]
-    public void Without_a_heading_a_parked_robot_keeps_the_any_heading_circle()
+    public void Without_a_heading_a_parked_robot_keeps_the_any_heading_circle_and_the_neighbour_still_leaves()
     {
+        // The parked one holds the circle (any heading), but the plan's start reserves only the body + the gate's stop
+        // margin (path tolerance grows with the distance driven): 0.72 m apart leaves 0.25 m between the bodies, so the
+        // neighbour may leave. With the full 0.15 m at the start neither could (lab 2026-11-23, MAP-ONE-V019, 0.66 m).
         var policy = Policy(laneHalfWidth: 0.25);
         var s = NewState(policy);
         Assert.True(s.EnsureTracked(_r1, -0.561, -1.620, localizationOk: true).Ok);
         Assert.True(s.EnsureTracked(_r2, 0.157, -1.623, localizationOk: true).Ok);
-        Assert.False(s.AcquireSemanticPlan(Plan(policy, _r2, Line(0.157, -1.623, 0.9, -0.95))).Granted);
+        Assert.True(s.AcquireSemanticPlan(Plan(policy, _r2, Line(0.157, -1.623, 0.9, -0.95))).Granted);
+    }
+
+    [Fact]
+    public void Two_robots_parked_066_m_apart_can_each_leave_v019()
+    {
+        // MAP-ONE-V019 lab 2026-11-23: RBT-001 at (-0.562, -1.570), RBT-002 at (0.096, -1.539), both facing about +y.
+        // RBT-002's real Nav2 plan out of PARKING-B: a step north, then north-east to the lane (R231126009).
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, -0.562, -1.570, localizationOk: true, poseYaw: 1.70).Ok);
+        Assert.True(s.EnsureTracked(_r2, 0.096, -1.539, localizationOk: true, poseYaw: 1.70).Ok);
+        ImmutableArray<SemanticPlanPose> outOfB =
+        [
+            new(0.096, -1.539, 1.704), new(0.083, -1.441, 0.785), new(0.146, -1.378, 0.785), new(0.208, -1.316, 0.785),
+            new(0.271, -1.253, 0.785), new(0.333, -1.191, 0), new(0.533, -1.191, 0), new(0.733, -1.191, 0), new(1.03, -1.191, 0)
+        ];
+        Assert.True(s.AcquireSemanticPlan(Plan(policy, _r2, outOfB)).Granted);
+    }
+
+    [Fact]
+    public void A_robot_parked_066_m_away_may_step_aside()
+    {
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, -0.562, -1.570, localizationOk: true, poseYaw: 1.70).Ok);
+        Assert.True(s.EnsureTracked(_r2, 0.096, -1.539, localizationOk: true, poseYaw: 1.70).Ok);
+        Assert.True(s.AcquireSemanticPlan(Plan(policy, _r1, Line(-0.562, -1.570, -0.862, -1.570))).Granted);
+    }
+
+    [Fact]
+    public void The_grant_covers_the_body_at_the_reported_pose_when_the_plan_starts_elsewhere()
+    {
+        // Lab 2026-11-23: RBT-001 at EP-QUEUE-B reported (2.243, 0.469) facing +y; Nav2's plan to a spot south started
+        // at (2.207, 0.383). The robot gate checks the body (+0.05 m) at the reported pose.
+        var policy = Policy(laneHalfWidth: 0.25);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, 2.243, 0.469, localizationOk: true, poseYaw: 1.56).Ok);
+        Assert.True(s.MarkOnline(_r1, 2.243, 0.469, localizationOk: true, poseYaw: 1.56).Ok);
+        ImmutableArray<SemanticPlanPose> south =
+            [new(2.207, 0.383, 1.6), new(2.22, 0.1, -1.48), new(2.22, -0.16, -1.48), new(2.33, -0.58, -1.48)];
+        var result = s.AcquireSemanticPlan(Plan(policy, _r1, south));
+        Assert.True(result.Granted);
+        var gate = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.RectCellsExact(2.243, 0.469, 1.56, policy.FootprintHalfLength + 0.05, policy.FootprintHalfWidth + 0.05,
+            policy.EffectiveCellSize, gate);
+        Assert.Empty(gate.Except(result.Authority!.ResourceIds));
+    }
+
+    [Fact]
+    public void A_robot_passes_one_that_stands_still_in_a_narrow_band()
+    {
+        // Discs everywhere (no lanes): the full 0.40 m disc 0.62 m from a robot standing at (0, 0) takes cells it holds;
+        // without the drift room (0.30 m) it does not, and the pass is granted.
+        var policy = Policy(laneHalfWidth: 0);
+        var s = NewState(policy);
+        Assert.True(s.EnsureTracked(_r1, 0, 0, localizationOk: true, poseYaw: 0).Ok);
+        Assert.True(s.MarkOnline(_r1, 0, 0, localizationOk: true, poseYaw: 0).Ok);
+        var path = Line(-1.0, 0.62, 1.0, 0.62);
+        Assert.NotEmpty(SemanticReservation.CollectResources(policy, path)
+            .Intersect(s.Snapshot().Robots.First(r => r.RobotId == _r1).OccupiedResourceIds));
+        var pass = s.AcquireSemanticPlan(Plan(policy, _r2, path));
+        Assert.True(pass.Granted, pass.Reason);
+        Assert.Empty(pass.Authority!.ResourceIds.Intersect(s.Snapshot().Robots.First(r => r.RobotId == _r1).OccupiedResourceIds));
+    }
+
+    [Fact]
+    public void A_moving_robot_is_not_passed_in_the_narrow_band()
+    {
+        var policy = Policy(laneHalfWidth: 0);
+        var s = NewState(policy);
+        Assert.True(s.AcquireSemanticPlan(Plan(policy, _r1, Line(-1.0, -0.15, 1.0, -0.15))).Granted); // r1 drives: narrow would fit, full does not
+        Assert.False(s.AcquireSemanticPlan(Plan(policy, _r2, Line(-1.0, 0.62, 1.0, 0.62))).Granted);
+    }
+
+    [Fact]
+    public void The_path_tolerance_grows_from_the_start()
+    {
+        var policy = Policy(laneHalfWidth: 0.25);
+        Assert.Equal(SemanticReservation.StartToleranceMeters, SemanticReservation.ToleranceAt(policy, 0), 6);
+        Assert.Equal(0.10, SemanticReservation.ToleranceAt(policy, 0.1), 6);
+        Assert.Equal(policy.PathToleranceMeters, SemanticReservation.ToleranceAt(policy, 1.0), 6);
+        // Never closer than the robot gate checks: body (any heading) + stop margin at the start (discs, no lanes).
+        var discs = Policy(laneHalfWidth: 0);
+        var start = SemanticReservation.CollectResources(discs, Line(0.05, 0.05, 1.0, 0.05));
+        var gate = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.DiscCells(0.05, 0.05, discs.FootprintRadiusMeters + 0.05, discs.EffectiveCellSize, gate);
+        Assert.True(gate.IsSubsetOf(start));
     }
 
     [Fact]

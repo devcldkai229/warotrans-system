@@ -2791,8 +2791,25 @@ public sealed partial class JobExecutionEngine(
                         var waitingAlready = step.OutputValues.TryGetValue(AreaQueueZoneKey, out var gz) && gz.GetString() == zone;
                         queueSince = waitingAlready && step.OutputValues.TryGetValue(AreaWaitSinceKey, out var gs) ? gs.GetDateTimeOffset() : now;
                         var waitAt = await GoalWaitPlaceAsync(job, robot, pose, goalBusy.Robot, policy, cancellationToken);
-                        if (waitAt is null
-                            || Dist(robot.PoseX, robot.PoseY, waitAt.X, waitAt.Y) <= Math.Max(0.25, waitAt.PositionTolerance))
+                        // A yield spot (no endpoint) is reached at its own tolerance: it was chosen because where the
+                        // robot stands is in the way, so "close enough" must not mean "stay".
+                        var reachedWithin = waitAt is { Id: var spotId } && spotId == Guid.Empty
+                            ? waitAt.PositionTolerance
+                            : Math.Max(0.25, waitAt?.PositionTolerance ?? 0);
+                        // Nowhere to stand aside, and the robot that has the goal is held by traffic behind THIS one
+                        // (it is still on its way): this one goes first. Lab 2026-11-23 (two INBOUND at once): RBT-002,
+                        // already ahead on the way, waited "where it stands" on RBT-001's path and RBT-001 waited for it.
+                        var goesFirst = waitAt is null && goalBusy.Robot is { } holder
+                                        && goalBusy.Reason.Contains("on its way", StringComparison.Ordinal)
+                                        && await BlocksTrafficOfAsync(robot.Id, holder, cancellationToken);
+                        if (goesFirst)
+                        {
+                            logger.LogInformation(
+                                "Job {JobNo} {StepKey}: {Busy}, but that robot waits behind this one and there is no place to stand aside: this one goes first",
+                                job.JobNo, stepKey, goalBusy.Reason);
+                        }
+                        else if (waitAt is null
+                            || Dist(robot.PoseX, robot.PoseY, waitAt.X, waitAt.Y) <= reachedWithin)
                         {
                             if (!waitingAlready)
                             {
@@ -2809,10 +2826,12 @@ public sealed partial class JobExecutionEngine(
                             await SaveAndPublishAsync(cancellationToken);
                             return false;
                         }
-
-                        queueZone = zone;
-                        goal = waitAt;
-                        await LogGoalQueueAsync(job, robotId, stepKey, pose, goalBusy.Reason, waitAt, cancellationToken);
+                        else
+                        {
+                            queueZone = zone;
+                            goal = waitAt;
+                            await LogGoalQueueAsync(job, robotId, stepKey, pose, goalBusy.Reason, waitAt, cancellationToken);
+                        }
                     }
 
                     // Goal only — robot Nav2 plans; grant arrives after traffic_plan uplink.
@@ -2825,6 +2844,14 @@ public sealed partial class JobExecutionEngine(
                         var tolerance = queueZone == DeadlockRetreatZone
                             ? Math.Max(goal.PositionTolerance, RetreatArrivalToleranceMeters)
                             : goal.PositionTolerance;
+                        if (goal.Id == Guid.Empty)
+                        {
+                            // A spot on free floor (no bay, no run-in): the tolerance must stay well below how far it
+                            // is, or the gateway counts the robot as already there. Lab 2026-11-23 (R231126007): a
+                            // deadlock retreat to a spot 0.31 m away with 0.35 m "arrived" in 0.1 s and nothing moved.
+                            var away = Dist(robot.PoseX, robot.PoseY, goal.X, goal.Y);
+                            tolerance = Math.Min(tolerance, Math.Max(GoalYieldSpotToleranceMeters, away / 2));
+                        }
                         semanticCommandId = await fleet.NavigateAsync(
                             robotId, goal.X, goal.Y, goal.Yaw, job.Id, step.Id, cancellationToken, route: null,
                             timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: tolerance);
@@ -3248,7 +3275,8 @@ public sealed partial class JobExecutionEngine(
 
         try
         {
-            var bundle = await trafficCompile.CompileAsync(mapVersionId, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
+            var graphMap = trafficOptions?.Value.GraphMapFor(mapVersionId) ?? mapVersionId;
+            var bundle = await trafficCompile.CompileAsync(graphMap, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
             if (bundle.Result.HasErrors)
             {
                 // Map editor validation can flag clearance/corridor issues while the compiled graph

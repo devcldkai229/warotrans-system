@@ -246,7 +246,8 @@ public static class SemanticReservation
     /// <summary>Zones and cells the robot sweeps along the first <c>HorizonMeters</c> of its proposed path.</summary>
     public static ImmutableArray<string> CollectResources(
         SemanticTrafficPolicy policy,
-        ImmutableArray<SemanticPlanPose> poses)
+        ImmutableArray<SemanticPlanPose> poses,
+        bool narrow = false)
     {
         if (poses.IsDefaultOrEmpty)
         {
@@ -255,7 +256,7 @@ public static class SemanticReservation
 
         var horizon = Math.Max(policy.EffectiveCellSize, policy.HorizonMeters);
         var resources = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var sample in SweptSamples(policy, poses, horizon))
+        foreach (var sample in SweptSamples(policy, poses, horizon, narrow))
         {
             resources.UnionWith(sample.Resources);
         }
@@ -267,15 +268,25 @@ public static class SemanticReservation
     public static List<(double X, double Y, HashSet<string> Resources)> SweptSamples(
         SemanticTrafficPolicy policy,
         ImmutableArray<SemanticPlanPose> poses,
-        double horizon)
+        double horizon,
+        bool narrow = false)
     {
         var samples = SamplePath(poses, policy.SampleStepMeters, horizon);
         var reachedEnd = samples.Count > 0
                          && samples[^1].X == poses[^1].X && samples[^1].Y == poses[^1].Y;
         var swept = new List<(double, double, HashSet<string>)>(samples.Count);
+        var traveled = 0.0;
         for (var i = 0; i < samples.Count; i++)
         {
             var (x, y) = samples[i];
+            if (i > 0)
+            {
+                traveled += Math.Sqrt(Math.Pow(x - samples[i - 1].X, 2) + Math.Pow(y - samples[i - 1].Y, 2));
+            }
+
+            // Narrow: no room to drift off the path beyond the start's (the robot gate's stop margin). Used only to pass
+            // a robot that stands still (TrafficState.TryGrantSemantic): drifting there stops the robot, never hits.
+            var tolerance = narrow ? ToleranceAt(policy, 0) : ToleranceAt(policy, traveled);
             var resources = new HashSet<string>(StringComparer.Ordinal);
             foreach (var z in policy.SingleOccupancyZones)
             {
@@ -289,19 +300,42 @@ public static class SemanticReservation
             {
                 RectCells(
                     x, y, heading,
-                    policy.FootprintHalfLength + Math.Max(0, policy.PathToleranceMeters) + policy.SampleStepMeters / 2.0,
+                    policy.FootprintHalfLength + tolerance + policy.SampleStepMeters / 2.0,
                     policy.LaneHalfWidthMeters,
                     policy.EffectiveCellSize, resources);
             }
             else
             {
-                DiscCells(x, y, policy.ReserveRadiusMeters, policy.EffectiveCellSize, resources);
+                DiscCells(x, y, policy.FootprintRadiusMeters + tolerance + policy.SampleStepMeters / 2.0,
+                    policy.EffectiveCellSize, resources);
             }
 
             swept.Add((x, y, resources));
         }
 
         return swept;
+    }
+
+    /// <summary>
+    /// Path tolerance reserved where the plan starts: the robot stands there, on its own path, so it cannot have
+    /// drifted yet. The robot gate's stop margin (0.05 m): at the start the grant still holds the body at any heading
+    /// with that margin, which is what the gate checks.
+    /// </summary>
+    public const double StartToleranceMeters = 0.05;
+
+    /// <summary>Metres of sideways room added per metre driven: drift off the path builds up slower than the distance.</summary>
+    public const double ToleranceGrowthPerMeter = 0.5;
+
+    /// <summary>
+    /// Sideways room reserved around a sample <paramref name="traveled"/> metres along the plan: it grows with the
+    /// distance from the start (a robot cannot drift further off its path than it has driven) up to the full path
+    /// tolerance. With the full 0.15 m at the start, two robots parked 0.66 m apart (MAP-ONE-V019 EP-PARKING-A / -B) each
+    /// reserved cells the other stood on, and neither could leave: lab 2026-11-23, R231126008 / R231126009.
+    /// </summary>
+    public static double ToleranceAt(SemanticTrafficPolicy policy, double traveled)
+    {
+        var full = Math.Max(0, policy.PathToleranceMeters);
+        return Math.Min(full, StartToleranceMeters + ToleranceGrowthPerMeter * Math.Max(0, traveled));
     }
 
     private const double StraightWindowMeters = 0.25;

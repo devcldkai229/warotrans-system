@@ -239,14 +239,14 @@ public sealed partial class JobExecutionEngine
         var other = otherRobotId is { } oid ? await fleet.GetRobotAsync(oid, cancellationToken) : null;
         var codes = WaitPointCodes();
         var endpoints = await navigation.GetEndpointsOnMapAsync(job.MapVersionId, cancellationToken);
-        var margin = Math.Max(0, trafficOptions?.Value.LocalizationMarginMeters ?? 0.05);
+        var margin = trafficOptions?.Value.EffectiveStandingMargin ?? 0.05;
         var otherWay = await OtherWayResourcesAsync(policy, other, goal, margin, cancellationToken);
         bool OffWay(double x, double y, double? yaw) => !StandingResources(policy, x, y, yaw, margin).Overlaps(otherWay);
         var stopRadius = Math.Min(policy.FootprintHalfLength, policy.FootprintHalfWidth);
         bool MayStop(double x, double y) =>
             policy.NoStopZones.IsDefaultOrEmpty || !policy.NoStopZones.Any(z => SemanticReservation.DiscHitsZone(x, y, stopRadius, z.Ring));
 
-        // 1. Where it stands, unless the goal has its own queue point (then it waits there, see 2a).
+        // Where it stands counts as clear when it is out of the other robot's way (used in step 2 below).
         var goalHasQueue = freeEndpoints?.GoalQueues.ContainsKey(goal.Code) == true;
         // With a corridor (FleetIdle:GoalCorridors) "clear" also means outside it: inside, it is in the way of the robot
         // that comes out, whatever the cells say.
@@ -254,11 +254,6 @@ public sealed partial class JobExecutionEngine
                           && MayStop(robot.PoseX, robot.PoseY) && OffWay(robot.PoseX, robot.PoseY, robot.PoseYaw)
                           && !InGoalCorridor(goal.Code, robot.PoseX, robot.PoseY)
                           && !blocksOther;
-        if (standsClear && !goalHasQueue)
-        {
-            return null;
-        }
-
         var robots = (await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken))
             .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
             .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == job.MapVersionId)
@@ -292,6 +287,32 @@ public sealed partial class JobExecutionEngine
         bool Fits(EndpointPoseWithType e) =>
             Dist(e.X, e.Y, goal.X, goal.Y) >= QueueGoalClearanceMeters && MayStop(e.X, e.Y) && OffWay(e.X, e.Y, e.Yaw)
             && !InGoalCorridor(goal.Code, e.X, e.Y);
+
+        // 1. The goal's own queue point, chosen from the map, not from a list: the nearest free QUEUE endpoint that serves
+        // this goal (within QueueServesGoalMeters) and where a waiting robot leaves the goal open: on the map's costmap,
+        // with its body there, the goal still reaches most of the map (QueuePassability). MAP-ONE-V019: EP-QUEUE-B beside
+        // the INBOUND dead end, the way in and out passing it on the other side. It beats waiting where it stands: the
+        // next robot is already next to the goal when it frees.
+        var bundleDir = trafficOptions?.Value.SemanticMapDirectory;
+        var ownQueue = endpoints
+            .Where(e => e.EndpointType == EndpointType.QUEUE && Free(e) && MayStop(e.X, e.Y)
+                        && Dist(e.X, e.Y, goal.X, goal.Y) >= QueueGoalClearanceMeters
+                        && Dist(e.X, e.Y, goal.X, goal.Y) <= QueueServesGoalMeters
+                        && !InGoalCorridor(goal.Code, e.X, e.Y)
+                        && QueuePassability.KeepsGoalOpen(bundleDir, goal.X, goal.Y, e.X, e.Y, e.Yaw ?? 0,
+                            policy.FootprintHalfLength, policy.FootprintHalfWidth))
+            .OrderBy(e => Dist(e.X, e.Y, goal.X, goal.Y))
+            .FirstOrDefault();
+        if (ownQueue is not null && !blocksOther)
+        {
+            return await navigation.GetEndpointPoseAsync(ownQueue.Id, cancellationToken);
+        }
+
+        // 2. Where it stands, when that is clear (no queue point serves this goal, or it is taken).
+        if (standsClear && !goalHasQueue)
+        {
+            return null;
+        }
 
         // 2a. The queue point configured for this goal (FleetIdle:GoalQueueEndpoints), e.g. EP-INBOUND=EP-QUEUE-B: the
         // INBOUND bay is a dead end, so its queue stands outside, on the way in. It counts as out of the way also when the
@@ -338,8 +359,11 @@ public sealed partial class JobExecutionEngine
             && await YieldSpotAsync(robot, other, goal, robots, cancellationToken, maxRadius: GoalYieldSpotMaxMeters) is { } spot
             && !InGoalCorridor(goal.Code, spot.X, spot.Y))
         {
+            // Its own small arrival tolerance, never the retreat's 0.35 m: a spot is often only ~0.3 m away, and with 0.35
+            // the robot already counted as there and never moved (lab 2026-11-23, R231126008: RBT-001 at PARKING-A was
+            // sent to a spot 0.30 m west, stayed, and RBT-002 at PARKING-B waited for it for ever, Capacity blocker RBT-001).
             return new EndpointPoseSnapshot(Guid.Empty, job.MapVersionId,
-                FormattableString.Invariant($"spot ({spot.X:F2}, {spot.Y:F2})"), spot.X, spot.Y, spot.Yaw, true, RetreatArrivalToleranceMeters);
+                FormattableString.Invariant($"spot ({spot.X:F2}, {spot.Y:F2})"), spot.X, spot.Y, spot.Yaw, true, GoalYieldSpotToleranceMeters);
         }
 
         return null;
@@ -365,6 +389,9 @@ public sealed partial class JobExecutionEngine
 
     /// <summary>How far a robot waiting for its goal looks for free floor to step aside to (out of a dead end).</summary>
     public const double GoalYieldSpotMaxMeters = 2.0;
+
+    /// <summary>Arrival tolerance at a goal-wait yield spot (free floor, no bay): well below how far a spot can be.</summary>
+    public const double GoalYieldSpotToleranceMeters = 0.10;
 
     /// <summary>Cells and zones a robot standing at (x, y) takes (the traffic's own rule, see TrafficState.ResourcesUnder).</summary>
     private static HashSet<string> StandingResources(SemanticTrafficPolicy policy, double x, double y, double? yaw, double margin)
@@ -505,7 +532,7 @@ public sealed partial class JobExecutionEngine
         }
 
         var policy = trafficOptions!.Value.ApplySemanticOverrides(loaded);
-        var margin = Math.Max(0, trafficOptions.Value.LocalizationMarginMeters);
+        var margin = trafficOptions.Value.EffectiveStandingMargin;
         var goal = winnerGoal ?? new EndpointPoseSnapshot(Guid.Empty, robot.CurrentMapVersionId, "", winner.PoseX, winner.PoseY, winner.PoseYaw, true);
         var avoid = await OtherWayResourcesAsync(policy, winner, goal, margin, cancellationToken);
         var snapshot = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);

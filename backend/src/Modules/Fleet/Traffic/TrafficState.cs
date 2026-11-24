@@ -154,6 +154,7 @@ public sealed class TrafficState
         }
 
         var robot = GetOrCreate(request.RobotId);
+        request = AnchoredAtSeenPose(robot, request);
 
         // OFFLINE / LOCALIZATION_LOSS must NOT clear from traffic_plan alone — only verified
         // progress / health evidence may recover those faults (Stage-3 safety).
@@ -322,6 +323,20 @@ public sealed class TrafficState
         }
         else if (CanAcquire(resources, robot.RobotId, out blocker, out waitReason))
         {
+            blocker = null;
+        }
+        else if (blocker is { } standing && StandsStill(standing)
+                 && SemanticReservation.CollectResources(_semantic, request.Poses, narrow: true) is var narrow
+                 && FindPriorWaiter(robot.RobotId, narrow, request.Priority) is null
+                 && !WouldCreateWaitForCycle(robot.RobotId, narrow)
+                 && CanAcquire(narrow, robot.RobotId, out _, out _))
+        {
+            // Held only by a robot that stands still (waiting for a confirmation at an endpoint, parked): pass it in a
+            // band without the drift room. Its body (and every other robot's) still stays outside the grant, and the
+            // robot gate stops this one if it drifts out; Nav2 keeps its distance from the standing robot it sees.
+            Log($"grant-narrow-past-standing:{robot.RobotId}:{standing}");
+            resources = narrow;
+            candidate = candidate with { ResourceIds = narrow };
             blocker = null;
         }
         else
@@ -766,6 +781,37 @@ public sealed class TrafficState
             ? at.Yaw
             : null;
 
+    /// <summary>Largest gap between the plan's first pose and the reported pose that is bridged (more is a fault).</summary>
+    public const double PlanStartBridgeMaxMeters = 0.30;
+
+    /// <summary>
+    /// The plan as reserved: starting where the robot last reported itself, when Nav2's path starts a little elsewhere.
+    /// The robot gate checks the body at the reported pose; Nav2 plans from its own TF pose. Lab 2026-11-23: RBT-001 at
+    /// EP-QUEUE-B reported (2.24, 0.47) while every plan started at (2.21, 0.38); with the path tolerance growing from
+    /// the start, the two cells in front of its body were not granted and the gate held it (OUTSIDE_RESERVATION).
+    /// </summary>
+    private SemanticPlanProposeRequest AnchoredAtSeenPose(RobotRuntime robot, SemanticPlanProposeRequest request)
+    {
+        if (robot.SeenAt is not { } seen || _clock.GetUtcNow() - seen.At > TimeSpan.FromSeconds(5))
+        {
+            return request;
+        }
+
+        var first = request.Poses[0];
+        var gap = Math.Sqrt(Math.Pow(first.X - seen.X, 2) + Math.Pow(first.Y - seen.Y, 2));
+        if (gap < 0.01 || gap > PlanStartBridgeMaxMeters)
+        {
+            return request;
+        }
+
+        return request with { Poses = request.Poses.Insert(0, new SemanticPlanPose(seen.X, seen.Y, first.Yaw)) };
+    }
+
+    /// <summary>A robot that stands still: no grant, no command (idle, parked, or held at a service stop).</summary>
+    private bool StandsStill(Guid robotId) =>
+        _robots.TryGetValue(robotId, out var r) && r.Authority is null && r.ActiveCommandId is null
+        && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService;
+
     /// <summary>Records the heading a robot reports while it stands still (no grant).</summary>
     private static void NoteYaw(RobotRuntime robot, double? x, double? y, double? yaw, bool localizationOk)
     {
@@ -794,7 +840,7 @@ public sealed class TrafficState
         // next to it.
         // With its heading known (standing still since it reported it), the body rectangle at that heading.
         var set = new HashSet<string>(StringComparer.Ordinal);
-        SemanticReservation.StandingCells(_semantic, x, y, standingYaw, _options.LocalizationMarginMeters, set);
+        SemanticReservation.StandingCells(_semantic, x, y, standingYaw, _options.EffectiveStandingMargin, set);
         // A robot standing still does not turn before its next grant (which takes the zone if the turn needs it), so the
         // zone test uses its half length, not the any-heading circle: on MAP-ONE-V013 (2026-11-22) RBT-002 parked at
         // EP-PARKING-B, 0.245 m below ZONE-SINGLE-CENTER, held the whole zone and RBT-001 waited for it forever.
@@ -1664,6 +1710,11 @@ public sealed class TrafficState
     {
         var robot = GetOrCreate(robotId);
         NoteYaw(robot, poseX, poseY, poseYaw, localizationOk);
+        if (localizationOk && poseX is double seenX && poseY is double seenY)
+        {
+            robot.SeenAt = (seenX, seenY, _clock.GetUtcNow());
+        }
+
         if (robot.Phase != TrafficRobotPhase.Quarantined)
         {
             SeedIfHoldingNothing(robot, poseX, poseY, localizationOk);
@@ -1751,10 +1802,16 @@ public sealed class TrafficState
 
         robot.X = x;
         robot.Y = y;
-        var under = ResourcesUnder(x, y, StandingYaw(robot, x, y));
+        var standingYaw = StandingYaw(robot, x, y);
+        var under = ResourcesUnder(x, y, standingYaw);
         var keep = under.Concat(robot.ServiceHoldIds).ToHashSet(StringComparer.Ordinal);
+        // With its heading known (it stands still, see StandingYaw) a cell outside the body rectangle is clear: it does
+        // not turn before its next grant. The any-heading circle kept a robot done at EP-SHELF-C-1 holding 34 cells
+        // (0.7 x 0.6 m), across the way of the robot heading for INBOUND (sim V019 2026-11-24).
         var released = robot.OccupiedResourceIds
-            .Where(rid => !keep.Contains(rid) && IsPhysicallyClear(robot, rid, x, y))
+            .Where(rid => !keep.Contains(rid)
+                          && ((standingYaw is not null && rid.StartsWith("cell:", StringComparison.Ordinal))
+                              || IsPhysicallyClear(robot, rid, x, y)))
             .ToList();
         foreach (var rid in released)
         {
@@ -1783,7 +1840,7 @@ public sealed class TrafficState
         var radius = _semantic!.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
         var under = new HashSet<string>(StringComparer.Ordinal);
         // The same shape it holds while it stands (StandingCells), so what it seeded is what is checked here.
-        SemanticReservation.StandingCells(_semantic, x, y, StandingYaw(robot, x, y), _options.LocalizationMarginMeters, under);
+        SemanticReservation.StandingCells(_semantic, x, y, StandingYaw(robot, x, y), _options.EffectiveStandingMargin, under);
         foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, radius, z.Ring)))
         {
             under.Add($"zone:{z.Code}");
@@ -2457,7 +2514,7 @@ public sealed class TrafficState
             }
 
             var body = new HashSet<string>(StringComparer.Ordinal);
-            SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.LocalizationMarginMeters, body);
+            SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.EffectiveStandingMargin, body);
             body.ExceptWith(other.OccupiedResourceIds); // what it holds is already counted by capacity
             if (body.Count == 0)
             {
@@ -2896,6 +2953,8 @@ public sealed class TrafficState
         public double? Y { get; set; }
         /// <summary>Heading reported at a pose while standing still (null after any grant: it may turn).</summary>
         public (double X, double Y, double Yaw)? YawAt { get; set; }
+        /// <summary>Last fresh localized pose from a heartbeat (the pose the robot gate checks), with when it came.</summary>
+        public (double X, double Y, DateTimeOffset At)? SeenAt { get; set; }
         public bool LocalizationOk { get; set; } = true;
         public HashSet<string> OccupiedResourceIds { get; } = new(StringComparer.Ordinal);
         public MotionAuthority? Authority { get; set; }
