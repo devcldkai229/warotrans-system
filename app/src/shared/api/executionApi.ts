@@ -352,9 +352,9 @@ export async function setMyHandoverWorkZone(zoneId: string | null): Promise<Staf
   return parseWorkZoneEnvelope(data);
 }
 /** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
-export async function failJobContainer(stepId: string, containerId: string, reason: string) {
+export async function failJobContainer(stepId: string, containerId: string, reason: string, problemCode?: string | null) {
   const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/fail-container`, {
-    method: 'POST', body: JSON.stringify({ containerId, reason }),
+    method: 'POST', body: JSON.stringify({ containerId, reason, problemCode: problemCode || null }),
   });
   return (await hydrateJobs([response]))[0];
 }
@@ -365,9 +365,9 @@ export function confirmJobStep(stepId: string, containerId: string | null, note?
  * Confirm an INSPECTION_CONFIRM step with its result (the step's declared output inspectionResult). A FAILED result
  * needs a note; the scanned container is compared by the server like a handover scan.
  */
-export async function confirmInspection(stepId: string, result: 'PASSED' | 'FAILED', note: string | null, scannedBarcode: string | null, containerId: string | null) {
+export async function confirmInspection(stepId: string, result: 'PASSED' | 'FAILED', note: string | null, scannedBarcode: string | null, containerId: string | null, defects: string[] = []) {
   const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/confirm`, {
-    method: 'POST', body: JSON.stringify({ containerId: containerId && UUID.test(containerId) ? containerId : null, note: note?.trim() || null, scannedBarcode, inspectionResult: result }),
+    method: 'POST', body: JSON.stringify({ containerId: containerId && UUID.test(containerId) ? containerId : null, note: note?.trim() || null, scannedBarcode, inspectionResult: result, defects: result === 'FAILED' ? defects : null }),
   });
   return (await hydrateJobs([response]))[0];
 }
@@ -377,6 +377,7 @@ const ISSUE_MAPPING: Record<string, { issueType: string; severity: string; probl
   MISSING_CONTAINER: { issueType: 'CONTAINER', severity: 'HIGH', problemCode: 'MISSING_CONTAINER' },
   CONTAINER_DAMAGED: { issueType: 'CONTAINER', severity: 'HIGH', problemCode: 'CONTAINER_DAMAGED' },
   BARCODE_UNREADABLE: { issueType: 'CONTAINER', severity: 'MEDIUM', problemCode: 'BARCODE_UNREADABLE' },
+  UNSAFE_LOAD: { issueType: 'CONTAINER', severity: 'HIGH', problemCode: 'UNSAFE_LOAD' },
   QUANTITY_MISMATCH: { issueType: 'CONTAINER', severity: 'MEDIUM', problemCode: 'QUANTITY_MISMATCH' },
   SHELF_BLOCKED: { issueType: 'STORAGE', severity: 'MEDIUM' },
   AMR_PATH_BLOCKED: { issueType: 'JOB', severity: 'HIGH' },

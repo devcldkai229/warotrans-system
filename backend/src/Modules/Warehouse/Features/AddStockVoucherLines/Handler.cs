@@ -80,6 +80,11 @@ public sealed class AddStockVoucherLinesHandler(
         }
         else
         {
+            var empty = containers.FirstOrDefault(c => c.ContentsQuantity is null or <= 0);
+            if (empty is not null)
+                throw new DomainValidationException(
+                    $"Container '{empty.Barcode}' does not say how many goods it holds.", "container_contents_incomplete");
+
             var locationIds = containers.Select(c => c.CurrentStorageLocationId).OfType<Guid>().Distinct().ToArray();
             var locations = await dbContext.StorageLocations.AsNoTracking()
                 .Where(l => locationIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.WarehouseId, cancellationToken);

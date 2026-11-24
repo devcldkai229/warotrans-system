@@ -27,7 +27,6 @@ public sealed record CreateContainerGroupRequest(
     Guid ProductId,
     int ContainerCount,
     decimal QuantityPerContainer,
-    string Unit,
     IReadOnlyList<ContainerQuantityOverride?>? QuantityOverrides = null,
     string? SupplierPackageBarcode = null);
 

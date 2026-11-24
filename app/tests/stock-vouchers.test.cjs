@@ -173,17 +173,17 @@ test('batch container creation links to draft voucher and verifies every allocat
     requestId: 'req-1',
     stockVoucherId: 'voucher-1',
     containerCount: 2,
-    groups: [{ groupKey: 'group-1', productId: 'p1', containerCount: 2, quantityPerContainer: 24, unit: 'pcs' }],
+    groups: [{ groupKey: 'group-1', productId: 'p1', containerCount: 2, quantityPerContainer: 24 }],
   };
   const items = [
-    { id: 'c1', barcode: 'CTN-20261117-000001', productId: 'p1', groupKey: 'group-1', containerNo: 1, contentsQuantity: 24, contentsUnit: 'pcs', supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
-    { id: 'c2', barcode: 'CTN-20261117-000002', productId: 'p1', groupKey: 'group-1', containerNo: 2, contentsQuantity: 24, contentsUnit: 'pcs', supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
+    { id: 'c1', barcode: 'CTN-20261117-000001', productId: 'p1', groupKey: 'group-1', containerNo: 1, contentsQuantity: 24, supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
+    { id: 'c2', barcode: 'CTN-20261117-000002', productId: 'p1', groupKey: 'group-1', containerNo: 2, contentsQuantity: 24, supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
   ];
   const linkedVoucher = detail({
     containerCount: 2,
     lines: items.map((item, idx) => ({
       id: `l-${idx + 1}`, lineNo: idx + 1, containerId: item.id, containerBarcode: item.barcode, containerStatus: 'CREATED',
-      productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs',
+      productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24,
       currentStorageLocationId: 'loc-in', currentStorageLocationCode: 'INBOUND-01', currentEndpointId: 'ep-in', currentLevelNo: null, done: false,
     })),
   });

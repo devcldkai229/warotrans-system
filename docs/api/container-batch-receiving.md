@@ -39,7 +39,6 @@ Use real warehouse and Product IDs and the server-created DRAFT inbound voucher 
       "productId": "11111111-1111-1111-1111-111111111111",
       "containerCount": 6,
       "quantityPerContainer": 24,
-      "unit": "pcs",
       "quantityOverrides": [
         { "containerNo": 2, "quantity": 18 }
       ]
@@ -48,14 +47,13 @@ Use real warehouse and Product IDs and the server-created DRAFT inbound voucher 
       "groupKey": "product-b",
       "productId": "22222222-2222-2222-2222-222222222222",
       "containerCount": 4,
-      "quantityPerContainer": 12,
-      "unit": "pcs"
+      "quantityPerContainer": 12
     }
   ]
 }
 ```
 
-This creates six boxes of Product A (five containing 24 pieces and box 2 containing 18), plus four boxes of Product B containing 12 pieces each. Root `containerCount` must equal the sum of group counts; it counts boxes, not pieces.
+This creates six boxes of Product A (five holding 24 goods and box 2 holding 18), plus four boxes of Product B holding 12 goods each. A box records only how many goods it holds; there is no unit (removed 2026-11-24, and a request that still sends `unit` is refused as an unknown member). Root `containerCount` must equal the sum of group counts; it counts boxes, not pieces.
 
 Rules:
 
@@ -63,7 +61,7 @@ Rules:
 - 1–9999 boxes total. Counts are positive integers; at least one group is required.
 - `groupKey`: client-generated, unique within the request after trimming, case-sensitive, at most 64 characters. Keep it stable through retries.
 - `quantityPerContainer`: positive, at most `999999999999999.999`, with at most 3 decimal places (`decimal(18,3)`).
-- `unit`: required nonblank string, at most 32 characters after trimming. Currently descriptive; there is no unit conversion/catalog validation.
+- The quantity of a box that is still being received (CREATED, not on a confirmed inbound voucher) can be corrected with `PUT /api/warehouse/containers/contents` `{ items: [{ containerId, quantity }] }`; afterwards it is refused with `container_contents_locked`. An inbound voucher refuses a box without a quantity (`container_contents_incomplete`).
 - `quantityOverrides`: optional; `containerNo` is **1-based within its group**, unique and in range. Quantity follows the same precision/positivity rules. Override only the boxes that differ from the default.
 - Optional `supplierPackageBarcode` belongs on each group, at most 128 characters; missing/blank falls back to the Product supplier barcode. This is separate from the unique WaroTrans barcode.
 - Do not mix `groups` with root `productId`, root supplier barcode or `initialLevelNo`.
@@ -79,7 +77,7 @@ The response contains `requestId`, `warehouseId`, `containerCount`, `replayed`, 
 | `id`, `barcode` | Persisted Container ID and unique WaroTrans barcode (`CTN-yyyyMMdd-...`) |
 | `productId` | Product in this box |
 | `groupKey`, `containerNo` | Stable mapping to the submitted group and box, suitable for printed labels |
-| `contentsQuantity`, `contentsUnit` | Effective quantity/unit after overrides |
+| `contentsQuantity` | Effective quantity after overrides |
 | `supplierPackageBarcode` | Supplier barcode, if any |
 | `status` | `CREATED` on first success |
 | `currentStorageLocationId`, `currentEndpointId` | Both null on first success |
@@ -87,7 +85,7 @@ The response contains `requestId`, `warehouseId`, `containerCount`, `replayed`, 
 
 Order is request-group order, then increasing `containerNo`. Render/print only the **successfully returned** persisted IDs/barcodes. Client previews must not invent them.
 
-Retry the same payload with the same `requestId` and same account, including after a timeout or unknown network result. The server returns the same Container IDs/barcodes and creates no extra boxes, including when identical requests arrive concurrently. Decimal scale, override ordering and surrounding whitespace on `labelBarcode` are normalized. Group order, Product, quantity, unit, warehouse, target voucher, explicit location and the selected pre-printed label are part of the request intent.
+Retry the same payload with the same `requestId` and same account, including after a timeout or unknown network result. The server returns the same Container IDs/barcodes and creates no extra boxes, including when identical requests arrive concurrently. Decimal scale, override ordering and surrounding whitespace on `labelBarcode` are normalized. Group order, Product, quantity, warehouse, target voucher, explicit location and the selected pre-printed label are part of the request intent.
 
 Reusing a `requestId` for a different payload/account returns 409 `container_creation_request_conflict`. When a user deliberately changes an already submitted batch, first resolve the prior outcome, then start a genuinely new operation with a new ID. Do not auto-generate a new ID on network failure or conflict.
 

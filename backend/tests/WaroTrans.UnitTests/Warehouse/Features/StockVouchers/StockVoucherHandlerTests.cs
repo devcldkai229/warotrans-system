@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.UnitTests.Warehouse.Infrastructure;
 using WaroTrans.Warehouse.Entities;
@@ -7,6 +8,8 @@ using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Features.AddStockVoucherLines;
 using WaroTrans.Warehouse.Features.CloseStockVoucherShort;
+using WaroTrans.Warehouse.Features.ContainerContents;
+using WaroTrans.Warehouse.Features.ListContainers;
 using WaroTrans.Warehouse.Features.ConfirmStockVoucher;
 using WaroTrans.Warehouse.Features.CreateContainer;
 using WaroTrans.Warehouse.Features.CreateStockVoucher;
@@ -88,7 +91,6 @@ public sealed class StockVoucherHandlerTests
             InventoryStorageLocationId = stored ? shelf : null,
             InventoryLevelNo = stored ? (short)1 : null,
             ContentsQuantity = 10,
-            ContentsUnit = "pcs",
             CreatedAt = createdAt,
             UpdatedAt = createdAt
         };
@@ -381,5 +383,100 @@ public sealed class StockVoucherHandlerTests
         var noReason = await Assert.ThrowsAsync<DomainValidationException>(() =>
             CloseShort().HandleAsync(voucher.Id, new CloseStockVoucherShortRequest(" ")));
         Assert.Equal("voucher_close_reason_required", noReason.Code);
+    }
+
+    // ------------------------------------------------------------------ box contents (how many goods), before admission
+
+    private sealed class RecordingAudit : IAuditTrail
+    {
+        public List<AuditEntry> Entries { get; } = [];
+
+        public Task RecordAsync(AuditEntry entry, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(entry);
+            return Task.CompletedTask;
+        }
+    }
+
+    private SetContainerContentsHandler Contents(IAuditTrail? audit = null) =>
+        new(Db(), audit ?? new RecordingAudit(), TimeProvider.System);
+
+    [Fact]
+    public async Task Received_boxes_get_their_counted_quantity_even_on_a_draft_voucher()
+    {
+        var loose = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow);
+        var onDraft = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow.AddSeconds(1));
+        await Create().HandleAsync(new CreateStockVoucherRequest(WarehouseId, StockVoucherType.INBOUND, ContainerIds: [onDraft]));
+        var audit = new RecordingAudit();
+
+        var result = await Contents(audit).HandleAsync(new SetContainerContentsRequest([new(loose, 24), new(onDraft, 12.5m)]), default);
+
+        await using var db = Db();
+        Assert.Equal(24, (await db.Containers.SingleAsync(c => c.Id == loose)).ContentsQuantity);
+        Assert.Equal(12.5m, (await db.Containers.SingleAsync(c => c.Id == onDraft)).ContentsQuantity);
+        Assert.Equal(2, result.Count);
+        Assert.Equal(2, audit.Entries.Count);
+    }
+
+    [Fact]
+    public async Task An_admitted_box_keeps_its_quantity()
+    {
+        var admitted = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow);
+        await using (var db = Db())
+        {
+            (await db.Containers.SingleAsync(c => c.Id == admitted)).InboundStockVoucherId = Guid.NewGuid();
+            await db.SaveChangesAsync();
+        }
+
+        var stored = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow.AddSeconds(1));
+
+        Assert.Equal("container_contents_locked", (await Assert.ThrowsAsync<ConflictException>(() =>
+            Contents().HandleAsync(new SetContainerContentsRequest([new(admitted, 5)]), default))).Code);
+        Assert.Equal("container_contents_locked", (await Assert.ThrowsAsync<ConflictException>(() =>
+            Contents().HandleAsync(new SetContainerContentsRequest([new(stored, 5)]), default))).Code);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1.0001)]
+    public async Task A_quantity_must_be_positive_with_three_decimals_at_most(double quantity)
+    {
+        var box = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow);
+
+        var refused = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            Contents().HandleAsync(new SetContainerContentsRequest([new(box, (decimal)quantity)]), default));
+
+        Assert.Equal("container_contents_invalid", refused.Code);
+    }
+
+    [Fact]
+    public async Task An_inbound_voucher_refuses_a_box_that_does_not_say_how_many_goods_it_holds()
+    {
+        var box = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow);
+        await using (var db = Db())
+        {
+            (await db.Containers.SingleAsync(c => c.Id == box)).ContentsQuantity = null;
+            await db.SaveChangesAsync();
+        }
+
+        var refused = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            Create().HandleAsync(new CreateStockVoucherRequest(WarehouseId, StockVoucherType.INBOUND, ContainerIds: [box])));
+
+        Assert.Equal("container_contents_incomplete", refused.Code);
+    }
+
+    [Fact]
+    public async Task Awaiting_inbound_lists_received_boxes_on_no_open_inbound_voucher()
+    {
+        var free = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow);
+        var onDraft = await SeedContainerAsync(ContainerStatus.CREATED, null, DateTimeOffset.UtcNow.AddSeconds(1));
+        await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow.AddSeconds(2));
+        await Create().HandleAsync(new CreateStockVoucherRequest(WarehouseId, StockVoucherType.INBOUND, ContainerIds: [onDraft]));
+
+        var listed = await new ListContainersHandler(Db(), _transports).HandleAsync(
+            new ListContainersRequest(WarehouseId, null, true, 50, AwaitingInbound: true), default);
+
+        Assert.Equal([free], listed.Items.Select(i => i.Id));
     }
 }

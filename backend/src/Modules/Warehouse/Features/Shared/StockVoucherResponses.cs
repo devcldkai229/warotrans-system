@@ -23,7 +23,6 @@ public sealed record StockVoucherLineResponse(
     short? CurrentLevelNo,
     bool Done,
     decimal? ContentsQuantity = null,
-    string? ContentsUnit = null,
     bool ClosedShort = false);
 
 public sealed record StockVoucherProductSummary(
@@ -121,7 +120,6 @@ internal static class StockVoucherQueries
                 EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : l.Container.CurrentEndpointId,
                 l.Container.CurrentLevelNo,
                 l.Container.ContentsQuantity,
-                l.Container.ContentsUnit,
                 l.ClosedShortAt
             })
             .ToListAsync(cancellationToken);
@@ -142,7 +140,6 @@ internal static class StockVoucherQueries
                 r.CurrentLevelNo,
                 StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus) && r.ClosedShortAt is null,
                 r.ContentsQuantity,
-                r.ContentsUnit,
                 r.ClosedShortAt is not null))
             .ToList();
 

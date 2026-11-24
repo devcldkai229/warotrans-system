@@ -24,7 +24,7 @@ public class CreateContainerBatchTests
         Assert.Equal(6, response.Items.Count(item => item.GroupKey == "group-1" && item.ProductId == fixture.A.Id));
         Assert.Equal(4, response.Items.Count(item => item.GroupKey == "group-2" && item.ProductId == fixture.B.Id));
         Assert.Equal(18m, response.Items.Single(item => item.GroupKey == "group-1" && item.ContainerNo == 2).ContentsQuantity);
-        Assert.All(response.Items, item => { Assert.Equal("CREATED", item.Status); Assert.Equal("pcs", item.ContentsUnit); Assert.Null(item.CurrentStorageLocationId); Assert.Null(item.CurrentEndpointId); });
+        Assert.All(response.Items, item => { Assert.Equal("CREATED", item.Status); Assert.Null(item.CurrentStorageLocationId); Assert.Null(item.CurrentEndpointId); });
         Assert.Empty(await fixture.Db.InventoryStocks.ToListAsync());
         Assert.Empty(await fixture.Db.StockVouchers.ToListAsync());
         Assert.Equal(1, fixture.Codes.ContainerBatchCalls);
@@ -37,7 +37,7 @@ public class CreateContainerBatchTests
     public async Task One_box_uses_the_same_batch_contract_and_legacy_request_still_creates_one_box()
     {
         using var f = await Fixture.CreateAsync();
-        var request = f.Request with { ContainerCount = 1, Groups = [new("one", f.A.Id, 1, 2.5m, "kg")] };
+        var request = f.Request with { ContainerCount = 1, Groups = [new("one", f.A.Id, 1, 2.5m)] };
         var receipt = await f.Handler.HandleAsync(request);
         Assert.Single(receipt.Items);
         Assert.Equal(2.5m, receipt.Items[0].ContentsQuantity);
@@ -142,12 +142,11 @@ public class CreateContainerBatchTests
             f.Request with { ProductId = f.A.Id }, f.Request with { RequestId = null }, f.Request with { WarehouseId = null },
             f.Request with { ContainerCount = 11 }, f.Request with { ContainerCount = 0 }, f.Request with { Groups = [] },
             f.Request with { StockVoucherId = Guid.Empty }, f.Request with { InitialLevelNo = 1 },
-            f.Request with { Groups = [null] }, f.Request with { Groups = [new("x", f.A.Id, 10, 0, "pcs")] },
-            f.Request with { Groups = [new("x", f.A.Id, 10, 1.0001m, "pcs")] },
-            f.Request with { Groups = [new("x", f.A.Id, 10, 1, " ")] },
-            f.Request with { Groups = [new("x", f.A.Id, 10, 1, "pcs", [new(11, 1)])] },
-            f.Request with { Groups = [new("x", f.A.Id, 10, 1, "pcs", [new(1, 1), new(1, 2)])] },
-            f.Request with { Groups = [new("x", f.A.Id, 5, 1, "pcs"), new(" x ", f.B.Id, 5, 1, "pcs")] },
+            f.Request with { Groups = [null] }, f.Request with { Groups = [new("x", f.A.Id, 10, 0)] },
+            f.Request with { Groups = [new("x", f.A.Id, 10, 1.0001m)] },
+            f.Request with { Groups = [new("x", f.A.Id, 10, 1, [new(11, 1)])] },
+            f.Request with { Groups = [new("x", f.A.Id, 10, 1, [new(1, 1), new(1, 2)])] },
+            f.Request with { Groups = [new("x", f.A.Id, 5, 1), new(" x ", f.B.Id, 5, 1)] },
         };
         foreach (var request in invalid) Assert.False((await validator.ValidateAsync(request)).IsValid);
         Assert.True((await validator.ValidateAsync(f.Request)).IsValid);
@@ -168,7 +167,7 @@ public class CreateContainerBatchTests
             f.Db.Warehouses.Add(warehouse); f.Db.Products.AddRange(f.A, f.B); await f.Db.SaveChangesAsync();
             f.Handler = new(f.Db, f.Codes, f.User, new CreateContainerValidator(), NullLogger<CreateContainerBatchHandler>.Instance);
             f.Request = new(WarehouseId: warehouse.Id, RequestId: Guid.NewGuid(), ContainerCount: 10, Groups:
-                [new("group-1", f.A.Id, 6, 24, " pcs ", [new(2, 18)]), new("group-2", f.B.Id, 4, 12, "pcs")]);
+                [new("group-1", f.A.Id, 6, 24, [new(2, 18)]), new("group-2", f.B.Id, 4, 12)]);
             return f;
         }
         public void Dispose() => Db.Dispose();

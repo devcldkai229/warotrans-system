@@ -81,6 +81,7 @@ import {
 import { localizeServerMessage, t } from '../../shared/i18n';
 import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
+import { InspectionSheet } from '../scan/ScanScreen';
 import { createJobRefresh } from './jobRefresh';
 
 export function JobDetailScreen() {
@@ -238,6 +239,12 @@ export function JobDetailScreen() {
   const activeStep = activeTask?.steps.find(step => step.id === job.activeStepId);
   const activeContainerRaw = activeStep?.resolvedInputs?.containerId || activeTask?.contextValues?.containerId;
   const activeContainerId = typeof activeContainerRaw === 'string' ? activeContainerRaw : undefined;
+  // Quality inspection is its own step (Passed / Failed with what is wrong), not a handover: it never opens Verify.
+  const inspectionStep = activeStep?.operationCode === 'INSPECTION_CONFIRM' && activeStep.status === 'WAITING' ? activeStep : null;
+  const inspectable = inspectionStep
+    ? (job.containers ?? []).filter(container => container.containerId && container.status === 'ONBOARD')
+    : [];
+  const [inspecting, setInspecting] = useState<{ id: string; barcode: string } | null>(null);
   const activeContainer = job.containers.find(container => container.containerId === activeContainerId);
 
   useEffect(() => {
@@ -607,7 +614,8 @@ export function JobDetailScreen() {
 
             <View style={styles.focusBody}>
               <Text variant="caption" color={colors.textSecondary} style={styles.focusLabel}>
-                {job.activeStepOperation === 'PICKUP_CONFIRM' || primaryTarget.action === 'PICKUP'
+                {inspectionStep ? t('Container to Inspect')
+                  : job.activeStepOperation === 'PICKUP_CONFIRM' || primaryTarget.action === 'PICKUP'
                   ? 'Container to Load (Pickup)' : 'Container to Unload (Dropoff)'}
               </Text>
               <Text variant="title" style={styles.focusBarcode}>
@@ -841,6 +849,19 @@ export function JobDetailScreen() {
               }
               accessibilityLabel="Initiate emergency cargo rescue"
             />
+          ) : inspectionStep ? (
+            <View style={{ gap: 8 }}>
+              {inspectable.length ? inspectable.map(container => (
+                <Button
+                  key={container.containerId}
+                  title={t('Inspect {code}', { code: container.code })}
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  onPress={() => { triggerHaptic('tap'); setInspecting({ id: container.containerId!, barcode: container.code }); }}
+                />
+              )) : <Text variant="caption" color="textSecondary">{t('Every container on board has been inspected.')}</Text>}
+            </View>
           ) : isWaiting && allowLegacyStepHandover ? (
             <Button
               title="Verify Handover"
@@ -896,6 +917,9 @@ export function JobDetailScreen() {
         jobStatus={job.status}
         onClose={() => setSelectedTaskId(null)}
       />}
+
+      {inspecting && inspectionStep ? <InspectionSheet task={{ stepId: inspectionStep.id, jobNo: job.jobNo || job.id }} container={inspecting}
+        onClose={() => setInspecting(null)} onDone={() => { setInspecting(null); jobReader.invalidate(); void refreshJob().catch(() => {}); }} /> : null}
 
       {/* Verification Modal Sheet */}
       <VerifyModal

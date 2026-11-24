@@ -31,7 +31,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
   const inbound = data.type === 'INBOUND';
   const hasPendingBatch = inbound && data.status === 'DRAFT' && !data.lines.length
     && isPendingBatchForVoucher(prep.value.pendingBatch, data.warehouseId, data.id);
-  const hasServerBatchLines = inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
+  const hasServerBatchLines = inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null);
   const steps = inbound ? ['Barcodes', 'Contents', 'Review'] : ['Containers', 'Review', 'Confirm'];
   const currentStep = review ? inbound ? 2 : 1 : inbound && data.lines.length ? 1 : 0;
   useEffect(() => {
@@ -54,7 +54,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
   const editContent = (id: string, fields: Partial<PreparedContent>) => {
     if (!writable || !data.lines.some(line => line.containerId === id)) return;
     setReview(false); setReviewError(null);
-    prep.update(previous => ({ ...previous, contents: { ...previous.contents, [id]: { ...(previous.contents[id] || { product: null, quantity: '', unit: '' }), ...fields } } }));
+    prep.update(previous => ({ ...previous, contents: { ...previous.contents, [id]: { ...(previous.contents[id] || { product: null, quantity: '' }), ...fields } } }));
   };
   const localReview = () => {
     const error = inbound ? inboundPreparationProblem(ids, prep.value) : null;
@@ -110,13 +110,13 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
       </Card>}
       {!!data.lines.length && !hasServerBatchLines && <Card gap={8}>
         <View style={styles.between}><Text variant="headline" style={{ flex: 1 }}>Container Contents</Text><Text variant="caption" color="textSecondary">{progress.complete}/{progress.total} complete</Text></View>
-        <Text variant="caption" color="textSecondary">Product, quantity and unit edits below are saved on this device only.</Text>
+        <Text variant="caption" color="textSecondary">Product and quantity edits below are saved on this device only.</Text>
         {data.lines.map((line, index) => {
           const value = prep.value.contents[line.containerId];
           const problem = contentProblem(value);
           return <View key={line.id} style={styles.containerRow}>
             <Pressable style={[styles.row, { minHeight: 44 }]} accessibilityRole="button" accessibilityState={{ expanded: expanded === line.containerId }} accessibilityLabel={`Edit container ${index + 1}, ${line.containerBarcode}`} onPress={() => { setExpanded(expanded === line.containerId ? null : line.containerId); setReviewError(null); }}>
-              <View style={styles.flex}><Text variant="caption" color="textMuted">Container {index + 1} Of {data.lines.length}</Text><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{value?.product?.name || line.productName}</Text><Text variant="caption" color="textSecondary">{!problem ? `${value.quantity} ${value.unit}` : 'Contents incomplete'}</Text></View>
+              <View style={styles.flex}><Text variant="caption" color="textMuted">Container {index + 1} Of {data.lines.length}</Text><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{value?.product?.name || line.productName}</Text><Text variant="caption" color="textSecondary">{!problem ? t('Qty {quantity}', { quantity: value!.quantity }) : 'Contents incomplete'}</Text></View>
               {!problem ? <Check size={20} color={colors.primaryText} /> : <ChevronRight size={20} color={colors.textMuted} />}
             </Pressable>
             {expanded === line.containerId && <View style={styles.formSection}>
@@ -127,7 +127,6 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
               </View>
               <View style={[styles.row, { alignItems: 'flex-start' }]}>
                 <TextField label="Contents Quantity" containerStyle={{ flex: 1 }} value={value?.quantity || ''} onChangeText={quantity => editContent(line.containerId, { quantity })} keyboardType="decimal-pad" maxLength={16} editable={writable} placeholder="e.g. 24" />
-                <TextField label="Unit" containerStyle={{ flex: 1 }} value={value?.unit || ''} onChangeText={unit => editContent(line.containerId, { unit })} maxLength={32} editable={writable} placeholder="e.g. pcs" />
               </View>
               {problem && <Text variant="caption" color={reviewError?.startsWith(`${line.containerBarcode}:`) ? 'dangerText' : 'textSecondary'} accessibilityRole={reviewError?.startsWith(`${line.containerBarcode}:`) ? 'alert' : undefined}>{problem}</Text>}
               <View style={styles.formSection}>
@@ -149,7 +148,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
     {review && <Card gap={14}>
       <View style={styles.between}><Text variant="headline">Review Preparation</Text><Button title="Edit" variant="ghost" size="sm" onPress={() => setReview(false)} /></View>
       <Text variant="bodyMedium">{inbound ? data.lines.length : Object.keys(prep.value.selected).length} containers · {data.warehouseName}</Text>
-      {inbound ? data.lines.map(line => { const content = prep.value.contents[line.containerId]; return <View key={line.id} style={styles.containerRow}><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{content?.product?.name || line.productName}</Text><Text variant="body">{content?.quantity} {content?.unit}</Text></View>; })
+      {inbound ? data.lines.map(line => { const content = prep.value.contents[line.containerId]; return <View key={line.id} style={styles.containerRow}><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{content?.product?.name || line.productName}</Text><Text variant="body">{content?.quantity}</Text></View>; })
         : Object.values(prep.value.selected).map(item => <View key={item.id} style={styles.containerRow}><Text variant="code" selectable>{item.barcode}</Text><Text variant="bodyMedium">{item.productName}</Text></View>)}
       <Text variant="body" color="textSecondary">{inbound ? 'When supported, confirmation will add these containers to stock at Inbound.' : 'When supported, confirmation will deduct these containers after the server verifies all are at Outbound.'}</Text>
       <Button title={inbound ? 'Confirm Inbound Voucher' : 'Confirm Outbound Voucher'} disabled onPress={() => {}} />

@@ -54,6 +54,7 @@ public static class WarehouseModule
         services.AddScoped<GetProductInventoryContextHandler>();
         services.AddScoped<ListWarehousesHandler>();
         services.AddScoped<ListContainersHandler>();
+        services.AddScoped<Features.ContainerContents.SetContainerContentsHandler>();
         services.AddScoped<ListStorageLocationsHandler>();
         services.AddScoped<CreateStorageLocationHandler>();
         services.AddScoped<SetStorageLocationStatusHandler>();
@@ -91,6 +92,7 @@ public static class WarehouseModule
         group.MapListContainers();
         group.MapRecoverContainer();
         Features.ContainerPhysical.ContainerPhysicalEndpoint.MapContainerPhysical(group);
+        Features.ContainerContents.ContainerContentsEndpoint.MapContainerContents(group);
         group.MapListStorageLocations();
         group.MapCreateStorageLocation();
         group.MapSetStorageLocationStatus();

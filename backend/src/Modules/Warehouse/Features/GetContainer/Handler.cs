@@ -25,7 +25,7 @@ public sealed class GetContainerHandler(WarehouseDbContext dbContext)
                 c.CurrentLevelNo,
                 c.CreatedBy,
                 c.CreatedAt,
-                c.UpdatedAt, c.ContentsQuantity, c.ContentsUnit, c.CreationRequestId, c.CreationGroupKey, c.CreationGroupOrdinal,
+                c.UpdatedAt, c.ContentsQuantity, c.CreationRequestId, c.CreationGroupKey, c.CreationGroupOrdinal,
                 c.CurrentStorageLocation != null ? c.CurrentStorageLocation.EndpointId : c.CurrentEndpointId))
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -57,7 +57,7 @@ public sealed class GetContainerHandler(WarehouseDbContext dbContext)
                 c.CurrentLevelNo,
                 c.CreatedBy,
                 c.CreatedAt,
-                c.UpdatedAt, c.ContentsQuantity, c.ContentsUnit, c.CreationRequestId, c.CreationGroupKey, c.CreationGroupOrdinal,
+                c.UpdatedAt, c.ContentsQuantity, c.CreationRequestId, c.CreationGroupKey, c.CreationGroupOrdinal,
                 c.CurrentStorageLocation != null ? c.CurrentStorageLocation.EndpointId : c.CurrentEndpointId))
             .FirstOrDefaultAsync(cancellationToken);
 

@@ -119,6 +119,7 @@ export function ContainersSection({ locations, onChanged }: { locations: Storage
             <tr>
               <Th>{t('Barcode')}</Th>
               <Th>{t('Product')}</Th>
+              <Th align="right">{t('Quantity')}</Th>
               <Th>{t('Status')}</Th>
               <Th>{t('Location')}</Th>
               <Th>{t('Level')}</Th>
@@ -135,6 +136,7 @@ export function ContainersSection({ locations, onChanged }: { locations: Storage
                   <span className="font-medium text-ink">{item.productName}</span>{' '}
                   <span className="font-mono text-xs text-muted">{item.sku}</span>
                 </Td>
+                <Td align="right" className="tabular-nums">{item.contentsQuantity ?? '—'}</Td>
                 <Td>
                   <StatusBadge tone={CONTAINER_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
                 </Td>

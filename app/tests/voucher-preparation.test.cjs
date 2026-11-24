@@ -33,8 +33,8 @@ test('inbound review requires actual allocated IDs matching requested count and 
   assert.match(prep.inboundPreparationProblem(['c1', 'c2'], value), /active product/);
   value.contents.c2 = { product, quantity: '0', unit: 'pcs' };
   assert.match(prep.inboundPreparationProblem(['c1', 'c2'], value), /greater than zero/);
-  value.contents.c2 = { product, quantity: '24', unit: ' ' };
-  assert.match(prep.inboundPreparationProblem(['c1', 'c2'], value), /unit/);
+  value.contents.c2 = { product, quantity: '24' };
+  assert.equal(prep.inboundPreparationProblem(['c1', 'c2'], value), null);
 });
 
 test('malformed or wrong-type saved preparations are rejected instead of silently wiping inputs', () => {

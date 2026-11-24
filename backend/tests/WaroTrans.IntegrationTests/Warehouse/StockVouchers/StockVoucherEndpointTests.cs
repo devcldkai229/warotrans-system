@@ -166,7 +166,7 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
         var batch = await ReadAsync<CreateContainerBatchResponse>(
             await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/containers", token,
                 new CreateContainerRequest(WarehouseId: warehouse.Id, StockVoucherId: voucher.Id, RequestId: Guid.NewGuid(),
-                    ContainerCount: 1, Groups: [new("boxes", product.Id, 1, 12, "pcs")])));
+                    ContainerCount: 1, Groups: [new("boxes", product.Id, 1, 12)])));
         var container = Assert.Single(batch.Items);
         await ReadAsync<VoucherDto>(await client.SendWithTokenAsync(
             HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/confirm", token));

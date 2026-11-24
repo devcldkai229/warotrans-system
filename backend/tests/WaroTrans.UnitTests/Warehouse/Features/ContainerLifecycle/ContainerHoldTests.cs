@@ -28,7 +28,7 @@ public sealed class ContainerHoldTests
 
     private ContainerMovementRecorder Recorder(WarehouseDbContext db) => new(db, NullLogger<ContainerMovementRecorder>.Instance);
 
-    private async Task<Guid> SeedAsync(ContainerStatus status, Guid? shelf = null, string? unit = null)
+    private async Task<Guid> SeedAsync(ContainerStatus status, Guid? shelf = null, decimal? contents = null)
     {
         await using var db = Db();
         if (!db.StorageLocations.Any())
@@ -46,8 +46,7 @@ public sealed class ContainerHoldTests
             Status = status,
             CurrentStorageLocationId = shelf,
             CurrentLevelNo = shelf is null ? null : (short)1,
-            ContentsQuantity = unit is null ? null : 24,
-            ContentsUnit = unit,
+            ContentsQuantity = contents,
             UpdatedAt = DateTimeOffset.UtcNow
         };
         db.Containers.Add(container);
@@ -233,7 +232,7 @@ public sealed class ContainerHoldTests
     [Fact]
     public async Task A_counted_quantity_is_recorded_and_the_container_is_back_in_use()
     {
-        var id = await SeedAsync(ContainerStatus.STORED, ShelfA, unit: "bottle");
+        var id = await SeedAsync(ContainerStatus.STORED, ShelfA, contents: 24);
         await HoldAsync(id, ContainerHoldMode.NOW, code: ContainerProblemCodes.QuantityMismatch);
 
         var after = await ReleaseAsync(id, ContainerHoldOutcomes.AdjustQuantity, 20);
@@ -246,7 +245,7 @@ public sealed class ContainerHoldTests
     [Fact]
     public async Task Adjusting_the_quantity_needs_the_counted_quantity()
     {
-        var id = await SeedAsync(ContainerStatus.STORED, ShelfA, unit: "bottle");
+        var id = await SeedAsync(ContainerStatus.STORED, ShelfA, contents: 24);
         await HoldAsync(id, ContainerHoldMode.NOW);
 
         var refused = await Assert.ThrowsAsync<DomainValidationException>(() => ReleaseAsync(id, ContainerHoldOutcomes.AdjustQuantity));

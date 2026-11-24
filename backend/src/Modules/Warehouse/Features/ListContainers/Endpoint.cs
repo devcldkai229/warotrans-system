@@ -18,6 +18,7 @@ public static class ListContainersEndpoint
             int? skip,
             string? status,
             string? voucherType,
+            bool? awaitingInbound,
             IValidator<ListContainersRequest> validator,
             ListContainersHandler handler,
             CancellationToken cancellationToken) =>
@@ -29,7 +30,8 @@ public static class ListContainersEndpoint
                 take ?? 50,
                 skip ?? 0,
                 status,
-                voucherType);
+                voucherType,
+                awaitingInbound ?? false);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
@@ -42,7 +44,8 @@ public static class ListContainersEndpoint
             "Defaults to transport-eligible statuses (CREATED, PACKED, STORED). " +
             "`status` narrows the list to one container status; `voucherType` (INBOUND / OUTBOUND) to Containers on a CONFIRMED " +
             "voucher of that type, newest voucher first; `skip` / `take` page it and `total` counts every match. Each item tells " +
-            "its latest voucher (not cancelled).");
+            "its latest voucher (not cancelled). `awaitingInbound=true`: CREATED Containers not admitted and on no open inbound " +
+            "voucher (what a new inbound voucher can take).");
 
         return group;
     }

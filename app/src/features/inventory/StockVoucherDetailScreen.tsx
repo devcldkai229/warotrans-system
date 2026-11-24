@@ -67,7 +67,7 @@ export function StockVoucherDetailScreen() {
   /** Open lines whose Container is where the trip starts (received for inbound, on its shelf for outbound). */
   const dispatchLines = useMemo(() => openLines.filter(line => (data?.type === 'INBOUND'
     ? line.containerStatus === 'CREATED' || line.containerStatus === 'PACKED' : line.containerStatus === 'STORED')), [openLines, data?.type]);
-  const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
+  const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null);
   const hasPendingBatch = Boolean(
     data && inbound && data.status === 'DRAFT' && !data.lines.length && prep.ready
     && isPendingBatchForVoucher(prep.value.pendingBatch, data.warehouseId, data.id),
@@ -342,7 +342,7 @@ export function StockVoucherDetailScreen() {
                   {line.closedShort ? <Text variant="caption" color="warningText">Closed Short</Text> : null}
                   <Text variant="caption" color="textSecondary" numberOfLines={1}>
                     {line.productSku}
-                    {line.contentsQuantity != null && line.contentsUnit ? ` · ${line.contentsQuantity} ${line.contentsUnit}` : ''}
+                    {line.contentsQuantity != null ? ` · ${t('Qty {quantity}', { quantity: line.contentsQuantity })}` : ''}
                     {(() => {
                       const locationText = voucherLineLocation(line, endpointLabelById);
                       return locationText ? ` · ${t(locationText)}` : '';

@@ -38,6 +38,18 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
             query = query.Where(c => c.Status == status);
         }
 
+        if (request.AwaitingInbound)
+        {
+            query = query.Where(c => c.Status == ContainerStatus.CREATED
+                                     && c.InboundStockVoucherId == null
+                                     && c.InventoryStorageLocationId == null
+                                     && !db.StockVoucherLines.Any(l =>
+                                         l.ContainerId == c.Id
+                                         && l.StockVoucher.Type == StockVoucherType.INBOUND
+                                         && l.StockVoucher.Status != StockVoucherStatus.CANCELLED
+                                         && l.ClosedShortAt == null));
+        }
+
         var byVoucher = !string.IsNullOrEmpty(request.VoucherType);
         if (byVoucher)
         {
@@ -85,7 +97,7 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                 c.CurrentLevelNo,
                 c.SupplierPackageBarcode,
                 c.UpdatedAt,
-                false, null, c.ContentsQuantity, c.ContentsUnit))
+                false, null, c.ContentsQuantity))
             .ToListAsync(cancellationToken);
 
         // The latest voucher each Container is on (cancelled ones and lines closed short do not count).
