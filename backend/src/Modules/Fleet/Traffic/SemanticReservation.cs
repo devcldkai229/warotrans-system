@@ -22,8 +22,18 @@ public sealed record SemanticTrafficPolicy(
     /// <summary>See <see cref="TrafficOptions.SemanticLaneHalfWidthMeters"/>. 0: discs only.</summary>
     double LaneHalfWidthMeters = 0,
     /// <summary>See <see cref="TrafficOptions.SemanticZoneMarginMeters"/>. Null: zones use <see cref="ReserveRadiusMeters"/>.</summary>
-    double? ZoneMarginMeters = null)
+    double? ZoneMarginMeters = null,
+    /// <summary>The bundle's zone partition (<c>traffic_zones.json</c>); empty on maps drawn for the cell model.</summary>
+    ImmutableArray<TrafficZone> TrafficZones = default,
+    /// <summary>See <see cref="TrafficOptions.SemanticResourceModel"/>: zone-chain asked for by the host.</summary>
+    bool ZoneChain = false)
 {
+    /// <summary>
+    /// Zone-chain model: on top of the swept cells, every path sample holds the traffic zone its centre is in, and a
+    /// robot standing still holds the zone it stands in. Needs both the host setting and a zone partition in the bundle.
+    /// </summary>
+    public bool UsesZoneChain => ZoneChain && !TrafficZones.IsDefaultOrEmpty;
+
     /// <summary>Circumscribed radius of the (padded) footprint: covers the robot at any heading, so turning in place.</summary>
     public double FootprintRadiusMeters =>
         Math.Sqrt(FootprintHalfLength * FootprintHalfLength + FootprintHalfWidth * FootprintHalfWidth);
@@ -296,6 +306,14 @@ public static class SemanticReservation
                 }
             }
 
+            // Zone chain: the zone the path runs through is held as a whole (one robot per corridor, bay, yard), so
+            // two robots never meet head-on in it. Its centre decides: the swept cells already keep the bodies apart,
+            // and a body brushing the edge of a parked robot's slot must not take that slot.
+            if (policy.UsesZoneChain && TrafficZones.ZoneAt(policy.TrafficZones, x, y) is { } traffic)
+            {
+                resources.Add(traffic.ResourceId);
+            }
+
             if (policy.LaneHalfWidthMeters > 0 && StraightHeadingAt(policy, samples, i, poses, reachedEnd) is { } heading)
             {
                 RectCells(
@@ -508,8 +526,13 @@ public static class SemanticReservation
             if (rid.StartsWith("zone:", StringComparison.Ordinal))
             {
                 var code = rid["zone:".Length..];
-                var rings = policy.SingleOccupancyZones.Where(z => z.Code == code).ToList();
-                if (rings.Count == 0 || rings.Any(z => DiscHitsZone(x, y, radius, z.Ring)))
+                var rings = policy.SingleOccupancyZones.Where(z => z.Code == code).Select(z => z.Ring).ToList();
+                if (!policy.TrafficZones.IsDefaultOrEmpty)
+                {
+                    rings.AddRange(policy.TrafficZones.Where(z => z.Code == code).Select(z => z.Ring));
+                }
+
+                if (rings.Count == 0 || rings.Any(ring => DiscHitsZone(x, y, radius, ring)))
                 {
                     return false;
                 }
@@ -593,8 +616,13 @@ public static class SemanticReservation
             FootprintHalfWidth: 0.15,
             zones,
             noStop,
-            keepout);
+            keepout,
+            TrafficZones: Traffic.TrafficZones.Load(Path.Combine(mapDir, Traffic.TrafficZones.FileName)));
     }
+
+    /// <summary>The traffic zone a robot standing at (x, y) holds in the zone-chain model, or null.</summary>
+    public static string? StandingZoneResource(SemanticTrafficPolicy policy, double x, double y) =>
+        policy.UsesZoneChain ? TrafficZones.ZoneAt(policy.TrafficZones, x, y)?.ResourceId : null;
 
     private static ImmutableArray<SemanticZonePoly> LoadZones(string path)
     {
