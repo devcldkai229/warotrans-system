@@ -10,13 +10,18 @@ import type { RobotResponse } from '../../types/contracts';
 import { Text } from '../../ui';
 import type { MapCameraController } from '../hooks/useMapCamera';
 import { MapAnchor } from '../MapAnchor';
-import { robotFootprintPx } from '../mapArchitecture';
+import {
+  ROBOT_TAG_GAP,
+  ROBOT_TAG_HEIGHT,
+  ROBOT_TAG_WIDTH,
+  resolveRobotTagPlacements,
+  robotFootprintPx,
+  type RobotTagPlacement,
+} from '../mapArchitecture';
 import { mapHeading } from '../mapModel';
 import { ROBOT_COLOR } from '../mapStyle';
 import { mapRobotState, type MapUpdateMode } from '../mapTelemetry';
 import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
-
-const TAG_WIDTH = 104;
 
 interface Props {
   map: MapVersionDetailDto;
@@ -38,6 +43,8 @@ interface RobotInteractiveOverlayProps {
   stateLabel: string;
   camera: MapCameraController;
   hitSize: number;
+  placement: RobotTagPlacement;
+  tagWidth: number;
   onSelect: (code: string) => void;
 }
 
@@ -50,6 +57,8 @@ const RobotInteractiveOverlay = memo(function RobotInteractiveOverlay({
   stateLabel,
   camera,
   hitSize,
+  placement,
+  tagWidth,
   onSelect,
 }: RobotInteractiveOverlayProps) {
   const styles = useThemedStyles(createStyles);
@@ -58,13 +67,34 @@ const RobotInteractiveOverlay = memo(function RobotInteractiveOverlay({
   const pointY = point.y;
 
   const tagPos = useAnimatedStyle(
-    () => ({
-      transform: [
-        { translateX: pointX * zoom.get() + camX.get() - TAG_WIDTH / 2 },
-        { translateY: pointY * zoom.get() + camY.get() + (halfLength + 2) * zoom.get() + 6 },
-      ],
-    }),
-    [pointX, pointY, halfLength, zoom, camX, camY],
+    () => {
+      const z = zoom.get();
+      const cx = pointX * z + camX.get();
+      const cy = pointY * z + camY.get();
+      const r = (halfLength + 2) * z;
+
+      let tx = cx - ROBOT_TAG_WIDTH / 2;
+      let ty = cy + r + ROBOT_TAG_GAP;
+
+      if (placement === 'above') {
+        ty = cy - r - ROBOT_TAG_GAP - ROBOT_TAG_HEIGHT;
+      } else if (placement === 'right') {
+        tx = cx + r + ROBOT_TAG_GAP + tagWidth / 2 - ROBOT_TAG_WIDTH / 2;
+        ty = cy - ROBOT_TAG_HEIGHT / 2;
+      } else if (placement === 'left') {
+        tx = cx - r - ROBOT_TAG_GAP - tagWidth / 2 - ROBOT_TAG_WIDTH / 2;
+        ty = cy - ROBOT_TAG_HEIGHT / 2;
+      } else if (placement === 'below-far') {
+        ty = cy + r + ROBOT_TAG_GAP + ROBOT_TAG_HEIGHT + 4;
+      } else if (placement === 'above-far') {
+        ty = cy - r - ROBOT_TAG_GAP - ROBOT_TAG_HEIGHT * 2 - 4;
+      }
+
+      return {
+        transform: [{ translateX: tx }, { translateY: ty }],
+      };
+    },
+    [pointX, pointY, halfLength, zoom, camX, camY, placement, tagWidth],
   );
 
   return (
@@ -81,18 +111,21 @@ const RobotInteractiveOverlay = memo(function RobotInteractiveOverlay({
         />
       </MapAnchor>
 
-      <Animated.View pointerEvents="none" style={[styles.tagAnchor, tagPos]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.tagAnchor, isSelected && styles.tagAnchorSelected, tagPos]}
+      >
         <View
           style={[
             styles.tag,
             styles.tagDefault,
-            isSelected && { backgroundColor: tone, borderColor: tone },
+            isSelected && styles.tagSelected,
           ]}
         >
           <View
             style={[
               styles.tagDot,
-              { backgroundColor: isSelected ? '#ffffff' : tone },
+              { backgroundColor: tone },
             ]}
           />
           <Text
@@ -153,12 +186,29 @@ export function RobotLayer({
     [robots, map, frame, now, updateMode, selected, colors.textMuted, colors.primary],
   );
 
-  if (entries.length === 0) return null;
-
   const w = footprint.width;
   const l = footprint.length;
   const hw = w / 2;
   const hl = l / 2;
+
+  const tagLayouts = useMemo(
+    () =>
+      resolveRobotTagPlacements(
+        entries.map(({ robot, point, isSelected }) => ({
+          id: robot.id,
+          code: robot.code,
+          x: point.x,
+          y: point.y,
+          isSelected,
+        })),
+        hl,
+        camera.settledZoom,
+      ),
+    [entries, hl, camera.settledZoom],
+  );
+
+  if (entries.length === 0) return null;
+
   const noseH = Math.max(3, l * 0.24);
   const noseW = Math.max(2.6, w * 0.24);
   const strokeUnit = 1 / Math.sqrt(Math.max(1, camera.settledZoom));
@@ -257,20 +307,25 @@ export function RobotLayer({
       </Animated.View>
 
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {entries.map(({ robot, point, tone, isSelected, state }) => (
-          <RobotInteractiveOverlay
-            key={robot.id}
-            robot={robot}
-            point={point}
-            halfLength={hl}
-            tone={tone}
-            isSelected={isSelected}
-            stateLabel={state.label}
-            camera={camera}
-            hitSize={hitSize}
-            onSelect={onSelect}
-          />
-        ))}
+        {entries.map(({ robot, point, tone, isSelected, state }) => {
+          const layout = tagLayouts[robot.id];
+          return (
+            <RobotInteractiveOverlay
+              key={robot.id}
+              robot={robot}
+              point={point}
+              halfLength={hl}
+              tone={tone}
+              isSelected={isSelected}
+              stateLabel={state.label}
+              camera={camera}
+              hitSize={hitSize}
+              placement={layout?.placement ?? 'below'}
+              tagWidth={layout?.tagWidth ?? ROBOT_TAG_WIDTH}
+              onSelect={onSelect}
+            />
+          );
+        })}
       </View>
     </>
   );
@@ -284,23 +339,41 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
       position: 'absolute',
       left: 0,
       top: 0,
-      width: TAG_WIDTH,
+      width: ROBOT_TAG_WIDTH,
       alignItems: 'center',
+    },
+    tagAnchorSelected: {
+      zIndex: 2,
     },
     tag: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 5,
-      paddingVertical: 1,
-      borderRadius: 5,
+      gap: 4.5,
+      paddingHorizontal: 6.5,
+      paddingVertical: 2,
+      borderRadius: 999,
       borderWidth: 1,
     },
     tagDefault: {
       backgroundColor: colors.mapLabelBg,
       borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : colors.mapHudBorder,
     },
+    tagSelected: {
+      backgroundColor: isDark ? '#F3F4F6' : '#18191B',
+      borderColor: isDark ? '#FFFFFF' : 'rgba(255, 255, 255, 0.16)',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.36 : 0.18,
+      shadowRadius: 4,
+      elevation: 3,
+    },
     tagDot: { width: 4.5, height: 4.5, borderRadius: 2.25 },
-    tagText: { fontSize: 9.5, lineHeight: 12, color: colors.textPrimary },
-    tagTextSelected: { color: '#ffffff' },
+    tagText: {
+      fontSize: 9.5,
+      lineHeight: 12,
+      fontVariant: ['tabular-nums'],
+      letterSpacing: 0.15,
+      color: colors.textPrimary,
+    },
+    tagTextSelected: { color: isDark ? '#111317' : '#FFFFFF' },
   });

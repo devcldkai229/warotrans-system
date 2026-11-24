@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
   type PointerEvent,
+  type ViewStyle,
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import Animated from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
 import {
   AlertTriangle,
@@ -38,9 +40,9 @@ import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
-import { Button, SegmentedControl, StatusPill, Text } from '../ui';
+import { Button, SegmentedControl, StatusPill, Text, ToggleSwitch } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
-import { BatteryIndicator, OnlineBadge } from '../ui/RobotBadges';
+import { BatteryIndicator } from '../ui/RobotBadges';
 import { triggerHaptic } from '../utils/haptics';
 import { worldToMapPercent } from '../utils/mapCoordinates';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
@@ -144,36 +146,15 @@ const PRESET_OPTIONS = [
   { label: 'SLAM / Grid', value: 'technical' },
 ] as const;
 
-function AppleSwitch({
-  value,
-  onToggle,
-  accessibilityLabel,
-}: {
-  value: boolean;
-  onToggle: () => void;
-  accessibilityLabel: string;
-}) {
-  const styles = useThemedStyles(createStyles);
-  return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
-      accessibilityLabel={accessibilityLabel}
-      style={[
-        styles.switchTrack,
-        value ? styles.switchTrackActive : styles.switchTrackInactive,
-      ]}
-    >
-      <View
-        style={[
-          styles.switchThumb,
-          value ? styles.switchThumbActive : styles.switchThumbInactive,
-        ]}
-      />
-    </Pressable>
-  );
-}
+const MAX_ENDPOINT_SCALE = 2.6;
+
+const WEB_HUD_GLASS_STYLE: ViewStyle | null =
+  Platform.OS === 'web'
+    ? ({
+        backdropFilter: 'blur(20px) saturate(170%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(170%)',
+      } as unknown as ViewStyle)
+    : null;
 
 function SheetContainer({
   inline,
@@ -394,6 +375,22 @@ function MapCanvas({
   }, []);
 
   const camera = useMapCamera(frame, identity, reducedMotion, stopFollowing, handleSingleTap);
+  const cameraZoom = camera.zoom;
+
+  const endpointZoomStyle = useAnimatedStyle(() => {
+    const s = Math.min(MAX_ENDPOINT_SCALE, Math.max(1, cameraZoom.get()));
+    return { transform: [{ scale: s }] };
+  }, [cameraZoom]);
+
+  const labelBelowOffsetStyle = useAnimatedStyle(() => {
+    const s = Math.min(MAX_ENDPOINT_SCALE, Math.max(1, cameraZoom.get()));
+    return { transform: [{ translateY: (s - 1) * 19 }] };
+  }, [cameraZoom]);
+
+  const labelAboveOffsetStyle = useAnimatedStyle(() => {
+    const s = Math.min(MAX_ENDPOINT_SCALE, Math.max(1, cameraZoom.get()));
+    return { transform: [{ translateY: -(s - 1) * 19 }] };
+  }, [cameraZoom]);
 
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
@@ -932,16 +929,18 @@ function MapCanvas({
                       height={44}
                       style={styles.station}
                     >
-                      <EndpointTile
-                        type={item.endpointType}
-                        code={item.code}
-                        name={item.name}
-                        headingDeg={mapHeading(item.yaw, map.originYaw, frame.rotated) - 90}
-                        selected={endpointId === item.id}
-                        isDark={isDark}
-                        surface={colors.surface}
-                        jobRole={endpointJobRole(item, jobContext)}
-                      />
+                      <Animated.View pointerEvents="none" style={endpointZoomStyle}>
+                        <EndpointTile
+                          type={item.endpointType}
+                          code={item.code}
+                          name={item.name}
+                          headingDeg={mapHeading(item.yaw, map.originYaw, frame.rotated) - 90}
+                          selected={endpointId === item.id}
+                          isDark={isDark}
+                          surface={colors.surface}
+                          jobRole={endpointJobRole(item, jobContext)}
+                        />
+                      </Animated.View>
                     </MapControl>
                   </MapAnchor>
                 ))
@@ -958,10 +957,11 @@ function MapCanvas({
                   height={66}
                   passThrough
                 >
-                  <View
-                    style={
-                      placement === 'above' ? styles.stationLabelAbove : styles.stationLabelBelow
-                    }
+                  <Animated.View
+                    style={[
+                      placement === 'above' ? styles.stationLabelAbove : styles.stationLabelBelow,
+                      placement === 'above' ? labelAboveOffsetStyle : labelBelowOffsetStyle,
+                    ]}
                   >
                     {role ? (
                       <View style={[styles.jobRolePill, { backgroundColor: roleAccent! }]}>
@@ -991,7 +991,7 @@ function MapCanvas({
                         {displayText}
                       </Text>
                     </View>
-                  </View>
+                  </Animated.View>
                 </MapAnchor>
               );
             })}
@@ -1133,67 +1133,51 @@ function MapCanvas({
         <View
           style={[
             styles.inspectCard,
+            WEB_HUD_GLASS_STYLE,
             {
               bottom: inspectBottom,
               right: 12,
             },
           ]}
         >
-          {inspected.kind === 'zone' ? (
-            <>
+          <View style={styles.inspectBody}>
+            <View style={styles.inspectHeader}>
               <View
                 style={[
-                  styles.inspectAccent,
-                  { backgroundColor: zoneColor(inspected.zone.zoneType) },
+                  styles.inspectDot,
+                  {
+                    backgroundColor:
+                      inspected.kind === 'zone' ? zoneColor(inspected.zone.zoneType) : LANE_BLUE,
+                  },
                 ]}
               />
-              <View style={styles.inspectBody}>
-                <View style={styles.inspectHeader}>
-                  <Text variant="bodyMedium" fontWeight="700" numberOfLines={1} style={styles.inspectTitle}>
-                    {inspected.zone.name || inspected.zone.code}
-                  </Text>
-                  <View
-                    style={[
-                      styles.inspectBadge,
-                      { backgroundColor: `${zoneColor(inspected.zone.zoneType)}22` },
-                    ]}
-                  >
-                    <Text
-                      variant="caption"
-                      fontWeight="700"
-                      style={{ color: zoneColor(inspected.zone.zoneType), fontSize: 11 }}
-                    >
-                      {zoneLabel(inspected.zone.zoneType)}
-                    </Text>
-                  </View>
-                </View>
-                <Text variant="caption" color="textSecondary" numberOfLines={2}>
-                  {ZONE_DESCRIPTION[inspected.zone.zoneType] ?? zoneShortBadge(inspected.zone)}
-                  {inspected.zone.maxSpeed != null ? ` · Max ${inspected.zone.maxSpeed} m/s` : ''}
+              <Text variant="bodyMedium" fontWeight="600" numberOfLines={1} style={styles.inspectTitle}>
+                {inspected.kind === 'zone'
+                  ? inspected.zone.name || inspected.zone.code
+                  : inspected.edge.name || inspected.edge.code}
+              </Text>
+              <View style={styles.inspectBadge}>
+                <Text variant="caption" color="textSecondary" style={styles.inspectBadgeText}>
+                  {inspected.kind === 'zone'
+                    ? zoneLabel(inspected.zone.zoneType)
+                    : inspected.edge.direction === 'ONE_WAY'
+                    ? 'One-way lane'
+                    : 'Two-way lane'}
                 </Text>
               </View>
-            </>
-          ) : (
-            <>
-              <View style={[styles.inspectAccent, { backgroundColor: LANE_BLUE }]} />
-              <View style={styles.inspectBody}>
-                <View style={styles.inspectHeader}>
-                  <Text variant="bodyMedium" fontWeight="700" numberOfLines={1} style={styles.inspectTitle}>
-                    {inspected.edge.name || inspected.edge.code}
-                  </Text>
-                  <View style={[styles.inspectBadge, { backgroundColor: colors.infoBg }]}>
-                    <Text variant="caption" fontWeight="700" color="infoText" style={{ fontSize: 11 }}>
-                      {inspected.edge.direction === 'ONE_WAY' ? 'One-way lane' : 'Two-way lane'}
-                    </Text>
-                  </View>
-                </View>
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                  Width {(inspected.edge.widthMeters || 1).toFixed(1)} m
-                  {inspected.edge.maxSpeed != null ? ` · Max ${inspected.edge.maxSpeed} m/s` : ''}
-                </Text>
-              </View>
-            </>
-          )}
+            </View>
+            {inspected.kind === 'zone' ? (
+              <Text variant="caption" color="textSecondary" numberOfLines={2}>
+                {ZONE_DESCRIPTION[inspected.zone.zoneType] ?? zoneShortBadge(inspected.zone)}
+                {inspected.zone.maxSpeed != null ? ` · Max ${inspected.zone.maxSpeed} m/s` : ''}
+              </Text>
+            ) : (
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                Width {(inspected.edge.widthMeters || 1).toFixed(1)} m
+                {inspected.edge.maxSpeed != null ? ` · Max ${inspected.edge.maxSpeed} m/s` : ''}
+              </Text>
+            )}
+          </View>
           <Pressable
             onPress={() => setInspected(null)}
             accessibilityRole="button"
@@ -1223,7 +1207,7 @@ function MapCanvas({
           />
 
           {state && (following || state.lastReported) ? (
-            <View style={styles.telemetryChip}>
+            <View style={[styles.telemetryChip, WEB_HUD_GLASS_STYLE]}>
               <Text
                 variant="caption"
                 color={state.lastReported ? 'warningText' : 'textSecondary'}
@@ -1251,6 +1235,24 @@ function MapCanvas({
                 <ChevronLeft size={18} color={colors.textPrimary} />
               </Pressable>
             ) : null}
+            {(sheet === 'endpoint' && endpoint) || (sheet === 'robot' && robot) ? (
+              <View style={styles.headerIconWell}>
+                {sheet === 'endpoint' && endpoint ? (
+                  <EndpointIcon
+                    type={endpoint.endpointType}
+                    code={endpoint.code}
+                    name={endpoint.name}
+                    size={18}
+                    isDark={isDark}
+                  />
+                ) : (
+                  <Bot
+                    size={18}
+                    color={robot?.isOnline ? colors.textPrimary : colors.textMuted}
+                  />
+                )}
+              </View>
+            ) : null}
             <View style={styles.sheetHeaderTitleGroup}>
               <Text variant="title" numberOfLines={1}>
                 {sheet === 'layers'
@@ -1262,15 +1264,27 @@ function MapCanvas({
                   : robot?.code || 'Robot Telemetry'}
               </Text>
               {sheet === 'endpoint' || sheet === 'robot' ? (
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                <Text
+                  variant="caption"
+                  color="textSecondary"
+                  numberOfLines={1}
+                  style={sheet === 'endpoint' ? styles.headerSubtitleMono : undefined}
+                >
                   {sheet === 'endpoint'
-                    ? `${endpoint?.code} · ${endpoint?.endpointType}`
-                    : robot?.isOnline
-                    ? `${t(robotStatusLabel(robot.status))} · ${t('Online')}`
+                    ? endpoint
+                      ? `${endpoint.code} · ${endpoint.endpointType}`
+                      : ''
+                    : robot
+                    ? `${t(robotStatusLabel(robot.status))}${robot.isOnline ? '' : ` · ${t('Offline')}`}`
                     : 'Offline'}
                 </Text>
               ) : null}
             </View>
+            {sheet === 'endpoint' && endpoint && !endpoint.isEnabled ? (
+              <StatusPill status="OFFLINE" label="Disabled" size="sm" dot />
+            ) : sheet === 'robot' && robot && !robot.isOnline ? (
+              <StatusPill status="OFFLINE" label="Offline" size="sm" dot />
+            ) : null}
             <Pressable
               onPress={close}
               accessibilityRole="button"
@@ -1290,7 +1304,7 @@ function MapCanvas({
                 {/* 1. Quick Presets */}
                 <View style={styles.sectionBlock}>
                   <Text variant="caption" color="textSecondary" style={styles.sectionHeaderTitle}>
-                    VIEW PRESETS
+                    View Presets
                   </Text>
                   <SegmentedControl
                     options={PRESET_OPTIONS}
@@ -1304,7 +1318,7 @@ function MapCanvas({
                 {/* 2. Inset Grouped Layers */}
                 <View style={styles.sectionBlock}>
                   <Text variant="caption" color="textSecondary" style={styles.sectionHeaderTitle}>
-                    DISPLAY LAYERS
+                    Display Layers
                   </Text>
                   <View style={styles.groupedCard}>
                     {LAYER_ITEMS.map((item, idx) => {
@@ -1331,11 +1345,11 @@ function MapCanvas({
                                 {item.label}
                               </Text>
                             </View>
-                            <AppleSwitch
+                            <ToggleSwitch
                               value={isActive}
-                              onToggle={() => {
+                              onValueChange={(next) => {
                                 triggerHaptic('tap');
-                                setLayers(prev => ({ ...prev, [item.key]: !prev[item.key] }));
+                                setLayers(prev => ({ ...prev, [item.key]: next }));
                               }}
                               accessibilityLabel={`Toggle ${item.label}`}
                             />
@@ -1400,7 +1414,7 @@ function MapCanvas({
                     <View style={styles.directoryContent}>
                       {/* AMR Fleet */}
                       <Text variant="caption" color="textSecondary" style={styles.subSectionTitle}>
-                        ACTIVE AMRs ON MAP ({mapRobots.length})
+                        Active AMRs on Map ({mapRobots.length})
                       </Text>
                       {mapRobots.length === 0 ? (
                         <View style={styles.emptyCard}>
@@ -1421,7 +1435,7 @@ function MapCanvas({
                                 <View style={styles.robotIconBox}>
                                   <Bot
                                     size={18}
-                                    color={r.isOnline ? colors.primaryText : colors.textMuted}
+                                    color={r.isOnline ? colors.textPrimary : colors.textMuted}
                                   />
                                 </View>
                                 <View style={styles.robotInfo}>
@@ -1483,7 +1497,7 @@ function MapCanvas({
                                       ? 'Track'
                                       : 'Inspect'
                                   }
-                                  variant={isSelected ? 'primary' : 'outline'}
+                                  variant={isSelected ? 'primary' : 'secondary'}
                                   size="sm"
                                   icon={Navigation}
                                   onPress={() => {
@@ -1507,7 +1521,7 @@ function MapCanvas({
                         color="textSecondary"
                         style={[styles.subSectionTitle, { marginTop: 12 }]}
                       >
-                        STATIONS & DOCKS ({enabledEndpoints.length})
+                        Stations & Docks ({enabledEndpoints.length})
                       </Text>
                       <View style={styles.groupedCard}>
                         {enabledEndpoints.map((e, idx) => {
@@ -1553,11 +1567,7 @@ function MapCanvas({
                                     {e.code} · X {e.x.toFixed(2)}m · Y {e.y.toFixed(2)}m
                                   </Text>
                                 </Pressable>
-                                <Button
-                                  title="Locate"
-                                  variant="ghost"
-                                  size="sm"
-                                  icon={Focus}
+                                <Pressable
                                   onPress={() => {
                                     triggerHaptic('tap');
                                     const p = worldToBase(e, map, frame);
@@ -1568,7 +1578,19 @@ function MapCanvas({
                                     setEndpointId(e.id);
                                     close();
                                   }}
-                                />
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${t('Locate')} ${e.name || e.code}`}
+                                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                                  style={({ pressed }) => [
+                                    styles.locatePill,
+                                    pressed && styles.btnPressed,
+                                  ]}
+                                >
+                                  <Focus size={13} color={colors.textSecondary} />
+                                  <Text variant="caption" color={colors.textPrimary} fontWeight="600">
+                                    Locate
+                                  </Text>
+                                </Pressable>
                               </View>
                               {!isLast && <View style={styles.insetDivider} />}
                             </View>
@@ -1584,7 +1606,7 @@ function MapCanvas({
                             color="textSecondary"
                             style={[styles.subSectionTitle, { marginTop: 12 }]}
                           >
-                            OPERATIONAL ZONES ({activeZones.length})
+                            Operational Zones ({activeZones.length})
                           </Text>
                           <View style={styles.groupedCard}>
                             {activeZones.map((z, idx) => {
@@ -1655,68 +1677,31 @@ function MapCanvas({
             ) : sheet === 'endpoint' && endpoint ? (
               /* Station Detail View */
               <View style={styles.detailContainer}>
-                <View style={styles.detailHeroCard}>
-                  <View style={styles.detailHeroIconBox}>
-                    <EndpointIcon
-                      type={endpoint.endpointType}
-                      code={endpoint.code}
-                      name={endpoint.name}
-                      size={22}
-                      isDark={isDark}
-                    />
-                  </View>
-                  <View style={styles.detailHeroText}>
-                    <Text variant="title">{endpoint.name}</Text>
-                    <Text
-                      variant="caption"
-                      color="textSecondary"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {endpoint.code} · {endpoint.endpointType}
-                    </Text>
-                  </View>
-                  <StatusPill
-                    status={endpoint.isEnabled ? 'ACTIVE' : 'OFFLINE'}
-                    label={endpoint.isEnabled ? 'Operational' : 'Disabled'}
-                    dot
-                  />
-                </View>
-
                 <View style={styles.specBox}>
-                  <View style={styles.specRow}>
-                    <Text variant="caption" color="textSecondary">
-                      Position X
+                  <View style={styles.specCell}>
+                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
+                      X
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      fontWeight="700"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {endpoint.x.toFixed(3)} m
+                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
+                      {`${endpoint.x.toFixed(2)} m`}
                     </Text>
                   </View>
-                  <View style={styles.specRow}>
-                    <Text variant="caption" color="textSecondary">
-                      Position Y
+                  <View style={styles.specDividerV} />
+                  <View style={styles.specCell}>
+                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
+                      Y
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      fontWeight="700"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {endpoint.y.toFixed(3)} m
+                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
+                      {`${endpoint.y.toFixed(2)} m`}
                     </Text>
                   </View>
-                  <View style={styles.specRow}>
-                    <Text variant="caption" color="textSecondary">
-                      Orientation Yaw
+                  <View style={styles.specDividerV} />
+                  <View style={styles.specCell}>
+                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
+                      Yaw
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      fontWeight="700"
-                      style={{ fontFamily: typography.fontMono }}
-                    >
-                      {((endpoint.yaw * 180) / Math.PI).toFixed(1)}° ({endpoint.yaw.toFixed(3)} rad)
+                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
+                      {`${((endpoint.yaw * 180) / Math.PI).toFixed(1)}°`}
                     </Text>
                   </View>
                 </View>
@@ -1738,84 +1723,43 @@ function MapCanvas({
                       close();
                     }}
                   />
-                  <Button
-                    title="Back to Layers"
-                    variant="ghost"
-                    size="md"
-                    icon={ChevronLeft}
-                    fullWidth
-                    onPress={backToLayers}
-                  />
                 </View>
               </View>
             ) : sheet === 'robot' && robot && state ? (
               /* Robot Detail View */
               <View style={styles.detailContainer}>
-                <View
-                  style={[
-                    styles.robotHero,
-                    { borderColor: robot.isOnline ? colors.successBorder : colors.borderStrong },
-                  ]}
-                >
-                  <View style={styles.robotHeroTop}>
-                    <View
-                      style={[
-                        styles.robotAvatar,
-                        { backgroundColor: (ROBOT_COLOR[robot.status] ?? colors.textMuted) + '22' },
-                      ]}
-                    >
-                      <Bot
-                        size={24}
-                        color={
-                          robot.isOnline
-                            ? ROBOT_COLOR[robot.status] ?? colors.primaryText
-                            : colors.textMuted
-                        }
-                      />
-                    </View>
-                    <View style={styles.detailHeroText}>
-                      <Text
-                        variant="title"
-                        numberOfLines={1}
-                        style={{ fontFamily: typography.fontMono }}
-                      >
-                        {robot.code}
-                      </Text>
-                      <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                        {robot.name || robot.code}
-                      </Text>
-                    </View>
-                    <OnlineBadge online={robot.isOnline} />
+                <View style={styles.robotStats}>
+                  <View style={styles.robotStat}>
+                    <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
+                      Battery
+                    </Text>
+                    <BatteryIndicator
+                      percent={robot.batteryPercent}
+                      charging={robot.status === 'CHARGING'}
+                      size="lg"
+                      bar
+                    />
                   </View>
-                  <View style={styles.robotStats}>
-                    <View style={styles.robotStat}>
-                      <Text variant="caption" color="textSecondary">
-                        Battery
-                      </Text>
-                      <BatteryIndicator
-                        percent={robot.batteryPercent}
-                        charging={robot.status === 'CHARGING'}
-                        size="lg"
-                        bar
+                  <View style={styles.robotStatDivider} />
+                  <View style={styles.robotStat}>
+                    <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
+                      Status
+                    </Text>
+                    <View style={styles.robotStatValueRow}>
+                      <View
+                        style={[
+                          styles.robotStatusDot,
+                          { backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted },
+                        ]}
                       />
-                    </View>
-                    <View style={styles.robotStat}>
-                      <Text variant="caption" color="textSecondary">
-                        Status
+                      <Text
+                        variant="bodyMedium"
+                        fontWeight="600"
+                        numberOfLines={1}
+                        style={styles.robotStatValue}
+                      >
+                        {robotStatusLabel(robot.status)}
                       </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted,
-                          }}
-                        />
-                        <Text variant="bodyMedium" fontWeight="700" numberOfLines={1}>
-                          {robotStatusLabel(robot.status)}
-                        </Text>
-                      </View>
                     </View>
                   </View>
                 </View>
@@ -1849,7 +1793,7 @@ function MapCanvas({
                   {onManualDrive ? (
                     <Button
                       title="Manual Drive"
-                      variant="outline"
+                      variant="secondary"
                       size="md"
                       icon={SlidersHorizontal}
                       fullWidth
@@ -1860,14 +1804,6 @@ function MapCanvas({
                       }}
                     />
                   ) : null}
-                  <Button
-                    title="Back to Layers"
-                    variant="ghost"
-                    size="md"
-                    icon={ChevronLeft}
-                    fullWidth
-                    onPress={backToLayers}
-                  />
                 </View>
               </View>
             ) : (
@@ -1877,7 +1813,7 @@ function MapCanvas({
                 </Text>
                 <Button
                   title="Back to Layers"
-                  variant="outline"
+                  variant="secondary"
                   icon={ChevronLeft}
                   onPress={backToLayers}
                 />
@@ -1903,28 +1839,46 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     smallState: { position: 'absolute', left: 24, right: 24, justifyContent: 'center' },
     station: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 20 },
-    robotHero: {
-      borderWidth: 1.5,
-      borderRadius: 18,
-      padding: 14,
-      gap: 14,
-      backgroundColor: colors.surface,
-    },
-    robotHeroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    robotAvatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 14,
+    robotStats: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 14,
+      borderCurve: 'continuous',
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
     },
-    robotStats: { flexDirection: 'row', gap: 8 },
     robotStat: {
       flex: 1,
+      gap: 5,
+    },
+    robotStatDivider: {
+      width: StyleSheet.hairlineWidth,
+      height: 28,
+      backgroundColor: colors.border,
+      marginHorizontal: 12,
+    },
+    robotStatLabel: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '500',
+    },
+    robotStatValueRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: 6,
-      padding: 10,
-      borderRadius: 12,
-      backgroundColor: colors.surfaceSubtle,
+    },
+    robotStatusDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 3.5,
+    },
+    robotStatValue: {
+      fontSize: 13,
+      lineHeight: 17,
+      flexShrink: 1,
     },
 
     topLeftHud: {
@@ -2029,18 +1983,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: radii.lg,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+      borderRadius: 16,
+      borderCurve: 'continuous',
       borderWidth: 1,
-      backgroundColor: colors.mapHudBg,
-      borderColor: colors.mapHudBorder,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.90)' : 'rgba(255, 255, 255, 0.92)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       ...shadows.md,
-    },
-    inspectAccent: {
-      width: 4,
-      alignSelf: 'stretch',
-      borderRadius: 2,
     },
     inspectBody: {
       flex: 1,
@@ -2050,8 +2000,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     inspectHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 7,
       flexWrap: 'wrap',
+    },
+    inspectDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      flexShrink: 0,
     },
     inspectTitle: {
       flexShrink: 1,
@@ -2059,7 +2015,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     inspectBadge: {
       paddingHorizontal: 7,
       paddingVertical: 1.5,
-      borderRadius: 6,
+      borderRadius: 999,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)',
+    },
+    inspectBadgeText: {
+      fontSize: 10.5,
+      fontWeight: '600',
     },
     inspectClose: {
       width: 28,
@@ -2067,7 +2028,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.surfaceSubtle,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
     },
 
     footer: {
@@ -2084,8 +2045,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
-      backgroundColor: colors.mapHudBg,
-      borderColor: colors.mapHudBorder,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       ...shadows.sm,
     },
 
@@ -2112,10 +2073,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderBottomColor: colors.border,
       gap: 12,
     },
+    headerIconWell: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
     sheetHeaderTitleGroup: {
       flex: 1,
       minWidth: 0,
       gap: 2,
+    },
+    headerSubtitleMono: {
+      fontFamily: typography.fontMono,
     },
     circleBtn: {
       width: 36,
@@ -2144,15 +2118,17 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 8,
     },
     sectionHeaderTitle: {
-      fontWeight: '700',
-      letterSpacing: 0.6,
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: -0.1,
       color: colors.textSecondary,
     },
     subSectionTitle: {
-      fontWeight: '700',
-      letterSpacing: 0.5,
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: -0.1,
       color: colors.textSecondary,
       marginBottom: 4,
     },
@@ -2195,39 +2171,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       height: 1,
       backgroundColor: colors.border,
       marginLeft: 56,
-    },
-
-    // Tactile Switch
-    switchTrack: {
-      width: 44,
-      height: 26,
-      borderRadius: 13,
-      padding: 2,
-      justifyContent: 'center',
-    },
-    switchTrackActive: {
-      backgroundColor: isDark ? '#e4e6eb' : '#1c1c1e',
-    },
-    switchTrackInactive: {
-      backgroundColor: isDark ? colors.borderStrong : '#dcdfe4',
-    },
-    switchThumb: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: '#ffffff',
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.18,
-      shadowRadius: 2.5,
-      elevation: 2,
-    },
-    switchThumbActive: {
-      alignSelf: 'flex-end',
-      backgroundColor: isDark ? '#18191a' : '#ffffff',
-    },
-    switchThumbInactive: {
-      alignSelf: 'flex-start',
     },
 
     // Operational Zones in Directory
@@ -2320,16 +2263,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 12,
     },
     robotCardSelected: {
-      backgroundColor: colors.primaryLight,
-      borderColor: colors.primaryBorder,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.05)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(18, 19, 23, 0.16)',
     },
     robotIconBox: {
       width: 36,
       height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 10,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2369,15 +2311,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       minHeight: 52,
     },
     stationItemSelected: {
-      backgroundColor: colors.primaryLight,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.05)',
     },
     stationIconBox: {
       width: 32,
       height: 32,
-      borderRadius: 16,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 9,
+      borderCurve: 'continuous',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2392,12 +2333,20 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 8,
     },
     typeTag: {
-      backgroundColor: colors.surface,
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      borderRadius: 4,
-      borderWidth: 1,
-      borderColor: colors.border,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
+      paddingHorizontal: 6.5,
+      paddingVertical: 1.5,
+      borderRadius: 999,
+    },
+    locatePill: {
+      minHeight: 32,
+      paddingHorizontal: 9,
+      borderRadius: 8,
+      borderCurve: 'continuous',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
     },
 
     // Empty Card
@@ -2413,45 +2362,40 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
 
     // Detail Views
     detailContainer: {
-      gap: 16,
-    },
-    detailHeroCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
       gap: 14,
-      padding: 16,
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: radii.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    detailHeroIconBox: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    detailHeroText: {
-      flex: 1,
-      minWidth: 0,
-      gap: 2,
     },
     specBox: {
-      backgroundColor: colors.surfaceSubtle,
-      padding: 14,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 10,
-    },
-    specRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 14,
+      borderCurve: 'continuous',
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 12,
+      paddingHorizontal: 6,
+    },
+    specCell: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 3,
+    },
+    specCellLabel: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '500',
+    },
+    specCellValue: {
+      fontSize: 13.5,
+      lineHeight: 18,
+      fontWeight: '700',
+      fontFamily: typography.fontMono,
+      fontVariant: ['tabular-nums'],
+    },
+    specDividerV: {
+      width: StyleSheet.hairlineWidth,
+      height: 26,
+      backgroundColor: colors.border,
     },
     detailActions: {
       gap: 10,

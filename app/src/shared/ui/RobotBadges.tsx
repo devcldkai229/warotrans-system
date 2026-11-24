@@ -1,8 +1,8 @@
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Battery, BatteryCharging, BatteryFull, BatteryLow, BatteryMedium, BatteryWarning } from 'lucide-react-native';
 import { formatBattery } from '../formatBattery';
-import { useThemeColors } from '../theme/ThemeContext';
+import { useTheme, useThemeColors } from '../theme/ThemeContext';
 import { Text } from './Text';
 
 export type BatteryTone = 'success' | 'warning' | 'danger' | 'muted';
@@ -50,15 +50,34 @@ export function BatteryIndicator({ percent, charging = false, size = 'sm', bar =
   </View>;
 }
 
-/** Online is a filled green pill with a bright dot; offline is a muted outline. */
+/** Quiet recessed online/offline pill without neon glow. */
 export function OnlineBadge({ online, label }: { online: boolean; label?: string }) {
-  const colors = useThemeColors();
-  return <View style={{
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
-    backgroundColor: online ? colors.successBg : colors.surfaceMuted, borderWidth: 1, borderColor: online ? colors.successBorder : colors.borderStrong,
-  }}>
-    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: online ? colors.success : colors.textMuted,
-      shadowColor: colors.success, shadowOpacity: online ? 0.8 : 0, shadowRadius: 4, shadowOffset: { width: 0, height: 0 } }} />
-    <Text variant="caption" fontWeight="700" color={online ? 'successText' : 'textMuted'}>{label ?? (online ? 'Online' : 'Offline')}</Text>
-  </View>;
+  const { colors, isDark } = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 999,
+        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.05)',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(18, 19, 23, 0.08)',
+      }}
+    >
+      <View
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: online ? (isDark ? '#30D158' : '#34C759') : colors.textMuted,
+        }}
+      />
+      <Text variant="caption" fontWeight="600" color={online ? 'textPrimary' : 'textMuted'}>
+        {label ?? (online ? 'Online' : 'Offline')}
+      </Text>
+    </View>
+  );
 }

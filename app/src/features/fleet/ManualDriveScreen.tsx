@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Info, Lock, RefreshCw, ShieldAlert, Unlock } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
@@ -31,7 +31,7 @@ import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import type { ManualLeaseResponse, RobotResponse } from '../../shared/types/contracts';
-import { Button, Card, EmptyState, ReasonSheet, SegmentedControl, StatusPill, Text } from '../../shared/ui';
+import { Button, Card, EmptyState, ReasonSheet, SegmentedControl, StatusPill, Text, ToggleSwitch } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { ManualJoystickPad } from './ManualJoystickPad';
 import {
@@ -641,7 +641,7 @@ export function ManualDriveScreen() {
                     Stops before obstacles detected in the direction of travel.
                   </Text>
                 </View>
-                <Switch
+                <ToggleSwitch
                   value={assist}
                   onValueChange={(next) => {
                     triggerHaptic('tap');

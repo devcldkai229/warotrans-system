@@ -36,3 +36,6 @@ export type { EmptyStateProps } from './EmptyState';
 export { ProgressMeter } from './ProgressMeter';
 export type { ProgressMeterProps, MeterTone } from './ProgressMeter';
 export { ReasonSheet } from './ReasonSheet';
+
+export { ToggleSwitch } from './ToggleSwitch';
+export type { ToggleSwitchProps } from './ToggleSwitch';

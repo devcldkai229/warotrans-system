@@ -156,6 +156,21 @@ export function detectPerimeterShelfWalls(
   return walls;
 }
 
+interface ShelfBayCandidate {
+  ep: EndpointDto;
+  wall: PerimeterWall;
+  isHoriz: boolean;
+  anchorPos: number;
+  desiredSpan: number;
+  depth: number;
+  wallCoord: number;
+  wallMin: number;
+  wallMax: number;
+  startX: number;
+  startY: number;
+  needsConnector: boolean;
+}
+
 /**
  * Derive world-scaled floor docking bays (`[ ]`) and recessed wall-mounted shelf bays from real
  * endpoint poses relative to the map's outer perimeter walls.
@@ -176,6 +191,12 @@ export function computeStationArchitecture(
   const includeWallShelves = options?.includeWallShelves !== false;
   const wallRight = frame.left + frame.mapWidth;
   const wallBottom = frame.top + frame.mapHeight;
+  const candidatesByWall: Record<PerimeterWall, ShelfBayCandidate[]> = {
+    top: [],
+    bottom: [],
+    left: [],
+    right: [],
+  };
 
   for (const item of items) {
     const ep = item.endpoint;
@@ -217,62 +238,275 @@ export function computeStationArchitecture(
     };
 
     const isHoriz = wall === 'top' || wall === 'bottom';
-    const span = Math.min(
+    const desiredSpan = Math.min(
       SHELF_BAY_LENGTH_METERS * pxPerMetre,
       (isHoriz ? frame.mapWidth : frame.mapHeight) - 8,
     );
     const desiredDepth = SHELF_BAY_DEPTH_METERS * pxPerMetre;
     const depth = Math.min(desiredDepth, availDepthByWall[wall]);
-    if (depth < 6 || span < 10) continue;
+    if (depth < 6 || desiredSpan < 10) continue;
 
     const bayHalfOffset = (DOCK_BAY_LENGTH_METERS * 0.5) * pxPerMetre;
     const startX = item.x + nx * bayHalfOffset;
     const startY = item.y + ny * bayHalfOffset;
+    const wallCoord = isHoriz
+      ? wall === 'top'
+        ? frame.top
+        : wallBottom
+      : wall === 'left'
+      ? frame.left
+      : wallRight;
+    const anchorPos = isHoriz ? item.x : item.y;
+    const wallMin = (isHoriz ? frame.left : frame.top) + 4;
+    const wallMax = (isHoriz ? wallRight : wallBottom) - 4;
+    const needsConnector =
+      wall === 'top'
+        ? startY > wallCoord + 3
+        : wall === 'bottom'
+        ? startY < wallCoord - 3
+        : wall === 'left'
+        ? startX > wallCoord + 3
+        : startX < wallCoord - 3;
 
-    if (isHoriz) {
-      const cx = clamp(item.x, frame.left + span / 2 + 4, wallRight - span / 2 - 4);
-      const x = cx - span / 2;
-      const y = wall === 'top' ? frame.top - depth : wallBottom;
-      const wallY = wall === 'top' ? frame.top : wallBottom;
-      const opening = { x1: x, y1: wallY, x2: x + span, y2: wallY };
-      const connX = clamp(item.x, opening.x1, opening.x2);
-      const needsConnector = wall === 'top' ? startY > wallY + 3 : startY < wallY - 3;
-      shelfBays.push({
-        id: ep.id,
-        code: ep.code,
-        name: ep.name,
-        wall,
-        x,
-        y,
-        width: span,
-        height: depth,
-        slots: 3,
-        opening,
-        connector: needsConnector ? { x1: startX, y1: startY, x2: connX, y2: wallY } : null,
-      });
-    } else {
-      const cy = clamp(item.y, frame.top + span / 2 + 4, wallBottom - span / 2 - 4);
-      const y = cy - span / 2;
-      const x = wall === 'left' ? frame.left - depth : wallRight;
-      const wallX = wall === 'left' ? frame.left : wallRight;
-      const opening = { x1: wallX, y1: y, x2: wallX, y2: y + span };
-      const connY = clamp(item.y, opening.y1, opening.y2);
-      const needsConnector = wall === 'left' ? startX > wallX + 3 : startX < wallX - 3;
-      shelfBays.push({
-        id: ep.id,
-        code: ep.code,
-        name: ep.name,
-        wall,
-        x,
-        y,
-        width: depth,
-        height: span,
-        slots: 3,
-        opening,
-        connector: needsConnector ? { x1: startX, y1: startY, x2: wallX, y2: connY } : null,
-      });
+    candidatesByWall[wall].push({
+      ep,
+      wall,
+      isHoriz,
+      anchorPos,
+      desiredSpan,
+      depth,
+      wallCoord,
+      wallMin,
+      wallMax,
+      startX,
+      startY,
+      needsConnector,
+    });
+  }
+
+  const gap = clamp(pxPerMetre * 0.04, 3, 6);
+  for (const wall of PERIMETER_WALLS) {
+    const group = candidatesByWall[wall];
+    if (!group.length) continue;
+    const sorted = [...group].sort((a, b) => a.anchorPos - b.anchorPos);
+
+    // Trim span to neighbor spacing so adjacent shelf rectangles never overlap
+    const placed = sorted.map((c, idx) => {
+      const prevDist = idx > 0 ? c.anchorPos - sorted[idx - 1].anchorPos - gap : Infinity;
+      const nextDist = idx < sorted.length - 1 ? sorted[idx + 1].anchorPos - c.anchorPos - gap : Infinity;
+      const span = Math.max(10, Math.min(c.desiredSpan, prevDist, nextDist));
+      const maxStart = Math.max(c.wallMin, c.wallMax - span);
+      const start = clamp(c.anchorPos - span / 2, c.wallMin, maxStart);
+      return { c, start, end: start + span };
+    });
+
+    for (let i = 1; i < placed.length; i++) {
+      const prev = placed[i - 1];
+      const curr = placed[i];
+      if (prev.end + gap > curr.start) {
+        const mid = (prev.end + curr.start) / 2;
+        prev.end = Math.max(prev.start + 10, mid - gap / 2);
+        curr.start = Math.max(Math.min(curr.end - 10, mid + gap / 2), prev.end + gap);
+        if (curr.end < curr.start + 10) {
+          curr.end = Math.min(curr.c.wallMax, curr.start + 10);
+        }
+      }
+    }
+
+    for (const { c, start, end } of placed) {
+      const finalSpan = Math.max(6, end - start);
+      const slots = finalSpan < 26 ? 2 : 3;
+      if (c.isHoriz) {
+        const y = c.wall === 'top' ? c.wallCoord - c.depth : c.wallCoord;
+        const opening = { x1: start, y1: c.wallCoord, x2: start + finalSpan, y2: c.wallCoord };
+        const connX = clamp(c.anchorPos, opening.x1, opening.x2);
+        shelfBays.push({
+          id: c.ep.id,
+          code: c.ep.code,
+          name: c.ep.name,
+          wall: c.wall,
+          x: start,
+          y,
+          width: finalSpan,
+          height: c.depth,
+          slots,
+          opening,
+          connector: c.needsConnector ? { x1: c.startX, y1: c.startY, x2: connX, y2: c.wallCoord } : null,
+        });
+      } else {
+        const x = c.wall === 'left' ? c.wallCoord - c.depth : c.wallCoord;
+        const opening = { x1: c.wallCoord, y1: start, x2: c.wallCoord, y2: start + finalSpan };
+        const connY = clamp(c.anchorPos, opening.y1, opening.y2);
+        shelfBays.push({
+          id: c.ep.id,
+          code: c.ep.code,
+          name: c.ep.name,
+          wall: c.wall,
+          x,
+          y: start,
+          width: c.depth,
+          height: finalSpan,
+          slots,
+          opening,
+          connector: c.needsConnector ? { x1: c.startX, y1: c.startY, x2: c.wallCoord, y2: connY } : null,
+        });
+      }
     }
   }
 
   return { dockBays, shelfBays };
+}
+
+export const ROBOT_TAG_WIDTH = 104;
+export const ROBOT_TAG_HEIGHT = 18;
+export const ROBOT_TAG_GAP = 6;
+
+export type RobotTagPlacement = 'below' | 'above' | 'right' | 'left' | 'below-far' | 'above-far';
+
+export interface RobotTagAnchorInput {
+  id: string;
+  code: string;
+  x: number;
+  y: number;
+  isSelected?: boolean;
+}
+
+export interface ResolvedRobotTagLayout {
+  placement: RobotTagPlacement;
+  tagWidth: number;
+}
+
+interface ScreenBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+const ROBOT_TAG_PRIORITY: readonly RobotTagPlacement[] = [
+  'below',
+  'above',
+  'right',
+  'left',
+  'below-far',
+  'above-far',
+];
+
+/** Estimate screen width of a robot code pill (`dot + code + pill padding`). */
+export function estimateRobotTagWidth(code: string): number {
+  return Math.min(ROBOT_TAG_WIDTH, Math.max(46, Math.ceil(24 + code.length * 6.4)));
+}
+
+function boxOverlapArea(a: ScreenBox, b: ScreenBox, pad: number): number {
+  const ox = Math.max(0, Math.min(a.x2 + pad, b.x2) - Math.max(a.x1 - pad, b.x1));
+  if (ox <= 0) return 0;
+  const oy = Math.max(0, Math.min(a.y2 + pad, b.y2) - Math.max(a.y1 - pad, b.y1));
+  return ox * oy;
+}
+
+function candidateTagBox(
+  placement: RobotTagPlacement,
+  cx: number,
+  cy: number,
+  radius: number,
+  tagW: number,
+): ScreenBox {
+  switch (placement) {
+    case 'below': {
+      const y1 = cy + radius + ROBOT_TAG_GAP;
+      return { x1: cx - tagW / 2, y1, x2: cx + tagW / 2, y2: y1 + ROBOT_TAG_HEIGHT };
+    }
+    case 'above': {
+      const y2 = cy - radius - ROBOT_TAG_GAP;
+      return { x1: cx - tagW / 2, y1: y2 - ROBOT_TAG_HEIGHT, x2: cx + tagW / 2, y2 };
+    }
+    case 'right': {
+      const x1 = cx + radius + ROBOT_TAG_GAP;
+      return { x1, y1: cy - ROBOT_TAG_HEIGHT / 2, x2: x1 + tagW, y2: cy + ROBOT_TAG_HEIGHT / 2 };
+    }
+    case 'left': {
+      const x2 = cx - radius - ROBOT_TAG_GAP;
+      return { x1: x2 - tagW, y1: cy - ROBOT_TAG_HEIGHT / 2, x2, y2: cy + ROBOT_TAG_HEIGHT / 2 };
+    }
+    case 'below-far': {
+      const y1 = cy + radius + ROBOT_TAG_GAP + ROBOT_TAG_HEIGHT + 4;
+      return { x1: cx - tagW / 2, y1, x2: cx + tagW / 2, y2: y1 + ROBOT_TAG_HEIGHT };
+    }
+    case 'above-far': {
+      const y1 = cy - radius - ROBOT_TAG_GAP - ROBOT_TAG_HEIGHT * 2 - 4;
+      return { x1: cx - tagW / 2, y1, x2: cx + tagW / 2, y2: y1 + ROBOT_TAG_HEIGHT };
+    }
+  }
+}
+
+/**
+ * Resolve deterministic non-overlapping tag slot placements (`below`, `above`, `right`, `left`,
+ * `below-far`, `above-far`) in screen coordinates at the current settled zoom.
+ */
+export function resolveRobotTagPlacements(
+  items: readonly RobotTagAnchorInput[],
+  halfLength: number,
+  zoom: number,
+): Record<string, ResolvedRobotTagLayout> {
+  if (items.length === 0) return {};
+
+  const z = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
+  const r = (halfLength + 2) * z;
+
+  const entries = items.map(item => {
+    const cx = item.x * z;
+    const cy = item.y * z;
+    return {
+      item,
+      cx,
+      cy,
+      tagWidth: estimateRobotTagWidth(item.code),
+      chassis: { x1: cx - r, y1: cy - r, x2: cx + r, y2: cy + r },
+    };
+  });
+
+  const sorted = [...entries].sort(
+    (a, b) =>
+      (a.item.isSelected ? 0 : 1) - (b.item.isSelected ? 0 : 1) ||
+      a.item.code.localeCompare(b.item.code) ||
+      a.item.id.localeCompare(b.item.id),
+  );
+
+  const placedTags: ScreenBox[] = [];
+  const result: Record<string, ResolvedRobotTagLayout> = {};
+
+  for (const current of sorted) {
+    let chosenPlacement: RobotTagPlacement = 'below';
+    let chosenBox = candidateTagBox('below', current.cx, current.cy, r, current.tagWidth);
+    let bestScore = Infinity;
+
+    for (const placement of ROBOT_TAG_PRIORITY) {
+      const box = candidateTagBox(placement, current.cx, current.cy, r, current.tagWidth);
+      let score = 0;
+
+      for (const placed of placedTags) {
+        score += boxOverlapArea(box, placed, 4);
+      }
+      for (const other of entries) {
+        if (other.item.id === current.item.id) continue;
+        score += boxOverlapArea(box, other.chassis, 2);
+      }
+
+      if (score === 0) {
+        chosenPlacement = placement;
+        chosenBox = box;
+        break;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        chosenPlacement = placement;
+        chosenBox = box;
+      }
+    }
+
+    placedTags.push(chosenBox);
+    result[current.item.id] = { placement: chosenPlacement, tagWidth: current.tagWidth };
+  }
+
+  return result;
 }

@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   View,
+  type ViewStyle,
 } from 'react-native';
 import {
   ArrowRight,
@@ -16,8 +17,7 @@ import {
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
-import { colors, ThemeColors } from '../../shared/theme/colors';
-import { radii } from '../../shared/theme/radii';
+import type { ThemeColors } from '../../shared/theme/colors';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
@@ -25,6 +25,7 @@ import {
   Button,
   ProgressMeter,
   StatusPill,
+  statusTone,
   Text,
 } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
@@ -42,6 +43,14 @@ import { useMapFleet } from '../../shared/maps/hooks/useMapFleet';
 
 const INITIAL_JOB = EMPTY_JOB;
 
+const WEB_SHEET_GLASS_STYLE: ViewStyle | null =
+  Platform.OS === 'web'
+    ? ({
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+      } as unknown as ViewStyle)
+    : null;
+
 /**
  * Modern "Command Center" HomeScreen.
  *
@@ -54,7 +63,7 @@ const INITIAL_JOB = EMPTY_JOB;
 export function HomeScreen() {
   const { session } = useAuth();
   const { navigate, dockHeight } = useNavigation();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors, isDark } = useThemedStyles(createStyles);
   const [peekSheetHeight, setPeekSheetHeight] = useState(86);
   const fleetQuery = useMapFleet(session?.id || '');
   // robot.localize: tell a robot where it stands after power-on; the snapshot refresh shows LOCALIZED when it converged.
@@ -104,7 +113,21 @@ export function HomeScreen() {
   const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
   const activePositionLabel = isWaitingHandover ? 'Waiting at Station' : isQueuedOrCreated ? 'Awaiting Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
   const collapsedBtnTitle = isWaitingHandover ? 'Verify' : isQueuedOrCreated ? 'Start' : 'Open';
-  const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Mission Detail';
+  const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Job Detail';
+
+  const collapsedTone = statusTone(isWaitingHandover ? 'WAITING_HANDOVER' : activeJob.status);
+  const collapsedStatusDotColor =
+    collapsedTone === 'danger'
+      ? colors.danger
+      : collapsedTone === 'warning'
+      ? colors.warning
+      : collapsedTone === 'info'
+      ? colors.primary
+      : collapsedTone === 'success'
+      ? isDark
+        ? '#30D158'
+        : '#34C759'
+      : colors.textMuted;
 
   const toggleSheetExpand = () => {
     triggerHaptic('tap');
@@ -127,6 +150,8 @@ export function HomeScreen() {
     triggerHaptic('tap');
     navigate('job_detail', { jobId: activeJob.id });
   };
+
+  const destructiveColor = isDark ? '#FF453A' : '#DC2626';
 
   return (
     <View style={styles.root}>
@@ -153,10 +178,6 @@ export function HomeScreen() {
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {
           setSelectedRobotId(id);
-          const r = robots.find((item) => item.id === id);
-          if (r) {
-            toast.info(`${r.id}${r.lastReported ? ' · Last Reported' : ''}: Battery ${r.battery == null ? '—' : `${r.battery}%`}, Speed ${r.speed}`);
-          }
         }}
         style={styles.mapCanvas}
       />
@@ -170,6 +191,7 @@ export function HomeScreen() {
         }}
         style={[
           styles.peekSheetContainer,
+          WEB_SHEET_GLASS_STYLE,
           { bottom: dockHeight + 10 },
         ]}
       >
@@ -183,12 +205,12 @@ export function HomeScreen() {
         </Pressable>
         {fleetQuery.isError ? <Text variant="caption" color={colors.dangerText}>Fleet could not be refreshed. Showing last reported positions.</Text> : null}
 
-        {!activeJob.id ? <View style={styles.insetBox}>
+        {!activeJob.id ? <View style={styles.emptyJobBox}>
           <Text variant="headline">{jobsQuery.isPending ? 'Loading Jobs…' : jobsQuery.isError ? 'Jobs Unavailable' : 'No Active Jobs'}</Text>
           {jobsQuery.isError ? <Text variant="body" color={colors.dangerText}>{jobsQuery.error.message}</Text> : null}
           <Button title={jobsQuery.isError ? 'Retry Jobs' : 'View Jobs'} onPress={() => { if (jobsQuery.isError) void refetchJobs(); else navigate('jobs'); }} />
         </View> : !isSheetExpanded ? (
-          /* Collapsed Mode (Peek: ~68px, frees up 80% of screen for map) */
+          /* Collapsed Mode: crisp 2-line preview + primary CTA */
           <View style={styles.collapsedRow}>
             <Pressable
               onPress={toggleSheetExpand}
@@ -197,38 +219,33 @@ export function HomeScreen() {
               accessibilityLabel={`Job ${activeJob.jobNo || activeJob.id}, ${activeStatusLabel}. Tap to view details.`}
             >
               <View style={styles.collapsedTopLine}>
-                <StatusPill status={activeJob.status} label={activeStatusLabel} size="sm" dot />
-              </View>
-              <View style={styles.collapsedBottomRow}>
-                <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.jobCode}>
+                <View style={[styles.collapsedStatusDot, { backgroundColor: collapsedStatusDotColor }]} />
+                <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.collapsedJobCode}>
                   {activeJob.jobNo || activeJob.id}
                 </Text>
-                <Text variant="caption" color={colors.textMuted}>·</Text>
-                <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.collapsedTarget}>
-                  <Text style={styles.boldText}>{activeJob.target || 'Unknown Destination'}</Text> · <Text style={styles.boldMono}>{activeJob.robot || 'Unassigned'}</Text>
-                </Text>
               </View>
+              <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.collapsedTarget}>
+                {activeStatusLabel}
+                {' · '}
+                {activeJob.target || 'Unknown Destination'}
+                {activeJob.robot ? (
+                  <>
+                    {' · '}
+                    <Text style={styles.collapsedRobotMono}>{activeJob.robot}</Text>
+                  </>
+                ) : null}
+              </Text>
             </Pressable>
 
-            <View style={styles.collapsedActionGroup}>
-              <Button
-                title={collapsedBtnTitle}
-                variant="primary"
-                size="sm"
-                onPress={handleStartHandover}
-                icon={ArrowRight}
-                iconPosition="right"
-                style={styles.compactStartBtn}
-              />
-              <Pressable
-                onPress={toggleSheetExpand}
-                accessibilityRole="button"
-                accessibilityLabel="Expand handover details"
-                style={({ pressed }) => [styles.expandChevronBtn, pressed && styles.pressed]}
-              >
-                <ChevronUp size={16} color={colors.textSecondary} />
-              </Pressable>
-            </View>
+            <Button
+              title={collapsedBtnTitle}
+              variant="primary"
+              size="sm"
+              onPress={handleStartHandover}
+              icon={ArrowRight}
+              iconPosition="right"
+              style={styles.compactStartBtn}
+            />
           </View>
         ) : (
           /* Expanded Mode: Full inspection */
@@ -270,7 +287,7 @@ export function HomeScreen() {
               {activeJob.jobNo || activeJob.id}
             </Text>
 
-            {/* Task Details Inset Box */}
+            {/* Task Details Inset Grouped Card */}
             <View style={styles.insetBox}>
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Target</Text>
@@ -278,6 +295,8 @@ export function HomeScreen() {
                   {activeJob.target || 'Destination Unavailable'}
                 </Text>
               </View>
+
+              <View style={styles.insetDivider} />
 
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Cargo</Text>
@@ -287,6 +306,8 @@ export function HomeScreen() {
                 </Text>
               </View>
 
+              <View style={styles.insetDivider} />
+
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Assigned</Text>
                 <Text variant="body" color={colors.textSecondary} numberOfLines={1} style={styles.detailValue}>
@@ -295,12 +316,14 @@ export function HomeScreen() {
               </View>
 
               {!isQueuedOrCreated || (activeJob.progressPercent ?? 0) > 0 ? (
-                <ProgressMeter
-                  value={activeJob.progressPercent ?? 0}
-                  tone="warning"
-                  style={styles.meter}
-                  accessibilityLabel={`Job progress ${activeJob.progressPercent ?? 0} percent`}
-                />
+                <View style={styles.meterRow}>
+                  <ProgressMeter
+                    value={activeJob.progressPercent ?? 0}
+                    tone="warning"
+                    style={styles.meter}
+                    accessibilityLabel={`Job progress ${activeJob.progressPercent ?? 0} percent`}
+                  />
+                </View>
               ) : null}
             </View>
 
@@ -389,12 +412,15 @@ export function HomeScreen() {
                     triggerHaptic('tap');
                     navigate('fleet_recall');
                   }}
-                  style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.fleetRecallLink,
+                    pressed && styles.fleetRecallLinkPressed,
+                  ]}
                   accessibilityRole="button"
                   accessibilityLabel="Cancel active robot commands"
                 >
-                  <ShieldAlert size={14} color={colors.dangerText} />
-                  <Text style={styles.fleetRecallLinkText}>
+                  <ShieldAlert size={14} color={destructiveColor} />
+                  <Text color={destructiveColor} style={styles.fleetRecallLinkText}>
                     Cancel Commands
                   </Text>
                 </Pressable>
@@ -407,7 +433,7 @@ export function HomeScreen() {
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -422,27 +448,40 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     position: 'absolute',
     left: 14,
     right: 14,
-    backgroundColor: colors.surface,
+    backgroundColor: isDark ? 'rgba(28, 30, 34, 0.92)' : 'rgba(255, 255, 255, 0.92)',
     borderRadius: 20,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(18, 19, 23, 0.08)',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 7,
     paddingBottom: 12,
-    gap: 10,
+    gap: 8,
     zIndex: 70,
-    ...shadows.lg,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: isDark ? 0.42 : 0.12,
+    shadowRadius: 24,
+    elevation: 10,
   },
   cardHeaderHandle: {
     alignItems: 'center',
     paddingVertical: 4,
-    marginBottom: 2,
   },
   dragPill: {
-    width: 36,
-    height: 4,
+    width: 34,
+    height: 3.5,
     borderRadius: 2,
-    backgroundColor: colors.borderStrong,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.20)' : 'rgba(18, 19, 23, 0.16)',
+  },
+  emptyJobBox: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 19, 23, 0.035)',
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.07)',
+    padding: 14,
+    gap: 10,
   },
   collapsedRow: {
     flexDirection: 'row',
@@ -452,41 +491,45 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   },
   collapsedInfo: {
     flex: 1,
-    gap: 3,
+    minWidth: 0,
+    gap: 4,
   },
   collapsedTopLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
+    minWidth: 0,
   },
-  collapsedBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  collapsedStatusDot: {
+    width: 6.5,
+    height: 6.5,
+    borderRadius: 3.25,
+    flexShrink: 0,
+  },
+  collapsedJobCode: {
+    fontSize: 14.5,
+    lineHeight: 19,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    flexShrink: 1,
+    fontVariant: ['tabular-nums'],
   },
   collapsedTarget: {
-    fontWeight: '500',
-    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
   },
-  collapsedActionGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  collapsedRobotMono: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: typography.fontMono,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   compactStartBtn: {
-    minHeight: 38,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  expandChevronBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexShrink: 0,
   },
   expandedHeaderActions: {
     flexDirection: 'row',
@@ -497,9 +540,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(18, 19, 23, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -508,18 +551,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statusGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   jobCode: {
+    fontSize: 16,
+    lineHeight: 21,
+    letterSpacing: -0.3,
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
     flexShrink: 0,
   },
   fleetToggleBtn: {
@@ -529,24 +566,33 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     height: 30,
     paddingHorizontal: 10,
     borderRadius: 15,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(18, 19, 23, 0.08)',
   },
   fleetToggleText: {
     fontWeight: '600',
   },
   insetBox: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    padding: 12,
-    gap: 8,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 19, 23, 0.035)',
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.07)',
+    overflow: 'hidden',
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9.5,
+  },
+  insetDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 12,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.07)',
   },
   detailLabel: {
     width: 62,
@@ -560,17 +606,18 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   targetValue: {
     fontWeight: '700',
   },
-  boldText: {
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
   boldMono: {
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
+  meterRow: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    paddingTop: 2,
+  },
   meter: {
-    marginTop: 4,
+    marginTop: 2,
   },
   actionBtn: {
     minHeight: 46,
@@ -578,8 +625,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   expandedFleetSection: {
     marginTop: 4,
     paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(18, 19, 23, 0.08)',
     gap: 8,
   },
   fleetRecallLink: {
@@ -587,18 +634,18 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: 36,
+    minHeight: 38,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: colors.dangerBg,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.dangerBorder,
+    borderRadius: 10,
+    borderCurve: 'continuous',
+    backgroundColor: 'transparent',
+  },
+  fleetRecallLinkPressed: {
+    backgroundColor: isDark ? 'rgba(255, 69, 58, 0.14)' : 'rgba(220, 38, 38, 0.08)',
   },
   fleetRecallLinkText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: colors.dangerText,
+    fontSize: 13,
+    fontWeight: '600',
   },
   fleetRow: {
     flexDirection: 'row',
@@ -609,19 +656,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexGrow: 1,
     flexBasis: '45%',
     minWidth: 0,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.sm,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 19, 23, 0.035)',
+    borderRadius: 11,
+    borderCurve: 'continuous',
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 6,
     minHeight: 56,
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.07)',
   },
   fleetItemCardSelected: {
+    borderWidth: 1,
     borderColor: colors.textPrimary,
-    backgroundColor: colors.surface,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : colors.surface,
   },
   fleetCardTop: {
     flexDirection: 'row',
@@ -639,6 +688,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexShrink: 1,
     fontWeight: '700',
     fontFamily: typography.fontMono,
+    fontVariant: ['tabular-nums'],
     fontSize: 13,
   },
   statusDotRow: {
@@ -652,15 +702,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     width: 6,
     height: 6,
     borderRadius: 3,
-  },
-  statusDotRunning: {
-    backgroundColor: '#059669',
-  },
-  statusDotWarning: {
-    backgroundColor: '#d97706',
-  },
-  statusDotStandby: {
-    backgroundColor: '#64748b',
   },
   statusLabel: {
     fontSize: 11.5,

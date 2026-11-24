@@ -1,5 +1,15 @@
-import React from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { AlertTriangle, BookOpen, Focus, Layers, LocateFixed, Minus, Plus } from 'lucide-react-native';
 import { ThemeColors } from '../theme/colors';
@@ -87,6 +97,24 @@ function ClusterButton({
   );
 }
 
+const PULSE_EASE_OUT = Easing.out(Easing.cubic);
+
+const WEB_HUD_GLASS_STYLE: ViewStyle | null =
+  Platform.OS === 'web'
+    ? ({
+        backdropFilter: 'blur(18px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+      } as unknown as ViewStyle)
+    : null;
+
+function formatMapBaseCode(mapCode: string, versionNo: number): string {
+  const trimmed = mapCode.trim();
+  if (!trimmed || !Number.isFinite(versionNo) || versionNo < 0) return mapCode;
+  const suffixPattern = new RegExp(`[-_\\s]*v0*${Math.trunc(versionNo)}$`, 'i');
+  const stripped = trimmed.replace(suffixPattern, '').trim();
+  return stripped || trimmed;
+}
+
 export function MapTopStatusPill({
   mapCode,
   versionNo,
@@ -100,8 +128,50 @@ export function MapTopStatusPill({
   zonesVisible: boolean;
   onPressZonesHidden?: () => void;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (active) setReducedMotion(enabled);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReducedMotion);
+    return () => {
+      active = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (updateMode !== 'live' || reducedMotion) {
+      pulseAnim.setValue(0);
+      return;
+    }
+    pulseAnim.setValue(0);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1800,
+          easing: PULSE_EASE_OUT,
+          useNativeDriver: true,
+        }),
+        Animated.delay(600),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [updateMode, reducedMotion, pulseAnim]);
 
   const dotColor =
     updateMode === 'live'
@@ -121,40 +191,77 @@ export function MapTopStatusPill({
       ? 'Offline'
       : 'Polling · 5s';
 
+  const baseCode = formatMapBaseCode(mapCode, versionNo);
+
   return (
     <View style={styles.topLeftStack} pointerEvents="box-none">
       <View
-        style={[
-          styles.statusPill,
-          isDark && updateMode === 'live' && styles.statusPillLiveDark,
-        ]}
+        style={[styles.statusPill, WEB_HUD_GLASS_STYLE]}
         pointerEvents="none"
       >
-        <View style={[styles.liveHalo, { backgroundColor: `${dotColor}33` }]}>
-          <View style={[styles.liveDot, { backgroundColor: dotColor }]} />
+        <View style={styles.statusGroup}>
+          <View style={styles.beaconSlot}>
+            {updateMode === 'live' && !reducedMotion ? (
+              <Animated.View
+                style={[
+                  styles.pulseRing,
+                  {
+                    backgroundColor: dotColor,
+                    opacity: pulseAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.45, 0],
+                    }),
+                    transform: [
+                      {
+                        scale: pulseAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.55, 1.45],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            ) : (
+              <View style={[styles.pulseRing, { backgroundColor: dotColor, opacity: 0.22 }]} />
+            )}
+            <View style={[styles.liveDot, { backgroundColor: dotColor }]} />
+          </View>
+          <Text
+            variant="caption"
+            color="textPrimary"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.25}
+            style={styles.statusLabel}
+          >
+            {statusText}
+          </Text>
         </View>
-        <Text
-          variant="caption"
-          fontWeight="700"
-          color="textPrimary"
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.25}
-        >
-          {statusText}
-        </Text>
-        <Text variant="caption" color="textMuted" maxFontSizeMultiplier={1.25}>
-          ·
-        </Text>
-        <Text
-          variant="caption"
-          fontWeight="600"
-          color="textSecondary"
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.25}
-          style={styles.mapTagText}
-        >
-          {mapCode} · V{versionNo}
-        </Text>
+
+        <View style={styles.statusDivider} />
+
+        <View style={styles.mapIdentityGroup}>
+          <Text
+            variant="caption"
+            color="textSecondary"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.25}
+            style={styles.mapTagText}
+          >
+            {baseCode}
+          </Text>
+          <View style={styles.versionChip}>
+            <Text
+              variant="caption"
+              color="textSecondary"
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.2}
+              style={styles.versionChipText}
+            >
+              {`v${versionNo}`}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {!zonesVisible ? (
@@ -194,12 +301,13 @@ export function MapToolCluster({
   onLegend: () => void;
   onFollow: () => void;
 }) {
-  const colors = useThemeColors();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const iconSize = horizontal ? 16 : 17;
+  const selectedIconColor = isDark ? '#18191A' : '#FFFFFF';
 
   return (
-    <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
+    <View style={[styles.clusterPill, WEB_HUD_GLASS_STYLE, horizontal && styles.clusterRow]}>
       <ClusterButton label="Map layers and locations" compact={horizontal} onPress={onLayers}>
         <Layers size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
@@ -207,7 +315,7 @@ export function MapToolCluster({
       <ClusterButton label="Map legend" compact={horizontal} selected={legendOpen} onPress={onLegend}>
         <BookOpen
           size={iconSize}
-          color={legendOpen ? colors.primaryText : colors.textPrimary}
+          color={legendOpen ? selectedIconColor : colors.textPrimary}
           strokeWidth={1.85}
         />
       </ClusterButton>
@@ -223,7 +331,7 @@ export function MapToolCluster({
           >
             <LocateFixed
               size={iconSize}
-              color={following ? colors.primaryText : colors.textPrimary}
+              color={following ? selectedIconColor : colors.textPrimary}
               strokeWidth={1.85}
             />
           </ClusterButton>
@@ -249,7 +357,7 @@ export function MapCameraCluster({
   const iconSize = horizontal ? 16 : 17;
 
   return (
-    <View style={[styles.clusterPill, horizontal && styles.clusterRow]}>
+    <View style={[styles.clusterPill, WEB_HUD_GLASS_STYLE, horizontal && styles.clusterRow]}>
       <ClusterButton label="Zoom in" compact={horizontal} disabled={zoom >= 8} onPress={() => onZoom(2)}>
         <Plus size={iconSize} color={colors.textPrimary} strokeWidth={1.85} />
       </ClusterButton>
@@ -324,7 +432,7 @@ export function MapOrientationBox({
     value !== null && Number.isFinite(value) ? `${value.toFixed(2)} m` : '--';
 
   return (
-    <View style={[styles.orientBox, compact && styles.orientBoxCompact]}>
+    <View style={[styles.orientBox, WEB_HUD_GLASS_STYLE, compact && styles.orientBoxCompact]}>
       <View style={styles.reticleWrap}>
         <Text variant="caption" maxFontSizeMultiplier={1.15} style={styles.orientDeg}>
           0°
@@ -391,7 +499,7 @@ export function MapOrientationBox({
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     control: {
       width: 48,
@@ -399,11 +507,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 12,
-      backgroundColor: colors.mapHudBg,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
     },
-    selected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+    selected: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(18, 19, 23, 0.08)',
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.24)' : 'rgba(18, 19, 23, 0.18)',
+    },
     pressed: { opacity: 0.78 },
     pressedScale: { opacity: 0.85, transform: [{ scale: 0.94 }] },
     disabled: { opacity: 0.36 },
@@ -416,34 +527,80 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     statusPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 8,
+      height: 36,
       maxWidth: '100%',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
+      paddingLeft: 11,
+      paddingRight: 6,
       borderRadius: 999,
-      backgroundColor: colors.mapHudBg,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.82)' : 'rgba(255, 255, 255, 0.86)',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       ...shadows.sm,
     },
-    statusPillLiveDark: {
-      backgroundColor: 'rgba(13, 30, 22, 0.90)',
-      borderColor: 'rgba(69, 189, 98, 0.58)',
+    statusGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
-    liveHalo: {
-      width: 13,
-      height: 13,
-      borderRadius: 6.5,
+    beaconSlot: {
+      width: 14,
+      height: 14,
       alignItems: 'center',
       justifyContent: 'center',
+      position: 'relative',
+    },
+    pulseRing: {
+      position: 'absolute',
+      width: 12,
+      height: 12,
+      borderRadius: 6,
     },
     liveDot: {
       width: 6.5,
       height: 6.5,
       borderRadius: 3.25,
     },
+    statusLabel: {
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+    },
+    statusDivider: {
+      width: 1,
+      height: 12,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(18, 19, 23, 0.11)',
+    },
+    mapIdentityGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexShrink: 1,
+      minWidth: 0,
+    },
     mapTagText: {
       flexShrink: 1,
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: '600',
+      fontFamily: typography.fontMono,
+      letterSpacing: 0.15,
+    },
+    versionChip: {
+      height: 22,
+      paddingHorizontal: 7,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.06)',
+    },
+    versionChipText: {
+      fontSize: 10.5,
+      lineHeight: 13,
+      fontWeight: '600',
+      fontFamily: typography.fontMono,
+      fontVariant: ['tabular-nums'],
     },
     zonesWarningChip: {
       flexDirection: 'row',
@@ -461,9 +618,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     clusterPill: {
       borderRadius: 23,
       padding: 3,
-      backgroundColor: colors.mapHudBg,
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
       alignItems: 'center',
       ...shadows.md,
     },
@@ -484,7 +641,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       borderRadius: 18,
     },
     clusterBtnSelected: {
-      backgroundColor: colors.primaryLight,
+      backgroundColor: isDark ? '#E4E6EB' : '#1C1C1E',
     },
     dividerH: {
       width: 22,
@@ -500,19 +657,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     },
 
     orientBox: {
-      borderRadius: 6,
+      borderRadius: 14,
+      borderCurve: 'continuous',
       borderWidth: 1,
-      borderColor: colors.mapHudBorder,
-      backgroundColor: colors.mapHudBg,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(18, 19, 23, 0.08)',
+      backgroundColor: isDark ? 'rgba(24, 27, 33, 0.84)' : 'rgba(255, 255, 255, 0.88)',
+      paddingHorizontal: 10,
+      paddingVertical: 7,
       minWidth: 84,
       gap: 4,
       ...shadows.sm,
     },
     orientBoxCompact: {
-      paddingHorizontal: 7,
-      paddingVertical: 5,
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
       minWidth: 74,
       gap: 3,
     },

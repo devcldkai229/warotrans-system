@@ -4,6 +4,7 @@ import Svg, { Circle, Defs, Line, Path, Pattern, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../api/navigationApi';
 import { ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
+import type { ThemeShadows } from '../theme/shadows';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { Text } from '../ui';
 import { EndpointTile } from './EndpointGlyph';
@@ -430,7 +431,7 @@ export function MapLegendContent({
       {/* 1. Robots (AMR) */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          ROBOTS (AMR)
+          Robots (AMR)
         </Text>
         <View style={styles.listCard}>
           <View style={styles.flatGrid}>
@@ -462,7 +463,7 @@ export function MapLegendContent({
       {/* 2. Stations & Docks */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          STATIONS & DOCKS
+          Stations & Docks
         </Text>
         <View style={styles.listCard}>
           <View style={styles.flatGrid}>
@@ -494,7 +495,7 @@ export function MapLegendContent({
       {/* 3. Traffic Lanes & Paths */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          TRAFFIC LANES & PATHS
+          Traffic Lanes & Paths
         </Text>
         <View style={styles.listCard}>
           <View style={styles.listRow}>
@@ -548,7 +549,7 @@ export function MapLegendContent({
       {/* 4. Operational Zones */}
       <View style={styles.section}>
         <Text variant="caption" color="textSecondary" style={styles.sectionTitle}>
-          OPERATIONAL ZONES
+          Operational Zones
         </Text>
         <View style={styles.listCard}>
           {orderedZoneTypes.map((type, idx) => {
@@ -563,7 +564,7 @@ export function MapLegendContent({
                     </Text>
                     {onMap ? (
                       <View style={styles.onMapBadge}>
-                        <Text variant="caption" color="primaryText" style={styles.onMapBadgeText}>
+                        <Text variant="caption" color="textSecondary" style={styles.onMapBadgeText}>
                           On Map
                         </Text>
                       </View>
@@ -580,14 +581,15 @@ export function MapLegendContent({
   );
 }
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     root: { gap: 16 },
     section: { gap: 8 },
     sectionTitle: {
-      fontWeight: '700',
-      letterSpacing: 0.6,
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: -0.1,
       color: colors.textSecondary,
     },
     flatGrid: {
@@ -603,11 +605,11 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 9,
     },
     gridCellRowDivider: {
-      borderTopWidth: 1,
+      borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
     },
     gridCellRightCol: {
-      borderLeftWidth: 1,
+      borderLeftWidth: StyleSheet.hairlineWidth,
       borderLeftColor: colors.border,
     },
     miniTileBox: {
@@ -629,6 +631,7 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: radii.lg,
+      borderCurve: 'continuous',
       overflow: 'hidden',
     },
     listRow: {
@@ -652,18 +655,18 @@ const createStyles = (colors: ThemeColors) =>
       gap: 6,
     },
     onMapBadge: {
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      borderRadius: 4,
-      backgroundColor: colors.primaryLight,
+      paddingHorizontal: 7,
+      paddingVertical: 1.5,
+      borderRadius: 999,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(18, 19, 23, 0.07)',
     },
     onMapBadgeText: {
       fontSize: 10,
       lineHeight: 13,
-      fontWeight: '700',
+      fontWeight: '600',
     },
     divider: {
-      height: 1,
+      height: StyleSheet.hairlineWidth,
       backgroundColor: colors.border,
       marginLeft: 14,
     },

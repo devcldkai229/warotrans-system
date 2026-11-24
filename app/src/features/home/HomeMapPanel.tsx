@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { MapPin } from 'lucide-react-native';
 import { getOperatingContext, getMapVersionDetail } from '../../shared/api';
 import { Button, Text } from '../../shared/ui';
-import { colors, ThemeColors } from '../../shared/theme/colors';
+import type { ThemeColors } from '../../shared/theme/colors';
+import type { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { hasMapCalibration } from '../../shared/utils/mapCoordinates';
 import { OperationalMap } from './OperationalMap';
@@ -28,7 +29,7 @@ interface Props {
 }
 
 export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props) {
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const operating = useQuery({ queryKey: ['operating-context'], queryFn: () => getOperatingContext(), staleTime: 0, refetchInterval: 30_000 });
   const active = operating.data?.map;
   const warehouseId = operating.data?.warehouse.id;
@@ -46,7 +47,7 @@ export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props
     {map && !error ? <OperationalMap map={map} fleet={props.fleet || []} updateMode={props.updateMode} selectedRobotId={props.selectedRobotId}
       onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} jobContext={scopedJobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive} /> : <View style={[styles.state, { bottom: bottomInset }]}>
       {loading ? <><ActivityIndicator color={colors.primary} /><Text variant="body">Loading Warehouse Map…</Text></> : <>
-        <View style={styles.icon}><MapPin size={24} color={colors.primaryText} /></View>
+        <View style={styles.icon}><MapPin size={22} color={colors.textSecondary} strokeWidth={1.9} /></View>
         <Text variant="headline" textAlign="center">{error ? 'Map Could Not Be Loaded' : warehouseId ? 'No Published Map' : 'Your Warehouse Map'}</Text>
         <Text variant="body" textAlign="center" color="textSecondary">{error ? error.message : warehouseId
           ? 'The warehouse map will appear here when your admin publishes it.'
@@ -56,7 +57,15 @@ export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props
     </View>}
   </View>;
 }
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = (_colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) => StyleSheet.create({
   state: { position: 'absolute', top: 0, left: 24, right: 24, justifyContent: 'center', alignItems: 'center', gap: 14 },
-  icon: { width: 56, height: 56, borderRadius: 18, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  icon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(18, 19, 23, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
