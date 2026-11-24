@@ -5,7 +5,7 @@ import { Can } from '@/features/auth/RequirePermission'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
-import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
+import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, resumeJob, startJob, type JobSummaryDto } from '@/shared/api/jobs'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
@@ -35,7 +35,7 @@ import { JobSummaryPanel } from './JobSummaryPanel'
 import { detailToView, listItemToView } from './mapTransportRequest'
 import { RequestCloseActions } from './RequestCloseActions'
 import { RequestDetailPanel } from './RequestDetailPanel'
-import { queueAndStart, runAgain } from './runOnRobot'
+import { queueAndStart } from './runOnRobot'
 import { t } from '@/shared/i18n'
 function RequestCard({
 
@@ -86,7 +86,6 @@ function RequestCard({
 }
 
 const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED']
-const TERMINAL_JOB_STATUSES: JobStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
 
 /**
  * Run a request on a robot: SUBMITTED → queue (plan Jobs) → start the Job (backend picks the best free
@@ -117,19 +116,6 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     },
   })
 
-  const again = useMutation({
-    mutationFn: () => runAgain(request.id),
-    onSuccess: async ({ jobId }) => {
-      setError(null)
-      await refresh()
-      navigate(`/monitor/jobs/${jobId}`)
-    },
-    onError: async (err: Error) => {
-      setError(err.message)
-      await refresh()
-    },
-  })
-
   const start = useMutation({
     mutationFn: (jobId: string) => startJob(jobId).then(() => jobId),
     onSuccess: async (jobId) => {
@@ -150,19 +136,11 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onError: (err: Error) => setError(err.message),
   })
 
-  const busy = run.isPending || start.isPending || again.isPending || resume.isPending
+  const busy = run.isPending || start.isPending || resume.isPending
   // Starting, resuming and replaying a Job is job.operate (Staff and Admin); a Technician only looks.
   const mayOperate = useAuth().can(PERMISSIONS.jobOperate)
-  // A Job stopped half-way (robot offline) keeps its containers: resume it, do not replay the request.
-  const jobOpen = jobs.some((job) => !TERMINAL_JOB_STATUSES.includes(job.status))
-  const finished = TERMINAL_REQUEST_STATUSES.includes(request.status) && request.status !== 'CANCELLED' && !jobOpen
   return (
     <>
-      {finished && mayOperate ? (
-        <Button variant="primary" size="sm" disabled={busy} onClick={() => again.mutate()}>
-          <Icon name="refresh" size={14} /> {again.isPending ? t('Starting…') : t('Run again on robot')}
-        </Button>
-      ) : null}
       {request.status === 'SUBMITTED' && jobs.length === 0 && mayOperate ? (
         <Button variant="primary" size="sm" disabled={busy} onClick={() => run.mutate()}>
           <Icon name="bolt" size={14} /> {run.isPending ? t('Starting…') : t('Run on robot')}

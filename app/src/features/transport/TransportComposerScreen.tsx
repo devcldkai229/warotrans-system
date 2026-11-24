@@ -710,8 +710,25 @@ export function TransportComposerScreen() {
               </View>
             </View>;
           })}
-          {staffFields.map(field => <TextField key={field.key} label={field.label || field.key} value={inputs[field.key] ?? ''} onChangeText={value => setInputs(previous => ({ ...previous, [field.key]: value }))}
-            placeholder={field.description ?? undefined} />)}
+          {staffFields.map(field => {
+            const setValue = (value: string) => setInputs(previous => ({ ...previous, [field.key]: value }));
+            // A yes / no question is answered by choosing, never by typing "true".
+            if (field.dataType === 'BOOLEAN') {
+              return <View key={field.key} style={{ gap: 6 }}>
+                <Text variant="bodyMedium" fontWeight="600">{field.label || field.key}{field.required ? ' *' : ''}</Text>
+                {field.description ? <Text variant="caption" color="textSecondary">{field.description}</Text> : null}
+                <SegmentedControl
+                  value={inputs[field.key] ?? ''}
+                  onChange={setValue}
+                  accessibilityLabel={field.label || field.key}
+                  options={[{ label: t('Yes'), value: 'true' }, { label: t('No'), value: 'false' }]}
+                />
+              </View>;
+            }
+            return <TextField key={field.key} label={field.label || field.key} value={inputs[field.key] ?? ''} onChangeText={setValue}
+              keyboardType={field.dataType === 'INTEGER' ? 'number-pad' : field.dataType === 'DECIMAL' ? 'decimal-pad' : 'default'}
+              placeholder={field.description ?? undefined} />;
+          })}
           {canStartJobs ? <Pressable style={styles.startToggle} accessibilityRole="checkbox" accessibilityState={{ checked: startNow }} onPress={() => setStartNow(value => !value)}>
             <View style={[styles.check, startNow && styles.checkOn]}>{startNow ? <Check size={14} color="#fff" strokeWidth={3} /> : null}</View>
             <View style={{ flex: 1 }}>
