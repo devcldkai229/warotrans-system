@@ -2136,7 +2136,9 @@ public sealed partial class JobExecutionEngine(
                 spotRadius = relockCount switch { 0 => YieldSpotMaxMeters, 1 => 2.0, _ => 3.0 };
             }
 
-            var allowSpot = true;
+            // Zone chain: never to a free-floor spot. A spot knows no zones: sim V022 2026-11-24 backed a robot off onto
+            // lane LTR inside the INBOUND/OUTBOUND column, where it then held the column and blocked the other robot.
+            var allowSpot = trafficOptions?.Value.ZoneChainRequested != true;
             var backedOff = await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, loser.Target, winnerId, winnerMove.StepId,
                 winnerMove.Target, cancellationToken, allowSpot, spotRadius);
             if (!backedOff)
@@ -2311,8 +2313,11 @@ public sealed partial class JobExecutionEngine(
         // Best: step aside right here, out of the other robot's way (user, 2026-11-23: a robot at the end of the shelf B
         // lane drove all the way to a queue point to let the other one pass). Endpoints only when no spot close by is free.
         var spot = allowSpot ? await YieldSpotAsync(robot, winner, winnerGoal, others, cancellationToken, spotRadius) : null;
+        // Zone chain: only places a robot may park or queue at (by type), never a borrowed work endpoint.
+        var zoneChainRetreat = trafficOptions?.Value.ZoneChainRequested == true;
         var target = spot is null ? Pick(standAside.Where(e => e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.QUEUE))
-                                    ?? Pick(standAside) ?? Pick(lent) : null;
+                                    ?? Pick(standAside.Where(e => !zoneChainRetreat || e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK))
+                                    ?? (zoneChainRetreat ? null : Pick(lent)) : null;
         EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool)
         {
             var candidates = pool

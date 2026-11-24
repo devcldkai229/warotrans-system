@@ -147,7 +147,6 @@
             "policy": {
                 "kind": "BAY",
                 "queueEndpointCodes": [
-                    "EP-QUEUE-A"
                 ]
             },
             "geometry": {
@@ -190,7 +189,6 @@
             "policy": {
                 "kind": "BAY",
                 "queueEndpointCodes": [
-                    "EP-QUEUE-A"
                 ]
             },
             "geometry": {
@@ -233,8 +231,6 @@
             "policy": {
                 "kind": "BAY",
                 "queueEndpointCodes": [
-                    "EP-QUEUE-A",
-                    "EP-QUEUE-B"
                 ]
             },
             "geometry": {
@@ -271,57 +267,19 @@
             "policy_schema_version": 1
         },
         {
-            "id": "20c50068-bbfd-41ec-a9f5-2452c49b29b7",
-            "code": "ZONE-BAY-INBOUND",
-            "name": "Bay Inbound",
+            "id": "8b66f45f-a574-475c-bb89-152607335d5d",
+            "code": "ZONE-BAY-IO",
+            "name": "Bay IO",
             "policy": {
                 "kind": "BAY",
-                "queueEndpointCodes": [
-                    "EP-QUEUE-B",
-                    "EP-QUEUE-A"
-                ]
-            },
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
+                "holdPoses": [
                     [
-                        [
-                            1.58,
-                            0.3
-                        ],
-                        [
-                            2.66,
-                            0.3
-                        ],
-                        [
-                            2.66,
-                            1.6
-                        ],
-                        [
-                            1.58,
-                            1.6
-                        ],
-                        [
-                            1.58,
-                            0.3
-                        ]
+                        1.30,
+                        -0.81,
+                        0.0
                     ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "SINGLE_OCCUPANCY",
-            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
-            "policy_schema_version": 1
-        },
-        {
-            "id": "cf115cd6-83d9-42ca-9227-f2f3d3c5eae0",
-            "code": "ZONE-BAY-OUTBOUND",
-            "name": "Bay Outbound",
-            "policy": {
-                "kind": "BAY",
+                ],
                 "queueEndpointCodes": [
-                    "EP-QUEUE-A"
                 ]
             },
             "geometry": {
@@ -338,11 +296,11 @@
                         ],
                         [
                             2.66,
-                            -1.1
+                            1.6
                         ],
                         [
                             1.58,
-                            -1.1
+                            1.6
                         ],
                         [
                             1.58,
@@ -512,6 +470,46 @@
             "policy_schema_version": 1
         },
         {
+            "id": "ddf7400a-7045-4ac3-9612-e651e303cce6",
+            "code": "ZONE-SLOT-HOLD-IO",
+            "name": "Slot Hold IO",
+            "policy": {
+                "kind": "SLOT"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.0,
+                            -1.085
+                        ],
+                        [
+                            1.575,
+                            -1.085
+                        ],
+                        [
+                            1.575,
+                            -0.535
+                        ],
+                        [
+                            1.0,
+                            -0.535
+                        ],
+                        [
+                            1.0,
+                            -1.085
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "SINGLE_OCCUPANCY",
+            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
+            "policy_schema_version": 1
+        },
+        {
             "id": "e577156d-e615-481f-a85d-a7cf430c03f7",
             "code": "ZONE-SLOT-INSPECTION",
             "name": "Slot Inspection",
@@ -621,86 +619,6 @@
                         [
                             -0.175,
                             -1.89
-                        ]
-                    ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "SINGLE_OCCUPANCY",
-            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
-            "policy_schema_version": 1
-        },
-        {
-            "id": "010cc23a-227e-42b7-b3c3-e2f71b9aa912",
-            "code": "ZONE-SLOT-QUEUE-A",
-            "name": "Slot Queue A",
-            "policy": {
-                "kind": "SLOT"
-            },
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [
-                            -0.93,
-                            -1.095
-                        ],
-                        [
-                            -0.33,
-                            -1.095
-                        ],
-                        [
-                            -0.33,
-                            -0.545
-                        ],
-                        [
-                            -0.93,
-                            -0.545
-                        ],
-                        [
-                            -0.93,
-                            -1.095
-                        ]
-                    ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "SINGLE_OCCUPANCY",
-            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
-            "policy_schema_version": 1
-        },
-        {
-            "id": "b8e6b830-8eb0-46e8-9375-6f95a4c51624",
-            "code": "ZONE-SLOT-QUEUE-B",
-            "name": "Slot Queue B",
-            "policy": {
-                "kind": "SLOT"
-            },
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [
-                            1.995,
-                            -0.75
-                        ],
-                        [
-                            2.545,
-                            -0.75
-                        ],
-                        [
-                            2.545,
-                            -0.15
-                        ],
-                        [
-                            1.995,
-                            -0.15
-                        ],
-                        [
-                            1.995,
-                            -0.75
                         ]
                     ]
                 ]
@@ -868,46 +786,6 @@
             "policy_schema_version": 1
         },
         {
-            "id": "57530831-ea32-4698-9f21-6017a7a72dc2",
-            "code": "ZONE-TRANSIT-SPINE",
-            "name": "Transit Spine",
-            "policy": {
-                "kind": "TRANSIT"
-            },
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [
-                            1.58,
-                            -1.1
-                        ],
-                        [
-                            2.66,
-                            -1.1
-                        ],
-                        [
-                            2.66,
-                            0.3
-                        ],
-                        [
-                            1.58,
-                            0.3
-                        ],
-                        [
-                            1.58,
-                            -1.1
-                        ]
-                    ]
-                ]
-            },
-            "is_active": true,
-            "max_speed": null,
-            "zone_type": "SINGLE_OCCUPANCY",
-            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
-            "policy_schema_version": 1
-        },
-        {
             "id": "366e800a-215a-4b6e-aac5-1b932be8d8c2",
             "code": "ZONE-YARD",
             "name": "Yard",
@@ -1041,36 +919,6 @@
             "storage_location_code": null
         },
         {
-            "x": -0.632,
-            "y": -0.815,
-            "id": "c761feae-efb2-4428-8ddc-f9952f489f4d",
-            "yaw": 0,
-            "code": "EP-QUEUE-A",
-            "name": "Queue A",
-            "is_enabled": true,
-            "endpoint_type": "QUEUE",
-            "yaw_tolerance": 0.0873,
-            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
-            "position_tolerance": 0.05,
-            "source_endpoint_id": "9576b759-016b-4e1b-b827-f54fa532cb9b",
-            "storage_location_code": null
-        },
-        {
-            "x": 2.268,
-            "y": -0.45,
-            "id": "8c06d61e-6654-489e-af82-02ddedb7adca",
-            "yaw": 1.5707963267948966,
-            "code": "EP-QUEUE-B",
-            "name": "Queue B",
-            "is_enabled": true,
-            "endpoint_type": "QUEUE",
-            "yaw_tolerance": 0.08726646259971647,
-            "map_version_id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
-            "position_tolerance": 0.05,
-            "source_endpoint_id": "6513579a-c32f-461f-bd9a-2f5c8965ba60",
-            "storage_location_code": null
-        },
-        {
             "x": -0.602,
             "y": 1.215,
             "id": "116d93bf-3a93-4858-b5c2-290f85d0f88d",
@@ -1131,7 +979,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-24T07:13:10.144851+00:00",
+    "exportedAt": "2026-11-24T12:00:05.491015+00:00",
     "mapVersion": {
         "id": "d987dac5-0acc-4dd4-99af-4095917fbc49",
         "code": "MAP-ONE-V022",

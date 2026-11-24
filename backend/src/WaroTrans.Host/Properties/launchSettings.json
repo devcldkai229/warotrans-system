@@ -77,7 +77,7 @@
         "Traffic__RobotHomeEndpoints__RBT-002": "EP-PARKING-B",
         "FleetIdle__AutoReturnToPark": "true",
         "FleetIdle__IdleSeconds": "8",
-        "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-A",
+        "FleetIdle__FallbackEndpointCodes": "",
         "Logging__LogLevel__Default": "Information",
         "Logging__LogLevel__Microsoft.EntityFrameworkCore": "Warning",
         "Traffic__SemanticResourceModel": "ZoneChain"

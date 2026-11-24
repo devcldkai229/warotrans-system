@@ -31,7 +31,12 @@ public sealed record TrafficZone(
     /// <summary>Where a robot sent into this zone waits while another robot is in it, in order of preference.</summary>
     ImmutableArray<string> QueueEndpointCodes,
     /// <summary>The endpoints inside the zone (informative; membership is geometric).</summary>
-    ImmutableArray<string> EndpointCodes)
+    ImmutableArray<string> EndpointCodes,
+    /// <summary>
+    /// Where a robot waits for this zone on the lane leading into it (x, y, yaw; no endpoint): MAP-ONE-V022's right
+    /// column (INBOUND + corridor + OUTBOUND, one robot) is waited for on lane LTR, before its edge.
+    /// </summary>
+    ImmutableArray<(double X, double Y, double Yaw)> HoldPoses = default)
 {
     /// <summary>A robot may stand still here: a bay it works at or a stop slot.</summary>
     public bool IsStop => Kind is TrafficZoneKind.Bay or TrafficZoneKind.Slot;
@@ -173,13 +178,21 @@ public static class TrafficZones
 
                 if (pts.Count >= 3)
                 {
-                    list.Add(new TrafficZone(code, kind, pts.ToImmutableArray(), queues, Strings(z, "endpointCodes")));
+                    list.Add(new TrafficZone(code, kind, pts.ToImmutableArray(), queues, Strings(z, "endpointCodes"), Poses(z, "holdPoses")));
                 }
             }
         }
 
         return list.ToImmutableArray();
     }
+
+    private static ImmutableArray<(double X, double Y, double Yaw)> Poses(JsonElement z, string name) =>
+        z.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Array
+            ? el.EnumerateArray()
+                .Where(p => p.ValueKind == JsonValueKind.Array && p.GetArrayLength() >= 2)
+                .Select(p => (p[0].GetDouble(), p[1].GetDouble(), p.GetArrayLength() >= 3 ? p[2].GetDouble() : 0.0))
+                .ToImmutableArray()
+            : [];
 
     private static ImmutableArray<string> Strings(JsonElement z, string name) =>
         z.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Array

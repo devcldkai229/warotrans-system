@@ -29,6 +29,9 @@ public sealed partial class JobExecutionEngine
     /// <summary>A waiting place closer than this to the bay robot's plan out is in its way (both bodies plus a margin).</summary>
     private const double OccupantWayClearanceMeters = 0.55;
 
+    /// <summary>Arrival tolerance of a hold pose on a lane: well below its distance from the zone edge.</summary>
+    private const double HoldPoseToleranceMeters = 0.10;
+
     private sealed record ZoneApproachDecision(
         /// <summary>Where to drive now: the goal itself, a queue point, a stop slot; null = stay and wait.</summary>
         EndpointPoseSnapshot? DriveTo,
@@ -71,6 +74,14 @@ public sealed partial class JobExecutionEngine
             .Where(e => e is not null)
             .Select(e => e!)
             .ToList();
+        // Waiting poses on the lane into the zone (no endpoint): a robot waiting for the right column stands on lane LTR
+        // before its edge. Driven to as a spot (Id empty) and recognised by its code.
+        if (!bay.HoldPoses.IsDefaultOrEmpty)
+        {
+            queues.AddRange(bay.HoldPoses.Select((h, i) => new EndpointPoseWithType(
+                Guid.Empty, $"HOLD:{bay.Code}:{i + 1}", $"Hold {bay.Code} {i + 1}", Navigation.Enums.EndpointType.QUEUE,
+                true, h.X, h.Y, HoldPoseToleranceMeters, h.Yaw)));
+        }
 
         // The robot in the bay waits for THIS one (traffic: its way out runs through where this one stands): this spot
         // is in the way, whatever the map says. Sim V022 2026-11-24: R1 waited at EP-QUEUE-B for INBOUND, R2's way out
@@ -87,6 +98,19 @@ public sealed partial class JobExecutionEngine
         var occupantPath = occupantLeaving && !occupantView!.ProposedPath.IsDefaultOrEmpty ? occupantView.ProposedPath : [];
         bool OnItsWay(double x, double y) => occupantPath.Any(p => Dist(p.X, p.Y, x, y) < OccupantWayClearanceMeters);
         var inTheWay = (occupantLeaving && occupantView!.BlockingOwner == robot.Id) || OnItsWay(robot.PoseX, robot.PoseY);
+
+        // Swap: the robot in the bay this one wants waits (engine zone wait) for the zone THIS one stands in. Each stood
+        // on the other's goal and both waited for good (sim V022 2026-11-24: R1 at INBOUND for bay A, R2 at bay A for
+        // the INBOUND/OUTBOUND column). The one that started waiting later gives way, decided once.
+        var standingZone = TrafficZones.ZoneAt(policy.TrafficZones, robot.PoseX, robot.PoseY);
+        if (!inTheWay && busy.Value.Robot is { } other && standingZone is not null && standingZone.Code != bay.Code
+            && await WaitsForZoneSinceAsync(job, other, ZoneQueuePrefix + standingZone.Code, cancellationToken) is { } theirSince
+            && (since > theirSince || (since == theirSince && robot.Id.CompareTo(other) > 0)))
+        {
+            inTheWay = true;
+            logger.LogInformation("Robot {Robot} and the robot in {Bay} each stand where the other must go: {Robot} gives way",
+                robot.Code, bay.Code, robot.Code);
+        }
         bool StandsAt(EndpointPoseWithType e) =>
             Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= Math.Max(QueueOccupiedRadiusMeters, e.PositionTolerance);
 
@@ -94,12 +118,22 @@ public sealed partial class JobExecutionEngine
         // (unless it is in the way out). Never drive back and forth between two waiting places.
         var slotCodesHere = policy.TrafficZones.Where(z => z.Kind == TrafficZoneKind.Slot).SelectMany(z => z.EndpointCodes)
             .ToHashSet(StringComparer.Ordinal);
-        foreach (var q in queues.Concat(endpoints.Where(e => e.IsEnabled && slotCodesHere.Contains(e.Code))))
+        // Only places a robot may park or queue at (PARK / QUEUE type), never a work point such as INSPECTION or CHARGE.
+        foreach (var q in queues.Concat(endpoints.Where(e => e.IsEnabled && slotCodesHere.Contains(e.Code) && IsParkOrQueue(e))))
         {
             if (StandsAt(q) && !inTheWay)
             {
                 return new ZoneApproachDecision(null, zoneKey, since, busy.Value.Reason, busy.Value.Robot);
             }
+        }
+
+        // Standing at another stop (the bay it just worked at, a slot) out of the bay robot's way: wait right here. Driving
+        // to a queue point then crossed the very robot it waited for (sim V022, relocations C-1 → A-2 and A-1 → B: 16
+        // DEADLOCK_RISK and a back-off). Least motion first; a robot that needs this spot shows up as "in the way".
+        var standingIn = TrafficZones.ZoneAt(policy.TrafficZones, robot.PoseX, robot.PoseY);
+        if (standingIn is { IsStop: true } && standingIn.Code != bay.Code && !inTheWay)
+        {
+            return new ZoneApproachDecision(null, zoneKey, since, busy.Value.Reason, busy.Value.Robot);
         }
 
         // The first free queue point (on its way there already, or not yet): drive there.
@@ -120,7 +154,7 @@ public sealed partial class JobExecutionEngine
         }
 
         var slotCodes = policy.TrafficZones.Where(z => z.Kind == TrafficZoneKind.Slot).SelectMany(z => z.EndpointCodes).ToHashSet(StringComparer.Ordinal);
-        foreach (var slot in endpoints.Where(e => e.IsEnabled && slotCodes.Contains(e.Code) && !StandsAt(e) && !OnItsWay(e.X, e.Y))
+        foreach (var slot in endpoints.Where(e => e.IsEnabled && IsParkOrQueue(e) && !StandsAt(e) && !OnItsWay(e.X, e.Y))
                      .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y)))
         {
             if (await QueuePointFreeAsync(job, robot, slot, policy, cancellationToken))
@@ -133,6 +167,17 @@ public sealed partial class JobExecutionEngine
 
                 return new ZoneApproachDecision(Pose(slot, job.MapVersionId), zoneKey, since, busy.Value.Reason, busy.Value.Robot);
             }
+        }
+
+        // Nowhere to stand aside, and the robot that claimed the bay is only ON ITS WAY there and waits for THIS one:
+        // this one goes first. The other one waits where it stands (a stop: it has not entered yet). Sim V022 2026-11-24:
+        // R1 at PARKING-A headed for bay A had to pass R2 at SHELF-C-1, R2 waited for bay A, every parking / queue place
+        // lay on R1's way, and both stood still.
+        if (inTheWay && busy.Value.Reason.Contains("is on its way into", StringComparison.Ordinal))
+        {
+            logger.LogInformation("Robot {Robot} has nowhere to stand aside for the robot heading into {Bay} and blocks it: it goes first",
+                robot.Code, bay.Code);
+            return new ZoneApproachDecision(goal, null, null, "goes first", null);
         }
 
         return new ZoneApproachDecision(null, zoneKey, since, busy.Value.Reason, busy.Value.Robot);
@@ -222,6 +267,33 @@ public sealed partial class JobExecutionEngine
 
         return (passed, reason);
     }
+
+    /// <summary>When the given robot's open MOVE (another Job) started waiting for this zone; null when it does not.</summary>
+    private async Task<DateTimeOffset?> WaitsForZoneSinceAsync(Job job, Guid robotId, string zoneKey, CancellationToken cancellationToken)
+    {
+        var waits = await db.JobSteps.AsNoTracking()
+            .Where(s => s.StepType == StepType.MOVE
+                        && (s.Status == JobStepStatus.WAITING || s.Status == JobStepStatus.EXECUTING)
+                        && s.JobTask.JobId != job.Id
+                        && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => new { s.OutputValues, s.ResolvedInputs })
+            .ToListAsync(cancellationToken);
+        foreach (var w in waits)
+        {
+            if (w.ResolvedInputs.TryGetValue("robotId", out var r) && r.ValueKind == JsonValueKind.String && r.GetGuid() == robotId
+                && w.OutputValues.TryGetValue(AreaQueueZoneKey, out var z) && z.ValueKind == JsonValueKind.String && z.GetString() == zoneKey
+                && w.OutputValues.TryGetValue(AreaWaitSinceKey, out var since))
+            {
+                return since.GetDateTimeOffset();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>A place a robot may wait at by its type: parking or queue (no code list, so a new map needs no setting).</summary>
+    private static bool IsParkOrQueue(EndpointPoseWithType e) =>
+        e.EndpointType is Navigation.Enums.EndpointType.PARK or Navigation.Enums.EndpointType.QUEUE;
 
     private static EndpointPoseSnapshot Pose(EndpointPoseWithType e, Guid mapVersionId) =>
         new(e.Id, mapVersionId, e.Code, e.X, e.Y, e.Yaw ?? 0, e.IsEnabled, e.PositionTolerance);

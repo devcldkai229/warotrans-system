@@ -74,6 +74,17 @@ public static class ZonePolicyValidator
                         "queueEndpointCodes must be a list of endpoint codes (EP-...).", "zone_policy_invalid");
                 }
 
+                // Waiting poses on the lane into the zone ([x, y] or [x, y, yaw] each, map frame).
+                if (root.TryGetProperty("holdPoses", out var holds)
+                    && (holds.ValueKind != JsonValueKind.Array
+                        || holds.EnumerateArray().Any(h => h.ValueKind != JsonValueKind.Array
+                                                           || h.GetArrayLength() is < 2 or > 3
+                                                           || h.EnumerateArray().Any(v => v.ValueKind != JsonValueKind.Number))))
+                {
+                    throw new DomainValidationException(
+                        "holdPoses must be a list of [x, y] or [x, y, yaw] numbers.", "zone_policy_invalid");
+                }
+
                 break;
 
             case ZoneType.KEEP_OUT:
