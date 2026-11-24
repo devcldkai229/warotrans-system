@@ -1,19 +1,21 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
-import { shownRobotStatus } from './robotStatus'
 import type { MapVersionDto } from '@/shared/api/navigation'
-import type { MapBounds } from '@/shared/lib/mapView'
-import { humanize } from '@/shared/lib/format'
-import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
-import { findEndpointByName } from '@/shared/map/scene'
-import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
-import { summarizeTrafficWait, useTrafficOverlay } from './useTrafficOverlay'
-import { CostmapToggles } from './CostmapToggles'
-import { useCostmapOverlay } from './useCostmapOverlay'
-import { RobotPreviewCard } from './RobotPreviewCard'
 import { t } from '@/shared/i18n'
-interface FleetMapProps {
+import { cx } from '@/shared/lib/cx'
+import type { MapBounds } from '@/shared/lib/mapView'
+import { formatTrafficAlertReason } from '@/shared/map/ottoArchitecture'
+import { findEndpointByName } from '@/shared/map/scene'
+import { WarehouseMap, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
+import { FleetMapTopBar } from './FleetMapTopBar'
+import { FleetMapTools } from './FleetMapTools'
+import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
+import { RobotPreviewCard } from './RobotPreviewCard'
+import { shownRobotStatus } from './robotStatus'
+import { useCostmapOverlay } from './useCostmapOverlay'
+import { summarizeTrafficWait, useTrafficOverlay } from './useTrafficOverlay'
 
+interface FleetMapProps {
   robots: RobotView[]
   selectedCode: string | null
   onSelect: (code: string) => void
@@ -33,13 +35,20 @@ interface FleetMapProps {
   mapVersion?: MapVersionDto | null
 }
 
+interface FleetTrafficAlert {
+  robotCode: string
+  tone: 'danger' | 'warn'
+  title: string
+  detail: string
+}
+
 /** "Rack A-12 → Dock 3" → the two Endpoints it names, when both exist on the map. */
 function endpointsOfRoute(routeLabel: string | undefined, endpoints: Endpoint[]) {
   const [from, to] = (routeLabel ?? '').split('→').map((part) => findEndpointByName(part, endpoints))
   return from && to ? { from, to } : null
 }
 
-/** The fleet on the shared map: Robots by status, Zone/Edge occupancy, and where each active job is heading. */
+/** The fleet on the shared map: OTTO floor plan architecture, unified HUD, live robots, and traffic strip. */
 export function FleetMap({
   robots,
   selectedCode,
@@ -58,16 +67,12 @@ export function FleetMap({
   const alignDebug = isMapAlignDebugEnabled()
   const { snap, overlay: trafficOverlay } = useTrafficOverlay(robots, enableTrafficOverlay)
   const costmap = useCostmapOverlay(snap, robots, enableTrafficOverlay)
-  // The map version the Fleet page is showing; a draft or archived one is said so, since robots run on the published map.
-  const mapLabel = mapVersion
-    ? `${mapVersion.code} · v${mapVersion.versionNo}${mapVersion.status === 'PUBLISHED' ? '' : ` · ${humanize(String(mapVersion.status))}`}`
-    : t('No map selected')
+  const [alertsExpanded, setAlertsExpanded] = useState(false)
 
   const mapRobots = useMemo<MapRobot[]>(
     () =>
       robots.map((robot) => ({
         code: robot.code,
-        // A robot that stopped reporting is drawn grey (Offline) at the last place it reported.
         status: shownRobotStatus(robot),
         x: robot.poseX,
         y: robot.poseY,
@@ -97,61 +102,75 @@ export function FleetMap({
       }))
     : []
 
-  // A Robot stopped in a Zone another Robot holds: say who holds it and who is queued (TrafficCoordinator, rules/05).
-  const callouts: MapCallout[] = [
-    ...robots.flatMap((robot) => {
+  const trafficAlerts = useMemo<FleetTrafficAlert[]>(() => {
+    const byCode = new Map<string, FleetTrafficAlert>()
+
+    const upsert = (item: FleetTrafficAlert) => {
+      const existing = byCode.get(item.robotCode)
+      if (!existing || (existing.tone === 'warn' && item.tone === 'danger')) {
+        byCode.set(item.robotCode, item)
+      }
+    }
+
+    for (const r of snap?.robots ?? []) {
+      if (!r.quarantineReason) continue
+      const robot = robots.find((x) => x.id === r.robotId)
+      if (!robot) continue
+      upsert({
+        robotCode: robot.code,
+        tone: 'danger',
+        title: t('{code} quarantined', { code: robot.code }),
+        detail: formatTrafficAlertReason(r.quarantineReason, robots),
+      })
+    }
+
+    for (const robot of robots) {
       const zone = robot.telemetry?.zone
-      if (!zone?.heldByRobotCode) return []
-      return [
-        {
-          x: robot.poseX,
-          y: robot.poseY,
-          tone: 'danger' as const,
-          lines: [t('{code} waiting at {zone}', { code: robot.code, zone: zone.name }), t('held by {heldByRobotCode}, queue +{value}', { heldByRobotCode: zone.heldByRobotCode, value: zone.queueAfter ?? 0 })],
-        },
-      ]
-    }),
-    ...Array.from(new Set((snap?.waits ?? []).map((wait) => wait.robotId))).flatMap((robotId) => {
+      if (!zone?.heldByRobotCode) continue
+      upsert({
+        robotCode: robot.code,
+        tone: 'danger',
+        title: t('{code} waiting at {zone}', { code: robot.code, zone: zone.name }),
+        detail: t('held by {heldByRobotCode}, queue +{value}', {
+          heldByRobotCode: zone.heldByRobotCode,
+          value: zone.queueAfter ?? 0,
+        }),
+      })
+    }
+
+    const waitRobotIds = Array.from(new Set((snap?.waits ?? []).map((wait) => wait.robotId)))
+    for (const robotId of waitRobotIds) {
       const robot = robots.find((r) => r.id === robotId)
       const wait = robot && snap ? summarizeTrafficWait(robotId, snap, robots) : null
-      if (!robot || !wait) return []
+      if (!robot || !wait) continue
       const what = wait.resourceId.replace(/^zone:/, '')
       const more = wait.more > 0 ? ` (+${wait.more})` : ''
-      return [
-        {
-          x: robot.poseX,
-          y: robot.poseY,
-          tone: 'warn' as const,
-          lines: [
-            wait.blockerCode
-              ? t('{code} waiting for {blocker}', { code: robot.code, blocker: wait.blockerCode })
-              : t('{code} traffic wait', { code: robot.code }),
-            `${wait.reason} @ ${what}${more}`,
-          ],
-        },
-      ]
-    }),
-    ...(snap?.robots ?? [])
-      .filter((r) => r.quarantineReason)
-      .flatMap((r) => {
-        const robot = robots.find((x) => x.id === r.robotId)
-        if (!robot || r.x == null || r.y == null) return []
-        return [
-          {
-            x: r.x,
-            y: r.y,
-            tone: 'danger' as const,
-            lines: [t('{code} quarantined', { code: robot.code }), r.quarantineReason!],
-          },
-        ]
-      }),
-  ]
+      upsert({
+        robotCode: robot.code,
+        tone: 'warn',
+        title: wait.blockerCode
+          ? t('{code} waiting for {blocker}', { code: robot.code, blocker: wait.blockerCode })
+          : t('{code} traffic wait', { code: robot.code }),
+        detail: `${formatTrafficAlertReason(wait.reason, robots)} @ ${what}${more}`,
+      })
+    }
+
+    return Array.from(byCode.values())
+  }, [snap, robots])
+
+  const alertByRobotCode = useMemo(
+    () => new Map(trafficAlerts.map((item) => [item.robotCode, item])),
+    [trafficAlerts],
+  )
 
   const previewed = robots.find((robot) => robot.code === previewCode) ?? null
+  const primaryAlert = trafficAlerts[0] ?? null
+  const visibleAlerts = alertsExpanded && trafficAlerts.length > 1 ? trafficAlerts : primaryAlert ? [primaryAlert] : []
 
   return (
     <>
       <WarehouseMap
+        appearance="otto"
         yawUnit="rad"
         zones={zones}
         edges={edges}
@@ -159,7 +178,12 @@ export function FleetMap({
         bounds={bounds}
         occupancyImageUrl={occupancyImageUrl}
         robots={mapRobots}
-        layers={{ occupancy: costmap.view.traffic, zones: costmap.view.zones, edges: costmap.view.lanes }}
+        layers={{
+          occupancy: costmap.view.traffic,
+          zones: costmap.view.zones,
+          edges: costmap.view.lanes,
+          legend: false,
+        }}
         labels="all"
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
@@ -167,20 +191,79 @@ export function FleetMap({
         trafficOverlay={costmap.view.traffic ? trafficOverlay : null}
         costmapImages={costmap.costmapImages}
         cellSets={costmap.cellSets}
-        callouts={callouts}
+        callouts={[]}
         selected={{ robotCode: detail ? (selectedCode ?? undefined) : (previewCode ?? undefined) }}
         onRobotClick={(code) => (detail ? onSelect(code) : onPreview?.(previewCode === code ? null : code))}
         onBackgroundClick={() => onPreview?.(null)}
-      >
-        {!detail && previewed ? (
-          <RobotPreviewCard robot={previewed} onClose={() => onPreview?.(null)} onOpenDetails={() => onSelect(previewed.code)} />
-        ) : null}
-      </WarehouseMap>
-      <div className="absolute top-3 right-3 z-5 flex h-8 items-center gap-2 rounded-full bg-surface/95 px-3.5 text-xs text-ink-2 shadow-float">
-        <span className={`size-1.5 rounded-full ${snap ? 'bg-green' : 'bg-amber'}`} />
-        {snap ? t('{mapLabel} · traffic e{epoch}', { mapLabel, epoch: snap.epoch }) : mapLabel}
-      </div>
-      {enableTrafficOverlay ? <CostmapToggles costmap={costmap} /> : null}
+        renderOverlay={(effectiveBounds) =>
+          !detail && previewed ? (
+            <RobotPreviewCard
+              robot={previewed}
+              bounds={effectiveBounds}
+              alertMessage={alertByRobotCode.get(previewed.code)?.detail ?? null}
+              onClose={() => onPreview?.(null)}
+              onOpenDetails={() => onSelect(previewed.code)}
+            />
+          ) : null
+        }
+      />
+
+      <FleetMapTopBar
+        mapVersion={mapVersion}
+        trafficLive={Boolean(snap)}
+        trafficEpoch={snap?.epoch ?? null}
+      />
+
+      {enableTrafficOverlay ? (
+        <FleetMapTools
+          costmap={costmap}
+          robots={mapRobots}
+          zones={zones}
+          edges={edges}
+          endpoints={endpoints}
+        />
+      ) : null}
+
+      {visibleAlerts.length > 0 ? (
+        <div
+          data-map-ui
+          className="pointer-events-auto absolute bottom-3 left-1/2 z-5 flex w-max max-w-[min(460px,calc(100%-220px))] -translate-x-1/2 flex-col gap-1.5"
+        >
+          {visibleAlerts.map((alert, idx) => (
+            <div
+              key={alert.robotCode}
+              className="flex items-center gap-2 rounded-full border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] py-1.5 pr-2 pl-3 text-xs text-ink shadow-float backdrop-blur-md"
+            >
+              <button
+                type="button"
+                onClick={() => (detail ? onSelect(alert.robotCode) : onPreview?.(alert.robotCode))}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              >
+                <span
+                  className={cx('size-2 shrink-0 rounded-full', alert.tone === 'danger' ? 'bg-red' : 'bg-amber')}
+                  aria-hidden="true"
+                />
+                <span className="shrink-0 font-medium text-ink">{alert.title}</span>
+                <span className="text-muted/70" aria-hidden="true">
+                  ·
+                </span>
+                <span className="min-w-0 truncate text-ink-2">{alert.detail}</span>
+              </button>
+              {idx === visibleAlerts.length - 1 && trafficAlerts.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setAlertsExpanded((v) => !v)}
+                  aria-expanded={alertsExpanded}
+                  className="shrink-0 rounded-full bg-container-high px-2 py-0.5 text-[11px] font-medium text-ink-2 tabular-nums transition-colors hover:text-ink"
+                >
+                  {alertsExpanded ? t('Hide') : `+${trafficAlerts.length - 1}`}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {alignDebug ? (
         <MapAlignDebugOverlay
           robots={robots}

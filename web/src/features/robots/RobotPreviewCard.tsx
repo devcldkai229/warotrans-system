@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { RobotView } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
 import { formatRelativeTime } from '@/shared/lib/format'
-import { poseToPercent } from '@/shared/lib/mapView'
+import { DEFAULT_MAP_BOUNDS, poseToPercent, type MapBounds } from '@/shared/lib/mapView'
 import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
@@ -10,9 +10,11 @@ import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
 import { t } from '@/shared/i18n'
-interface RobotPreviewCardProps {
 
+interface RobotPreviewCardProps {
   robot: RobotView
+  bounds?: MapBounds
+  alertMessage?: string | null
   onClose: () => void
   onOpenDetails: () => void
 }
@@ -31,21 +33,41 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Floating summary anchored to a robot marker; "View details" opens the full Robot Detail panel. */
-export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreviewCardProps) {
-  const anchor = poseToPercent(robot.poseX, robot.poseY)
+export function RobotPreviewCard({
+  robot,
+  bounds = DEFAULT_MAP_BOUNDS,
+  alertMessage,
+  onClose,
+  onOpenDetails,
+}: RobotPreviewCardProps) {
+  const anchor = poseToPercent(robot.poseX, robot.poseY, bounds)
   // Open towards the free side of the map so the card never runs off the edge.
-  const side = parseFloat(anchor.left) > 60 ? 'left' : 'right'
+  const side = parseFloat(anchor.left) > 55 ? 'left' : 'right'
   const vertical = parseFloat(anchor.top) < 30 ? 'down' : parseFloat(anchor.top) > 70 ? 'up' : 'mid'
   const activity = robot.activity
+  const issueBanner = alertMessage?.trim() || robot.errorCode?.trim() || null
 
   return (
     <div
-      className={cx('absolute z-6 w-72 cursor-default rounded-md bg-surface p-4 shadow-float', SIDE[side], VERTICAL[vertical])}
-      style={{ left: anchor.left, top: anchor.top }}
-      role="dialog"
-      aria-label={t('{code} summary', { code: robot.code })}
-      onClick={(event) => event.stopPropagation()}
+      className="absolute z-6"
+      style={{
+        left: anchor.left,
+        top: anchor.top,
+        width: 0,
+        height: 0,
+        transform: 'scale(calc(1 / var(--z, 1)))',
+      }}
     >
+      <div
+        className={cx(
+          'absolute w-72 cursor-default rounded-xl border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] p-4 shadow-float backdrop-blur-md',
+          SIDE[side],
+          VERTICAL[vertical],
+        )}
+        role="dialog"
+        aria-label={t('{code} summary', { code: robot.code })}
+        onClick={(event) => event.stopPropagation()}
+      >
       <header className="flex items-center gap-2">
         <div className="mr-auto min-w-0">
           <strong className="block text-base font-medium">{robot.code}</strong>
@@ -57,8 +79,10 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
         </IconButton>
       </header>
 
-      {robot.errorCode?.trim() ? (
-        <p className="mt-3 rounded-sm bg-red-soft px-3 py-2 font-mono text-xs font-medium text-red-ink break-words">{robot.errorCode}</p>
+      {issueBanner ? (
+        <p className="mt-3 rounded-lg bg-red-soft px-3 py-2 text-xs font-medium text-red-ink break-words">
+          {issueBanner}
+        </p>
       ) : null}
 
       <dl className="mt-3">
@@ -91,6 +115,7 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
 
       <Button block className="mt-3" onClick={onOpenDetails}>{t('View details')}{' '}<Icon name="arrowRight" size={14} />
       </Button>
+      </div>
     </div>
   )
 }
