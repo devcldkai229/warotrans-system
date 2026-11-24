@@ -38,6 +38,9 @@ public sealed class SensitiveRouteAuthorizationTests(WaroTransWebApplicationFact
         new("POST", "/api/fleet/robots/{id:guid}/commands/stop", Permissions.RobotStop, true),
         new("POST", "/api/fleet/robots/{id:guid}/commands/resume", Permissions.RobotConfigure, true),
         new("POST", "/api/fleet/robots/{id:guid}/commands/localize", Permissions.RobotLocalize, true),
+        new("POST", "/api/fleet/robots/{id:guid}/commands/auto-localize", Permissions.RobotLocalize, true),
+        new("GET", "/api/fleet/robots/{id:guid}/auto-localize", Permissions.RobotRead, true),
+        new("GET", "/api/fleet/robots/{id:guid}/costmap", Permissions.RobotRead, true),
         new("GET", "/api/fleet/robots/{id:guid}/stop-state", Permissions.RobotRead, true),
         new("GET", "/api/fleet/robots/{id:guid}/manual/lease", Permissions.RobotRead, true),
         new("POST", "/api/fleet/robots/{id:guid}/manual/lease", Permissions.RobotManualDrive, true),
@@ -57,6 +60,8 @@ public sealed class SensitiveRouteAuthorizationTests(WaroTransWebApplicationFact
         new("GET", "/api/fleet/traffic/snapshot", Permissions.TrafficRead, false),
         new("GET", "/api/fleet/traffic/diagnostics", Permissions.TrafficRead, false),
         new("GET", "/api/fleet/traffic/ops-log", Permissions.TrafficRead, false),
+        new("GET", "/api/fleet/traffic/semantic-layers", Permissions.TrafficRead, false),
+        new("GET", "/api/fleet/traffic/static-costmap", Permissions.TrafficRead, false),
         new("POST", "/api/fleet/traffic/robots/{robotId:guid}/reconcile", Permissions.TrafficManage, true),
         new("POST", "/api/fleet/traffic/robots/{robotId:guid}/release-after-clearance", Permissions.TrafficManage, true),
     ];
