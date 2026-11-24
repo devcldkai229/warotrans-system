@@ -51,6 +51,9 @@ export interface Issue {
   containerOutcomes?: ContainerOutcome[]
   /** What resolving it did with the package, once resolved. */
   containerOutcome?: ContainerOutcome | null
+  /** Jira ticket made from this issue (code faults found by the AI investigation). */
+  jiraKey?: string | null
+  jiraUrl?: string | null
 }
 
 /** A container as Warehouse holds it (GET issue detail). */

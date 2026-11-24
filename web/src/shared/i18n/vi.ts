@@ -12,6 +12,7 @@ import { vi_requests } from './vi/requests'
 import { vi_roles } from './vi/roles'
 import { vi_shell } from './vi/shell'
 import { vi_technical } from './vi/technical'
+import { vi_lab } from './vi/lab'
 import { vi_workflows } from './vi/workflows'
 
 export const vi: Record<string, string> = {
@@ -28,5 +29,6 @@ export const vi: Record<string, string> = {
   ...vi_roles,
   ...vi_shell,
   ...vi_technical,
+  ...vi_lab,
   ...vi_workflows,
 }

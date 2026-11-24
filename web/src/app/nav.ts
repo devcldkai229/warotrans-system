@@ -1,4 +1,5 @@
 import { AI_ENABLED } from '@/shared/api/ai'
+import { LAB_ENABLED } from '@/shared/api/lab'
 import { PERMISSIONS, type Permission } from '@/shared/auth/permissions'
 import { t } from '@/shared/i18n'
 
@@ -57,6 +58,7 @@ export const TECH_NAV: NavGroup[] = [
   { label: t('Robot history'), to: '/tech/robot-history', requires: PERMISSIONS.robotRead },
   { label: t('Transport journals'), to: '/tech/journals', requires: PERMISSIONS.evidenceRead },
   ...(AI_ENABLED ? [{ label: t('AI incidents'), to: '/tech/incidents', requires: PERMISSIONS.evidenceRead }] : []),
+  ...(LAB_ENABLED ? [{ label: t('Fault Injection Lab'), to: '/tech/lab', requires: PERMISSIONS.labOperate }] : []),
   { label: t('Audit log'), to: '/tech/audit', requires: PERMISSIONS.auditRead },
   { label: t('Notifications'), to: '/tech/notifications', requires: PERMISSIONS.notificationRead },
 ]
