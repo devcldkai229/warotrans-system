@@ -99,6 +99,12 @@ public static class RobotMqttTopics
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/traffic_plan";
 
     /// <summary>Backend → robot: why the latest traffic_plan was not granted.</summary>
+    /// <summary>Fault Injection Lab (test robots only, Lab:Enabled): inject / clear one fault on the robot.</summary>
+    public const string LabSuffix = "lab";
+
+    public static string Lab(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/lab";
+
     public static string TrafficPlanReject(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/traffic_plan_reject";
 

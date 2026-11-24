@@ -51,17 +51,32 @@ public static class TransportEventTypes
     public const string TrafficWaitChanged = "traffic.wait-changed";
     public const string TrafficDecision = "traffic.decision";
 
+    /// <summary>Fault Injection Lab: a deliberate fault started / ended (request journal, or the robot's open run).</summary>
+    public const string LabFaultInjected = "lab.fault-injected";
+    public const string LabFaultCleared = "lab.fault-cleared";
+
+    /// <summary>The backend process started while the trip was unfinished.</summary>
+    public const string HostStarted = "host.started";
+
+    /// <summary>Staff scanned another container's label at a handover (refused).</summary>
+    public const string HandoverScanRejected = "staff.scan-rejected";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         TransportRequestProgressed, TransportRequestClosed, JobStatusChanged, JobStepStatusChanged,
         JobContainerStatusChanged, JobRobotAssignmentChanged, RobotCommandLifecycle, RobotConnectivityChanged,
-        RobotErrorReported, RobotBatteryLow, RobotGatewayRestarted, TrafficWaitChanged, TrafficDecision
+        RobotErrorReported, RobotBatteryLow, RobotGatewayRestarted, TrafficWaitChanged, TrafficDecision,
+        LabFaultInjected, LabFaultCleared, HostStarted, HandoverScanRejected
     };
 
     /// <summary>About one robot, not one trip: filed under the robot's run open at that time.</summary>
     public static bool IsRobotScoped(string eventType) =>
         eventType is RobotConnectivityChanged or RobotErrorReported or RobotBatteryLow or RobotGatewayRestarted
             or TrafficWaitChanged or TrafficDecision;
+
+    /// <summary>Filed under the request when it names one, else under the robot's open run (needs the robot then).</summary>
+    public static bool IsRequestOrRobotScoped(string eventType) =>
+        eventType is LabFaultInjected or LabFaultCleared;
 }
 
 /// <summary>What the monolith's reconciliation API (GET /api/evidence-bridge/transport-requests/{id}/runs) returns.</summary>

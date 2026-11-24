@@ -32,6 +32,22 @@ public sealed record JobStatusChanged(
 }
 
 /// <summary>A JobStep changed status (EXECUTING, WAITING, COMPLETED, FAILED …). Consumed by realtime UI.</summary>
+/// <summary>
+/// Staff scanned a label that is not the container of the handover step: the confirmation was refused. Published even
+/// though the confirmation rolls back, so the investigation sees the wrong scan.
+/// </summary>
+public sealed record HandoverScanRejected(
+    Guid JobId,
+    Guid JobStepId,
+    Guid? RobotId,
+    Guid ExpectedContainerId,
+    string? ExpectedBarcode,
+    string ScannedBarcode) : IIntegrationEvent
+{
+    public Guid EventId { get; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+}
+
 public sealed record JobStepStatusChanged(
     Guid JobId,
     Guid JobTaskId,

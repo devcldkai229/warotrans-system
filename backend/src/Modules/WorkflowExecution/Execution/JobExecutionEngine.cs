@@ -657,7 +657,7 @@ public sealed partial class JobExecutionEngine(
             }
 
             await EnsureNoBlockingHandoverIssuesAsync(job.Id, [expected], cancellationToken);
-            await EnsureScannedBarcodeMatchesAsync(source.ScannedBarcode, expected, cancellationToken);
+            await EnsureScannedBarcodeMatchesAsync(source.ScannedBarcode, expected, cancellationToken, job, step.Id);
             if (type == HandoverType.PICKUP)
             {
                 await EnsureRobotHasRoomAsync(job, cancellationToken);
@@ -1319,7 +1319,8 @@ public sealed partial class JobExecutionEngine(
         return value;
     }
 
-    private async Task EnsureScannedBarcodeMatchesAsync(string? scanned, Guid expected, CancellationToken cancellationToken)
+    private async Task EnsureScannedBarcodeMatchesAsync(
+        string? scanned, Guid expected, CancellationToken cancellationToken, Job? job = null, Guid? stepId = null)
     {
         if (string.IsNullOrWhiteSpace(scanned))
         {
@@ -1329,6 +1330,20 @@ public sealed partial class JobExecutionEngine(
         var container = warehouse is null ? null : (await warehouse.GetContainersAsync([expected], cancellationToken)).FirstOrDefault();
         if (container is null || !string.Equals(container.Barcode, scanned.Trim(), StringComparison.OrdinalIgnoreCase))
         {
+            if (job is not null && stepId is { } sid)
+            {
+                // Evidence of the wrong scan: the refusal below rolls the confirmation back, the event stays.
+                try
+                {
+                    await events.PublishAsync(new HandoverScanRejected(job.Id, sid, AssignedRobot(job), expected,
+                        container?.Barcode, scanned.Trim()), cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "Could not publish the rejected scan of job {JobNo}", job.JobNo);
+                }
+            }
+
             throw new DomainValidationException(
                 $"Scanned '{scanned.Trim()}' is not the container of this step.",
                 "handover_barcode_mismatch");

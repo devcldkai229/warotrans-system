@@ -121,4 +121,29 @@ public class TransportEventTests
         Assert.Contains("backs off", c.Message);
         Assert.Contains("waited-for=RBT-001", c.Message);
     }
+
+    [Fact]
+    public void Lab_events_need_a_request_or_a_robot()
+    {
+        Assert.Null(IngestTransportEventsHandler.Problem(Envelope(TransportEventTypes.LabFaultInjected, "IOT-01", request: Guid.NewGuid(), robot: null)));
+        Assert.Null(IngestTransportEventsHandler.Problem(Envelope(TransportEventTypes.LabFaultCleared, "IOT-01")));
+        Assert.Equal("request_or_robot_missing",
+            IngestTransportEventsHandler.Problem(Envelope(TransportEventTypes.LabFaultInjected, "IOT-01", robot: null)));
+        Assert.Equal("transport_request_missing", IngestTransportEventsHandler.Problem(Envelope(TransportEventTypes.HostStarted, "RUNNING")));
+    }
+
+    [Fact]
+    public void New_evidence_events_read_as_one_line()
+    {
+        var lab = EventClassifier.Classify(Envelope(TransportEventTypes.LabFaultInjected, "NAV-01",
+            new { title = "Navigation keeps aborting", ttlSeconds = 300 }, Guid.NewGuid()));
+        Assert.Equal("LAB fault NAV-01 injected on RBT-001: Navigation keeps aborting (300 s)", lab.Message);
+        var scan = EventClassifier.Classify(Envelope(TransportEventTypes.HandoverScanRejected, "MISMATCH",
+            new { scannedBarcode = "CNT-2", expectedBarcode = "CNT-1" }, Guid.NewGuid()));
+        Assert.Equal(EvidenceSeverity.WARNING, scan.Severity);
+        Assert.Contains("CNT-2 (expected CNT-1)", scan.Message);
+        var stale = EventClassifier.Classify(Envelope(TransportEventTypes.RobotCommandLifecycle, "STALE_RESULT",
+            new { type = "NAVIGATE_TO_POSE", outcome = "FAILED" }, Guid.NewGuid()));
+        Assert.Equal(EvidenceSeverity.ERROR, stale.Severity);
+    }
 }

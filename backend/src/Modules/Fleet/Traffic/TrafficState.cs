@@ -129,6 +129,8 @@ public sealed class TrafficState
 
         if (!string.Equals(request.SemanticMapFingerprint, _semantic.SemanticMapFingerprint, StringComparison.Ordinal))
         {
+            // Evidence: which bundle the robot runs and which one the Host bound (a robot on another map never moves).
+            Log($"semantic-reject-fingerprint:{request.RobotId}:robot={request.SemanticMapFingerprint} host={_semantic.SemanticMapFingerprint}");
             return AcquireResult.Reject("FINGERPRINT_MISMATCH");
         }
 
@@ -1513,6 +1515,55 @@ public sealed class TrafficState
         StateVersion++;
         PromoteWaiters(resourceIds);
         Log($"exit:{robotId}:{string.Join(",", resourceIds)}");
+        return TrafficOpResult.Success();
+    }
+
+    /// <summary>Fault Injection Lab (TRA-01): the owner of cells held by a phantom (no robot behind it).</summary>
+    public static readonly Guid LabPhantomOwner = new("1ab00000-0000-4000-8000-00000000f001");
+
+    /// <summary>
+    /// Fault Injection Lab only (Lab:Enabled): a phantom holds every cell of a disc, as a reservation nobody releases
+    /// would; robots whose plan crosses it wait with Capacity behind the phantom. <paramref name="hold"/> false lets go
+    /// and wakes the waiters.
+    /// </summary>
+    public TrafficOpResult LabPhantomHold(double x, double y, double radius, bool hold)
+    {
+        if (_semantic is null)
+        {
+            return TrafficOpResult.Fail("SEMANTIC_POLICY_UNBOUND");
+        }
+
+        var cells = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.DiscCells(x, y, radius, _semantic.CellSizeMeters, cells);
+        foreach (var cell in cells)
+        {
+            if (hold)
+            {
+                if (!_holders.TryGetValue(cell, out var set))
+                {
+                    _holders[cell] = set = [];
+                }
+
+                set.Add(LabPhantomOwner);
+            }
+            else if (_holders.TryGetValue(cell, out var set))
+            {
+                set.Remove(LabPhantomOwner);
+                if (set.Count == 0)
+                {
+                    _holders.Remove(cell);
+                }
+            }
+        }
+
+        StateVersion++;
+        Log(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"lab-phantom-{(hold ? "hold" : "release")}:{LabPhantomOwner}:x={x:F2} y={y:F2} r={radius:F2} cells={cells.Count}"));
+        if (!hold)
+        {
+            PromoteWaiters(cells);
+        }
+
         return TrafficOpResult.Success();
     }
 

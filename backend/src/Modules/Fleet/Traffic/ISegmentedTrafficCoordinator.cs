@@ -74,6 +74,10 @@ public interface ISegmentedTrafficCoordinator
 
     Task<TrafficOpResult> HoldServiceResourceAsync(Guid robotId, string resourceId, CancellationToken ct = default);
 
+    /// <summary>Fault Injection Lab only: a phantom holds (or lets go of) the cells of a disc. Default: unsupported.</summary>
+    Task<TrafficOpResult> LabPhantomHoldAsync(double x, double y, double radius, bool hold, CancellationToken ct = default) =>
+        Task.FromResult(TrafficOpResult.Fail("NOT_SUPPORTED"));
+
     /// <summary>
     /// Releases service holds not in <paramref name="keepResourceIds"/> when the robot pose is physically clear
     /// of those resources (N4). Does not run on safe-stop alone (T11).

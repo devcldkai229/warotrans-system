@@ -55,6 +55,16 @@ internal static class EventClassifier
                 $"{e.RobotCode} battery low ({Str(e.Payload, "batteryPercent")}%)", null, null),
             TransportEventTypes.RobotGatewayRestarted => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.WARNING,
                 $"{e.RobotCode} gateway restarted", null, null),
+            TransportEventTypes.LabFaultInjected => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.WARNING,
+                $"LAB fault {status} injected{(e.RobotCode is null ? "" : $" on {e.RobotCode}")}: {Str(e.Payload, "title")} "
+                + $"({Str(e.Payload, "ttlSeconds")} s)", null, null),
+            TransportEventTypes.LabFaultCleared => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.INFO,
+                $"LAB fault {status} ended ({Str(e.Payload, "outcome")})", null, null),
+            TransportEventTypes.HostStarted => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.WARNING,
+                $"Backend started while trip{job} was {status}", null, null),
+            TransportEventTypes.HandoverScanRejected => new(EvidenceEventCategory.CARGO, EvidenceSeverity.WARNING,
+                $"Wrong label scanned at a handover of{job}: {Str(e.Payload, "scannedBarcode")} "
+                + $"(expected {Str(e.Payload, "expectedBarcode") ?? "?"})", null, null),
             TransportEventTypes.TrafficWaitChanged => Traffic(e),
             TransportEventTypes.TrafficDecision => Decision(e),
             _ => new(EvidenceEventCategory.SYSTEM, EvidenceSeverity.INFO, e.EventType, null, null)
@@ -84,7 +94,7 @@ internal static class EventClassifier
         var error = Str(e.Payload, "errorCode");
         var severity = phase switch
         {
-            "ACK_REJECTED" or "ACK_TIMEOUT" or "OFFLINE_ABORT" => EvidenceSeverity.ERROR,
+            "ACK_REJECTED" or "ACK_TIMEOUT" or "OFFLINE_ABORT" or "STALE_RESULT" => EvidenceSeverity.ERROR,
             "RESULT" when outcome == "FAILED" => EvidenceSeverity.ERROR,
             "RESULT" when outcome == "CANCELED" => EvidenceSeverity.WARNING,
             _ => EvidenceSeverity.INFO
