@@ -529,6 +529,12 @@ public sealed partial class RobotControlService(
         return commandId;
     }
 
+    /// <summary>A control command (not tied to a Job) to a robot, for other features of this module (map building).</summary>
+    internal Task<Guid> SendControlAsync(Robot robot, RobotCommandType type, string wireType, object payload, CancellationToken cancellationToken) =>
+        SendAsync(robot, type, wireType, payload, cancellationToken);
+
+    internal Task<Robot> LoadRobotAsync(Guid robotId, CancellationToken cancellationToken) => LoadAsync(robotId, cancellationToken);
+
     private async Task<Robot> LoadAsync(Guid robotId, CancellationToken cancellationToken) =>
         await db.Robots.FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken)
         ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");

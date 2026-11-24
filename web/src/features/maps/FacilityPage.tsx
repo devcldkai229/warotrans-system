@@ -32,6 +32,9 @@ import { boundsFromMapMeta } from '@/shared/map/mapBounds'
 import { DEFAULT_MAP_BOUNDS } from '@/shared/lib/mapView'
 import { controlClass } from '@/shared/ui/controlClass'
 import { t } from '@/shared/i18n'
+import { listMappingSessions } from '@/shared/api/mapping'
+import { StartMappingDialog } from './mapping/StartMappingDialog'
+import { openMappingSessionsKey } from './mapping/mappingGrid'
 const WAREHOUSE_KEY = 'warotrans.facilityWarehouseId'
 
 /** Map Editor needs pixel size from PGM import; Create-metadata-only leaves width/height = 0. */
@@ -160,6 +163,7 @@ export function FacilityPage() {
   const [pendingYaml, setPendingYaml] = useState<File | null>(null)
   const [pendingPgm, setPendingPgm] = useState<File | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [mappingOpen, setMappingOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState<MetadataFormState>(emptyCreateForm)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -209,6 +213,14 @@ export function FacilityPage() {
   const published = maps.find((m) => m.status === 'PUBLISHED')
   const activeMap = activeMapQuery.data
   const warehouseName = warehouse?.name ?? warehouse?.code ?? t('Warehouse')
+  // Map building sessions still open in this warehouse (a reload, another tab): offer to go back to them.
+  const openMappingQuery = useQuery({
+    queryKey: openMappingSessionsKey(warehouseId ?? ''),
+    queryFn: () => listMappingSessions(warehouseId!),
+    enabled: Boolean(warehouseId),
+    refetchInterval: 10_000,
+  })
+  const openMapping = openMappingQuery.data ?? []
 
   async function invalidateMaps() {
     await Promise.all([
@@ -429,6 +441,12 @@ export function FacilityPage() {
               <p className="mt-2 text-sm text-muted">{t('No active (published) map for this warehouse.')}</p>
             )}
           </div>
+          <div className="flex items-end gap-3">
+          {canWrite ? (
+            <Button variant="primary" onClick={() => setMappingOpen(true)}>
+              <Icon name="map" size={15} /> {t('Build map')}
+            </Button>
+          ) : null}
           <label className="text-sm text-ink-2">{t('Warehouse')}<select
               className={cx(controlClass(), 'mt-1 block min-w-56')}
               value={warehouseId}
@@ -448,7 +466,17 @@ export function FacilityPage() {
               ))}
             </select>
           </label>
+          </div>
         </div>
+
+        {openMapping.map((session) => (
+          <div key={session.id} className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-blue/30 bg-blue-soft/60 px-4 py-3 text-sm">
+            <span>
+              {t('{robot} is building a map ({status}).', { robot: session.robotCode, status: session.status })}
+            </span>
+            <Button variant="outline" onClick={() => navigate(`/configure/facility/mapping/${session.id}`)}>{t('Continue')}</Button>
+          </div>
+        ))}
 
         {actionError ? <p className="mt-4 text-sm text-red">{actionError}</p> : null}
 
@@ -528,7 +556,7 @@ export function FacilityPage() {
                     )
                   }
                 }}
-              >{t('Build map')}</Button>
+              >{t('Download route graph')}</Button>
               {canWrite ? (
                 <Button
                   variant="ghost"
@@ -545,6 +573,8 @@ export function FacilityPage() {
             <MissingMapCard title={t('No published map')}>{t('Robots cannot navigate until a map version is published.')}</MissingMapCard>
           )}
         </div>
+
+        {mappingOpen && warehouseId ? <StartMappingDialog warehouseId={warehouseId} onClose={() => setMappingOpen(false)} /> : null}
 
         <header className="mt-14 mb-4 flex items-center justify-between">
           <h2 className="text-xl font-book">{t('Map versions')}</h2>

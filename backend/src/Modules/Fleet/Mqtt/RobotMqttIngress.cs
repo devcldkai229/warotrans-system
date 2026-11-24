@@ -15,8 +15,18 @@ public sealed class RobotMqttIngress(
     ProcessRobotCommandResultHandler commandResultHandler,
     ProcessRobotInteractionConfirmHandler interactionConfirmHandler,
     Traffic.TrafficProgressIngress? trafficProgressIngress = null,
-    Features.RobotHealth.ProcessRobotHealthHandler? healthHandler = null) : IRobotMqttIngress
+    Features.RobotHealth.ProcessRobotHealthHandler? healthHandler = null,
+    Features.Mapping.MappingService? mapping = null) : IRobotMqttIngress
 {
+    public Task HandleMappingPreviewAsync(string robotCode, string payload, CancellationToken cancellationToken)
+    {
+        mapping?.OnPreview(robotCode, payload);
+        return Task.CompletedTask;
+    }
+
+    public Task HandleMappingUploadAsync(string robotCode, string payload, CancellationToken cancellationToken) =>
+        mapping?.OnUploadChunkAsync(robotCode, payload, cancellationToken) ?? Task.CompletedTask;
+
     public Task HandleHealthAsync(RobotHealthMessage message, CancellationToken cancellationToken) =>
         healthHandler?.HandleAsync(message, cancellationToken) ?? Task.CompletedTask;
 

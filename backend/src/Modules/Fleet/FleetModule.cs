@@ -78,6 +78,10 @@ public static class FleetModule
         services.Configure<WaroTrans.Fleet.Features.RobotControl.AutoLocalizeOptions>(
             configuration.GetSection(WaroTrans.Fleet.Features.RobotControl.AutoLocalizeOptions.SectionName));
         services.AddHostedService<WaroTrans.Fleet.Features.RobotControl.AutoLocalizeHostedService>();
+        // Map building from the web (START_MAPPING / STOP_MAPPING, live view, finished map → DRAFT map version).
+        services.AddSingleton<WaroTrans.Fleet.Features.Mapping.MappingLiveStore>();
+        services.AddScoped<WaroTrans.Fleet.Features.Mapping.MappingService>();
+        services.AddHostedService<WaroTrans.Fleet.Features.Mapping.MappingSessionMonitor>();
         services.AddSingleton<WaroTrans.Fleet.Features.RobotHealth.RobotHealthStore>();
         services.AddScoped<WaroTrans.Fleet.Features.RobotHealth.ProcessRobotHealthHandler>();
         services.Configure<RobotCameraOptions>(configuration.GetSection(RobotCameraOptions.SectionName));
@@ -133,6 +137,7 @@ public static class FleetModule
         group.MapIssueCancelCommand();
         group.MapTeleopRobot();
         WaroTrans.Fleet.Features.RobotControl.RobotControlEndpoints.MapRobotControl(group);
+        WaroTrans.Fleet.Features.Mapping.MappingEndpoints.MapMapping(group);
         WaroTrans.Fleet.Features.RobotHealth.RobotHealthEndpoint.MapRobotHealth(group);
         group.MapStreamRobotCamera();
         group.MapGetTrafficSnapshot();

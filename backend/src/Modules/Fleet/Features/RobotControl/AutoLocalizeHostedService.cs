@@ -74,6 +74,7 @@ public sealed class AutoLocalizeHostedService(
                         && r.LocalizationStatus != LocalizationStatus.LOCALIZED
                         && r.CurrentCommandId == null
                         && r.Status != RobotStatus.EXECUTING && r.Status != RobotStatus.MAINTENANCE
+                        && r.MapVersionCode != "MAPPING"
                         && r.LastTelemetryAt != null && r.LastTelemetryAt > fresh)
             .ToListAsync(cancellationToken);
 

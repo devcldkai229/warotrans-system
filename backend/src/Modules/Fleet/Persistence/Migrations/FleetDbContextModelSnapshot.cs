@@ -201,6 +201,131 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                     b.ToTable("maintenance_records", "fleet");
                 });
 
+            modelBuilder.Entity("WaroTrans.Fleet.Entities.MappingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("error_message");
+
+                    b.Property<double?>("KnownAreaM2")
+                        .HasColumnType("double precision")
+                        .HasColumnName("known_area_m2");
+
+                    b.Property<int?>("MapHeight")
+                        .HasColumnType("integer")
+                        .HasColumnName("map_height");
+
+                    b.Property<string>("MapName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("map_name");
+
+                    b.Property<int?>("MapWidth")
+                        .HasColumnType("integer")
+                        .HasColumnName("map_width");
+
+                    b.Property<DateTimeOffset?>("MappingSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("mapping_since");
+
+                    b.Property<string>("ResultMapVersionCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("result_map_version_code");
+
+                    b.Property<Guid?>("ResultMapVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("result_map_version_id");
+
+                    b.Property<string>("RobotCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("robot_code");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<string>("RobotPath")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("robot_path");
+
+                    b.Property<Guid?>("StartCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("start_command_id");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<Guid?>("StartedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("started_by_id");
+
+                    b.Property<string>("StartedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("started_by_name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("StopCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stop_command_id");
+
+                    b.Property<DateTimeOffset?>("StopRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stop_requested_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_mapping_sessions");
+
+                    b.HasIndex("RobotId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mapping_sessions_robot_open")
+                        .HasFilter("status IN ('STARTING','MAPPING','SAVING','CANCELLING')");
+
+                    b.HasIndex("StartCommandId")
+                        .HasDatabaseName("i_x_mapping_sessions_start_command_id");
+
+                    b.HasIndex("StopCommandId")
+                        .HasDatabaseName("i_x_mapping_sessions_stop_command_id");
+
+                    b.HasIndex("WarehouseId", "StartedAt")
+                        .HasDatabaseName("i_x_mapping_sessions_warehouse_id_started_at");
+
+                    b.ToTable("mapping_sessions", "fleet");
+                });
+
             modelBuilder.Entity("WaroTrans.Fleet.Entities.Robot", b =>
                 {
                     b.Property<Guid>("Id")

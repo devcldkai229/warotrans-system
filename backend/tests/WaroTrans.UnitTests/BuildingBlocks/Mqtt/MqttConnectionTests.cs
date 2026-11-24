@@ -96,9 +96,12 @@ public class MqttConnectionTests
 
         Assert.All(batches, b => Assert.InRange(b.Count, 1, MqttSubscriberHostedService.MaxFiltersPerSubscribe));
         var all = batches.SelectMany(b => b).ToDictionary(x => x.Filter, x => x.Qos);
-        Assert.Equal(10, all.Count);
+        Assert.Equal(12, all.Count);
         // The live costmap is a periodic view sample: at most once.
         Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce, all["warotrans/v1/robots/+/costmap"]);
+        // Map building: the live view is a sample, the finished map's chunks must all arrive.
+        Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce, all["warotrans/v1/robots/+/mapping"]);
+        Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce, all["warotrans/v1/robots/+/mapping_upload"]);
         Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce, all["warotrans/v1/robots/+/command_result"]);
         Assert.Equal(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce, all["warotrans/v1/robots/+/heartbeat"]);
     }

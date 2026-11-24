@@ -18,5 +18,7 @@ public enum RobotCommandType
     /// The robot finds where it stands by itself: scan matching against candidate poses, then (only when allowed) a
     /// global localization with a turn on the spot. It takes a pose only when sure; otherwise it returns suggestions.
     /// </summary>
-    AUTO_LOCALIZE
+    AUTO_LOCALIZE,
+    START_MAPPING,
+    STOP_MAPPING
 }

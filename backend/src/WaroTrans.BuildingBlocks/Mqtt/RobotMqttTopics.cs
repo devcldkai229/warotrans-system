@@ -19,6 +19,18 @@ public static class RobotMqttTopics
     /// <summary>The robot's live Nav2 costmap (global / local), a downsampled image; view only, never acted on.</summary>
     public const string CostmapSuffix = "costmap";
 
+    /// <summary>Map building: the robot's pose and the map being built (downsampled), about once a second; view only.</summary>
+    public const string MappingSuffix = "mapping";
+
+    /// <summary>Map building: the finished map (PGM, zlib + base64) in chunks, after STOP_MAPPING with save.</summary>
+    public const string MappingUploadSuffix = "mapping_upload";
+
+    public static string MappingFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/mapping";
+
+    public static string MappingUploadFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/mapping_upload";
+
     public static string CostmapFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/costmap";
 
@@ -119,6 +131,8 @@ public static class RobotMqttTopics
         kind = rest[(slash + 1)..];
         return kind is HeartbeatSuffix
             or CostmapSuffix
+            or MappingSuffix
+            or MappingUploadSuffix
             or TelemetrySuffix
             or CommandSuffix
             or CommandAckSuffix

@@ -177,4 +177,10 @@ export const viServerErrors: Record<string, string> = {
   robot_manual_mode: "Robot '{q1}' đang được điều khiển bằng tay.",
   localize_target_required: 'Hãy chọn một endpoint hoặc một vị trí.',
   invalid_pose: 'Vị trí phải là các số hợp lệ.',
+  // Map building
+  'mapping_session_open': 'Robot này đang có một phiên dựng map.',
+  'mapping_session_not_mapping': 'Phiên dựng map không ở trạng thái đang dựng.',
+  'mapping_session_closed': 'Phiên dựng map đã đóng.',
+  'mapping_session_not_found': 'Không tìm thấy phiên dựng map.',
+  'robot_mapping': 'Robot đang dựng map.',
 }
