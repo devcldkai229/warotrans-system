@@ -14,9 +14,10 @@ namespace WaroTrans.Navigation.Features.CloneMapVersion;
 /// <summary>
 /// Copies a map version (any status) into a new DRAFT of the same warehouse so it can be edited: same occupancy
 /// image (asset URIs are reused, assets are never deleted) and a copy of every endpoint, zone, edge and endpoint
-/// group. Codes are never copied: they come from the system code generator like any new item (endpoint EP-{NAME},
-/// zone ZONE-{NAME}, edge EDGE-{NAME}); ids are new and endpoints remember their source (SourceEndpointId) so
-/// storage locations can follow them on publish.
+/// group. Endpoint and group codes are copied as they are: a code is the map-independent identity of a place, which
+/// workflows resolve on any map version (INavigationModule.ResolvePlaceOnMapAsync), even when the endpoint was renamed
+/// since it was created. Zone and edge codes come from the code generator. Ids are new and endpoints remember their
+/// source (SourceEndpointId) so storage locations can follow them on publish.
 /// </summary>
 public sealed class CloneMapVersionHandler(
     NavigationDbContext dbContext,
@@ -87,7 +88,7 @@ public sealed class CloneMapVersionHandler(
             {
                 Id = Guid.NewGuid(),
                 MapVersionId = clone.Id,
-                Code = await codeGenerator.NextEndpointCodeAsync(endpoint.Name, cancellationToken),
+                Code = endpoint.Code,
                 Name = endpoint.Name,
                 EndpointType = endpoint.EndpointType,
                 X = endpoint.X,

@@ -983,6 +983,12 @@ public sealed class RobotCareService(
             return null;
         }
 
+        // Configured on the map published back then: the group with the same code on the robot's map.
+        if (await navigation.ResolvePlaceOnMapAsync(groupId, robot.CurrentMapVersionId, cancellationToken) is { TargetId: { } onMap })
+        {
+            groupId = onMap;
+        }
+
         var group = await navigation.GetEndpointGroupAsync(groupId, cancellationToken);
         if (group is not { IsActive: true } || group.MapVersionId != robot.CurrentMapVersionId)
         {

@@ -7,9 +7,12 @@ using WaroTrans.WorkflowExecution.Validation;
 
 namespace WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
 
-public sealed class GetWorkflowRequestInputSchemaHandler(WorkflowExecutionDbContext db)
+public sealed class GetWorkflowRequestInputSchemaHandler(
+    WorkflowExecutionDbContext db,
+    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null)
 {
-    public async Task<WorkflowRequestInputSchemaDto> HandleAsync(Guid id, CancellationToken cancellationToken)
+    /// <param name="mapVersionId">The request's map: fixed stops are given as its Endpoints (same code), when set.</param>
+    public async Task<WorkflowRequestInputSchemaDto> HandleAsync(Guid id, CancellationToken cancellationToken, Guid? mapVersionId = null)
     {
         var workflow = await db.Workflows
             .AsNoTracking()
@@ -20,7 +23,9 @@ public sealed class GetWorkflowRequestInputSchemaHandler(WorkflowExecutionDbCont
 
         var model = WorkflowMapping.ToDefinitionModel(workflow);
         var schema = RequestInputSchemaBuilder.Build(model);
-        var fixedStops = WorkflowFixedStops.Resolve(model);
+        var fixedStops = mapVersionId is { } map
+            ? await WorkflowFixedStops.ResolveOnMapAsync(model, map, navigation, cancellationToken)
+            : WorkflowFixedStops.Resolve(model);
 
         return new WorkflowRequestInputSchemaDto(
             workflow.Id,

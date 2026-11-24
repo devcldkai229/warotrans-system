@@ -58,6 +58,7 @@ public static class FleetModule
         services.AddScoped<DisableRobotHandler>();
         services.AddScoped<PutRobotInServiceHandler>();
         services.AddScoped<ChangeRobotMapHandler>();
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishGuard, FleetMapPublishGuard>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<Services.InFlightCommandAborter>();
         services.AddScoped<ProcessRobotTelemetryHandler>();

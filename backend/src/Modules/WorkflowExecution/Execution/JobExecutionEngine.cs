@@ -2601,6 +2601,21 @@ public sealed partial class JobExecutionEngine(
         }
 
         var endpointId = step.ResolvedInputs["targetEndpointId"].GetGuid();
+        // A workflow configured while another map was published names that map's endpoint or group: the place with the
+        // same code on the Job's map is meant (maps are re-published, workflows are not re-configured each time).
+        var place = await navigation.ResolvePlaceOnMapAsync(endpointId, job.MapVersionId, cancellationToken);
+        if (place is { Found: false })
+        {
+            Fail(job, task, step, stepKey, "workflow_place_not_on_map",
+                $"'{place.Code}' is not on the Job's map. Add it to the map (same name) or choose another place in the workflow.", now);
+            return true;
+        }
+
+        if (place?.TargetId is { } onJobMap)
+        {
+            endpointId = onJobMap;
+        }
+
         // TRN-03: a cancelled Job's robot takes its cargo to a recovery point instead of the step's own target. That
         // place was chosen by the operator (a real endpoint), so it wins over the step's endpoint group, if any.
         var recoveryTo = RecoveryTarget(step);
@@ -3342,7 +3357,13 @@ public sealed partial class JobExecutionEngine(
 
             case nameof(CheckConditionCode.ENDPOINT_AVAILABLE):
             {
-                var pose = await navigation.GetEndpointPoseAsync(inputs["endpointId"].GetGuid(), cancellationToken);
+                var checkedId = inputs["endpointId"].GetGuid();
+                if (await navigation.ResolvePlaceOnMapAsync(checkedId, job.MapVersionId, cancellationToken) is { TargetId: { } onMap })
+                {
+                    checkedId = onMap;
+                }
+
+                var pose = await navigation.GetEndpointPoseAsync(checkedId, cancellationToken);
                 passed = pose is { IsEnabled: true } && pose.MapVersionId == job.MapVersionId;
                 reason = pose is null ? "endpoint_not_found" : passed ? "available" : "endpoint_disabled_or_other_map";
                 outputs["endpointStatus"] = JsonSerializer.SerializeToElement(passed ? "AVAILABLE" : "UNAVAILABLE");

@@ -49,8 +49,8 @@ export function useTransportRequestComposerData(options: {
   })
 
   const schemaQuery = useQuery({
-    queryKey: ['workflows', 'request-input-schema', options.workflowId],
-    queryFn: () => getWorkflowRequestInputSchema(options.workflowId),
+    queryKey: ['workflows', 'request-input-schema', options.workflowId, options.mapVersionId],
+    queryFn: () => getWorkflowRequestInputSchema(options.workflowId, options.mapVersionId || undefined),
     enabled: Boolean(options.workflowId),
   })
 

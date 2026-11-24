@@ -17,10 +17,7 @@ import type {
 } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import {
-  checkRouteGraph,
-  clearRouteGraphCache,
   cloneMapVersion,
-  downloadRouteGraphGeoJson,
   createEdge,
   createEndpoint,
   createZone,
@@ -28,14 +25,12 @@ import {
   deleteEndpoint,
   deleteZone,
   getMapVersionDetail,
-  publishMapVersion,
   resolveMapAssetUrl,
   updateEdge,
   updateEndpoint,
   updateZone,
   type EdgeDto,
   type EndpointDto,
-  type RouteGraphValidationDto,
   type ZoneDto,
 } from '@/shared/api/navigation'
 import { listWorkflows } from '@/shared/api/workflows'
@@ -53,6 +48,7 @@ import { EndpointStorageField } from './EndpointStorageField'
 import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
 import { EndpointGroupsPanel } from './editor/EndpointGroupsPanel'
+import { PublishMapDialog } from './PublishMapDialog'
 import { MapEditorCanvas, type EditorTool } from './editor/MapEditorCanvas'
 import { useMapCostmap } from './editor/useMapCostmap'
 import { degToRad, normalizeYaw, radToDeg } from './yaw'
@@ -228,7 +224,6 @@ export function MapEditorPage() {
   const [panelWidth, setPanelWidth] = useState(readPanelWidth)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionOk, setActionOk] = useState<string | null>(null)
-  const [graphReport, setGraphReport] = useState<RouteGraphValidationDto | null>(null)
   const [epDraft, setEpDraft] = useState<Partial<Endpoint> | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{
     name: string
@@ -257,69 +252,8 @@ export function MapEditorPage() {
     await queryClient.invalidateQueries({ queryKey: ['navigation', 'map-detail', mapId] })
   }
 
-  const publishMutation = useMutation({
-    mutationFn: () => publishMapVersion(mapId!),
-    onSuccess: async () => {
-      await invalidate()
-      navigate('/configure/facility')
-    },
-    onError: (err) => setActionError(errMessage(err)),
-  })
-
-  const checkGraphMutation = useMutation({
-    mutationFn: () => checkRouteGraph(mapId!),
-    onSuccess: (report) => {
-      setGraphReport(report)
-      setActionError(null)
-      setActionOk(
-        report.isValid
-          ? t('Route graph OK · {nodeCount} nodes · {edgeCount} edges · {value}…', { nodeCount: report.nodeCount, edgeCount: report.edgeCount, value: report.graphHash.slice(0, 8) })
-          : t('Route graph has {length} error(s)', { length: report.issues.filter((i) => i.severity === 'ERROR').length }),
-      )
-    },
-    onError: (err) => {
-      setGraphReport(null)
-      setActionError(errMessage(err))
-    },
-  })
-
-  const clearGraphCacheMutation = useMutation({
-    mutationFn: () => clearRouteGraphCache(mapId!),
-    onSuccess: () => {
-      setGraphReport(null)
-      setActionError(null)
-      setActionOk(t('Compiled graph cache cleared — next check/sim rebuilds from Edges / Endpoints / Zones'))
-    },
-    onError: (err) => setActionError(errMessage(err)),
-  })
-
-  const viewRouteGraphMutation = useMutation({
-    mutationFn: async () => {
-      const code = version?.code?.replace(/[^A-Za-z0-9_-]+/g, '_') || mapId!
-      await downloadRouteGraphGeoJson(mapId!, `route_graph_${code}.geojson`)
-      return code
-    },
-    onSuccess: (code) => {
-      setActionError(null)
-      setActionOk(t('Downloaded route graph · {code}.geojson', { code }))
-    },
-    onError: async (err) => {
-      if (err instanceof ApiError && err.status === 422) {
-        try {
-          const report = await checkRouteGraph(mapId!)
-          setGraphReport(report)
-          setActionOk(null)
-          setActionError(
-            t('Route graph invalid — {length} error(s); fix then View again', { length: report.issues.filter((i) => i.severity === 'ERROR').length }),
-          )
-          return
-        } catch {
-          /* fall through */
-        }
-      }
-      setActionError(errMessage(err))
-    },
-  })
+  // Publishing goes through the publish check (workflows, Jobs, requests, robots) in PublishMapDialog.
+  const [publishOpen, setPublishOpen] = useState(false)
 
   // Read-only (published / archived) map → edit a DRAFT copy of it.
   const cloneMutation = useMutation({
@@ -1041,53 +975,9 @@ export function MapEditorPage() {
           )}
         </span>
         <div className="ml-auto flex gap-2">
-          <Button
-            variant="ghost"
-            disabled={!mapId || checkGraphMutation.isPending}
-            title={t('Offline QA: compile Edges/Endpoints/Zones (not required for Semantic Nav2 Active)')}
-            onClick={() => checkGraphMutation.mutate()}
-          >
-            {checkGraphMutation.isPending ? t('Checking…') : t('Check topology (offline)')}
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={!mapId || viewRouteGraphMutation.isPending}
-            title={t('Offline: download legacy RouteGraph GeoJSON (Stage-3 Active uses Nav2 free-space)')}
-            onClick={() => viewRouteGraphMutation.mutate()}
-          >
-            {viewRouteGraphMutation.isPending ? t('Loading…') : t('Export route graph (legacy)')}
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={!mapId}
-            title={t('Open traffic debug SVG (occupancy, connectors, rejected access, clearance)')}
-            onClick={() => {
-              const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
-              window.open(`${base}/api/navigation/maps/${mapId}/traffic-graph/debug.svg`, '_blank', 'noopener,noreferrer')
-            }}
-          >{t('Debug SVG')}</Button>
-          {canWrite ? (
-          <Button
-            variant="ghost"
-            disabled={!mapId || clearGraphCacheMutation.isPending}
-            title={t('Drop in-memory compiled graph cache for this map (does not delete geometry)')}
-            onClick={() => {
-              if (
-                window.confirm(
-                  t('Clear compiled route-graph cache for this map?\n\nEdges, endpoints and zones stay. The next check or sim rebuilds the graph.'),
-                )
-              ) {
-                clearGraphCacheMutation.mutate()
-              }
-            }}
-          >
-            {clearGraphCacheMutation.isPending ? t('Clearing…') : t('Clear graph cache')}
-          </Button>
-          ) : null}
-          <Button variant={groupsOpen ? 'outline' : 'ghost'} onClick={() => setGroupsOpen((open) => !open)}>{t('Endpoint groups')}</Button>
           <Button variant="ghost" onClick={() => navigate('/configure/facility')}>{t('Close')}</Button>
           {!canWrite ? null : isDraft ? (
-            <Button variant="primary" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>{t('Publish')}</Button>
+            <Button variant="primary" disabled={!mapId} onClick={() => setPublishOpen(true)}>{t('Publish')}</Button>
           ) : (
             <Button
               variant="primary"
@@ -1100,30 +990,16 @@ export function MapEditorPage() {
           )}
         </div>
       </header>
-
-      {graphReport ? (
-        <div className="mx-3 mb-0 max-h-40 flex-none overflow-auto rounded-md border border-outline-soft bg-container px-3 py-2 text-xs">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className={graphReport.isValid ? 'font-medium text-green' : 'font-medium text-red'}>
-                {graphReport.isValid ? t('Valid') : t('Invalid')}
-              </span>
-              <span className="ml-2 text-muted">{t('{nodeCount} nodes · {edgeCount} edges · hash {value}…', { nodeCount: graphReport.nodeCount, edgeCount: graphReport.edgeCount, value: graphReport.graphHash.slice(0, 12) })}</span>
-            </div>
-            <button type="button" className="text-muted hover:text-ink" onClick={() => setGraphReport(null)}>{t('Dismiss')}</button>
-          </div>
-          {graphReport.issues.length === 0 ? (
-            <p className="mt-1 text-muted">{t('No issues.')}</p>
-          ) : (
-            <ul className="mt-1 space-y-1">
-              {graphReport.issues.map((issue, index) => (
-                <li key={`${issue.code}-${index}`} className={issue.severity === 'ERROR' ? 'text-red' : 'text-ink-2'}>
-                  <span className="font-mono">{issue.severity}</span> · {issue.code}: {issue.message}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {publishOpen && mapId && version ? (
+        <PublishMapDialog
+          mapId={mapId}
+          mapCode={version.code}
+          onClose={() => setPublishOpen(false)}
+          onPublished={async () => {
+            await invalidate()
+            navigate('/configure/facility')
+          }}
+        />
       ) : null}
 
       <div className="relative flex h-12 flex-none items-center justify-between px-4">
@@ -1202,6 +1078,19 @@ export function MapEditorPage() {
                 {item.label}
               </button>
             ))}
+            <button
+              type="button"
+              title={isDraft ? t('Create and edit endpoint groups (a MOVE to a group goes to a free member)') : t('Endpoint groups of this map')}
+              className={cx(
+                'flex h-8 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-200',
+                groupsOpen ? 'bg-primary text-white' : 'text-ink-2 hover:bg-surface hover:text-ink',
+              )}
+              aria-pressed={groupsOpen}
+              onClick={() => setGroupsOpen((open) => !open)}
+            >
+              <Icon name="list" size={15} />
+              {t('Endpoint groups')}
+            </button>
             <span className="mx-1 h-5 w-px bg-outline/60" />
             <button
               type="button"

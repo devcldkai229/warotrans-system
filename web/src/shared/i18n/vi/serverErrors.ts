@@ -183,4 +183,10 @@ export const viServerErrors: Record<string, string> = {
   'mapping_session_closed': 'Phiên dựng map đã đóng.',
   'mapping_session_not_found': 'Không tìm thấy phiên dựng map.',
   'robot_mapping': 'Robot đang dựng map.',
+  // Map versions
+  'map_publish_blocked': 'Không thể xuất bản map: còn Job đang chạy trên map hiện tại.',
+  'map_publish_needs_confirmation': 'Xuất bản map này sẽ làm hỏng workflow hoặc yêu cầu vận chuyển: xem bước kiểm tra và nhập lý do để vẫn xuất bản.',
+  'map_publish_reason_required': 'Hãy nhập lý do (từ 5 ký tự) để vẫn xuất bản.',
+  'workflow_place_not_on_map': 'Workflow cần một điểm không có trên map này. Hãy thêm điểm đó (cùng tên) hoặc sửa workflow.',
+  'place_not_found': 'Không tìm thấy endpoint hoặc nhóm điểm.',
 }

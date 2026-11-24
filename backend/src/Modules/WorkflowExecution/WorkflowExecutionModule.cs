@@ -65,6 +65,10 @@ public static class WorkflowExecutionModule
         services.AddSingleton<StepInputResolver>();
         services.AddScoped<WorkflowVariableContextBuilder>();
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
+        // Publishing a map: workflows naming places it lacks, Jobs running on the old map; not-started Jobs follow it.
+        services.AddScoped<WorkflowMapPublish>();
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishGuard>(sp => sp.GetRequiredService<WorkflowMapPublish>());
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishFollower>(sp => sp.GetRequiredService<WorkflowMapPublish>());
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
         services.AddScoped<IJobPlanLimitsQuery, JobPlanLimitsQuery>();
         services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));

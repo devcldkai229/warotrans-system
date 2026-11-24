@@ -11,7 +11,9 @@ using WaroTrans.WorkflowExecution.Validation;
 
 namespace WaroTrans.WorkflowExecution.Services;
 
-public sealed class WorkflowRequestValidator(WorkflowExecutionDbContext db) : IWorkflowRequestValidator
+public sealed class WorkflowRequestValidator(
+    WorkflowExecutionDbContext db,
+    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null) : IWorkflowRequestValidator
 {
     public async Task ValidateAsync(
         Guid workflowId,
@@ -124,7 +126,8 @@ public sealed class WorkflowRequestValidator(WorkflowExecutionDbContext db) : IW
         WorkflowMovementRules.Ensure(workflow.Code, request.Details);
 
         var model = WorkflowMapping.ToDefinitionModel(workflow);
-        WorkflowFixedStops.Ensure(model, request.Details);
+        var fixedStops = await WorkflowFixedStops.ResolveOnMapAsync(model, request.MapVersionId, navigation, cancellationToken);
+        WorkflowFixedStops.Ensure(fixedStops, model.Code, request.Details);
         var inputs = request.WorkflowInputs ?? new Dictionary<string, JsonElement>();
 
         foreach (var variable in model.Variables.Where(v => v.Source == WorkflowVariableSource.STAFF_INPUT))
