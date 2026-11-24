@@ -40,6 +40,9 @@ public static class OperationExecutionScopeCatalog
             (StepType.CHECK, nameof(CheckConditionCode.INVENTORY_AVAILABLE)) => PerContainer(JobStopAction.PICKUP),
             (StepType.CHECK, nameof(CheckConditionCode.ENDPOINT_AVAILABLE)) =>
                 new(ExecutionScope.ONCE_PER_STOP, StopActionFilter: null),
+            // Judged at every stop, right before the MOVE into it.
+            (StepType.CHECK, nameof(CheckConditionCode.ROUTE_CLEAR)) =>
+                new(ExecutionScope.ONCE_PER_STOP, StopActionFilter: null),
 
             (StepType.MOVE, nameof(MovePurpose.PICKUP)) => OncePerStop(JobStopAction.PICKUP),
             (StepType.MOVE, nameof(MovePurpose.DROPOFF)) => OncePerStop(JobStopAction.DROPOFF),

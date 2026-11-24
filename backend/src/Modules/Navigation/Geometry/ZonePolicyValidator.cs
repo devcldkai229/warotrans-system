@@ -12,6 +12,10 @@ public static class ZonePolicyValidator
 {
     public const int SchemaVersion = 1;
 
+    /// <summary>Zone-chain kinds of a SINGLE_OCCUPANCY zone (policy <c>kind</c>).</summary>
+    public static readonly IReadOnlySet<string> TrafficZoneKinds =
+        new HashSet<string>(["BAY", "TRANSIT", "YARD", "SLOT"], StringComparer.Ordinal);
+
     public static void Validate(
         ZoneType zoneType,
         double? maxSpeed,
@@ -38,14 +42,36 @@ public static class ZonePolicyValidator
         switch (zoneType)
         {
             case ZoneType.SINGLE_OCCUPANCY:
+                if (policy?.RootElement is not { ValueKind: JsonValueKind.Object } root)
+                {
+                    break;
+                }
+
                 // Optional queue point: a robot sent into the area while another robot is in it waits there first.
-                if (policy?.RootElement is { ValueKind: JsonValueKind.Object } root
-                    && root.TryGetProperty("queueEndpointCode", out var queue)
+                if (root.TryGetProperty("queueEndpointCode", out var queue)
                     && (queue.ValueKind != JsonValueKind.String
                         || !(queue.GetString() ?? "").StartsWith("EP-", StringComparison.Ordinal)))
                 {
                     throw new DomainValidationException(
                         "queueEndpointCode must be the code of an endpoint (EP-...).", "zone_policy_invalid");
+                }
+
+                // Zone-chain partition (Traffic:SemanticResourceModel = ZoneChain): what the zone is for.
+                if (root.TryGetProperty("kind", out var kind)
+                    && (kind.ValueKind != JsonValueKind.String || !TrafficZoneKinds.Contains(kind.GetString() ?? "")))
+                {
+                    throw new DomainValidationException(
+                        "kind must be BAY, TRANSIT, YARD or SLOT.", "zone_policy_invalid");
+                }
+
+                // Queue points in order of preference: where a robot waits while another robot is in the zone.
+                if (root.TryGetProperty("queueEndpointCodes", out var queues)
+                    && (queues.ValueKind != JsonValueKind.Array
+                        || queues.EnumerateArray().Any(q => q.ValueKind != JsonValueKind.String
+                                                            || !(q.GetString() ?? "").StartsWith("EP-", StringComparison.Ordinal))))
+                {
+                    throw new DomainValidationException(
+                        "queueEndpointCodes must be a list of endpoint codes (EP-...).", "zone_policy_invalid");
                 }
 
                 break;
