@@ -227,7 +227,11 @@ public sealed class TrafficState
         // Replan: the old grant reserved another path. It is withdrawn here; if the new path is granted the robot
         // gets the new EXTEND, otherwise an explicit revoke (below) so it never keeps driving on the old one.
         var previous = robot.Authority;
-        if (previous is not null && !zoneChain)
+        // Zone chain keeps the current grant across a replan of the SAME command only. A new command: the robot dropped
+        // its grant itself (NEW_COMMAND); restoring it left the backend sure the robot may drive while the robot had
+        // no grant and stood still holding the yard (sim V022 2026-11-24, two robots going home).
+        var keepPrevious = zoneChain && previous is not null && previous.CommandId == request.CommandId;
+        if (previous is not null && !keepPrevious)
         {
             RevokeAuthorityKeepOccupancy(robot, "REPLAN");
         }
@@ -276,18 +280,18 @@ public sealed class TrafficState
         // Zone chain: a robot that is driving keeps what its current grant gave it until the new plan is granted.
         ReleaseSemanticOccupancyOutside(
             robot,
-            zoneChain && previous is not null ? standing.Union(previous.ResourceIds, StringComparer.Ordinal).ToImmutableArray() : standing);
+            keepPrevious ? standing.Union(previous!.ResourceIds, StringComparer.Ordinal).ToImmutableArray() : standing);
 
         EnsureSemanticCapacities(resources);
 
-        if (zoneChain && previous is not null)
+        if (keepPrevious)
         {
             // Decided afresh below; restored when the new plan cannot be granted.
             robot.Authority = null;
         }
 
         var result = TryGrantSemantic(robot, request, resources);
-        if (zoneChain && previous is not null)
+        if (keepPrevious)
         {
             if (result.Granted)
             {
@@ -299,7 +303,7 @@ public sealed class TrafficState
             // stops it where the new path leaves that, and it stays queued for the rest. Revoking here stopped a robot
             // on the spot in a corridor and made it the next robot's blocker.
             robot.Authority = previous;
-            robot.PartialAuthorityId = previous.AuthorityId;
+            robot.PartialAuthorityId = previous!.AuthorityId;
             robot.Phase = TrafficRobotPhase.Authorized;
             Log($"zone-chain-keep:{robot.RobotId}:{previous.AuthorityId}:{result.Reason}");
             return result;

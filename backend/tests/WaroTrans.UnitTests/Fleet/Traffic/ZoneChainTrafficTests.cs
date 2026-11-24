@@ -260,4 +260,21 @@ public class ZoneChainTrafficTests
         Assert.DoesNotContain("zone:SPINE", r1);
         Assert.Contains("zone:SLOT-Q", r1);
     }
+
+    [Fact]
+    public void A_new_command_that_cannot_be_granted_does_not_get_the_old_commands_grant_back()
+    {
+        var s = NewState();
+        Assert.True(s.MarkOnline(_r2, 2.5, 1.2, true, Math.PI / 2).Ok); // stands in BAY-N
+        Assert.True(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, ToEast())).Granted);
+        s.DrainEvents();
+
+        // Another NAVIGATE (the robot dropped its grant on NEW_COMMAND), into the taken BAY-N.
+        var other = Guid.NewGuid();
+        var w = s.AcquireSemanticPlan(Plan(_r1, other, 2, Path((0.8, 0), (2.5, 0.3), (2.5, 1.2))));
+
+        Assert.False(w.Granted);
+        Assert.Null(View(s, _r1).Authority);
+        Assert.Contains(s.DrainEvents(), e => e.Kind == TrafficEventKind.AuthorityRevoked);
+    }
 }
