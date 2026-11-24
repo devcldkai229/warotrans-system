@@ -58,7 +58,9 @@ public sealed class ProcessRobotCommandResultHandler(
                 command.Status);
             // A late result that contradicts the one already applied (SUCCEEDED for a command already CANCELED or
             // FAILED …) is ignored, but it is evidence of a robot/link problem: record it. A plain repeat is not.
+            // A late CANCELED is the robot answering the Host's own CANCEL (sent after a timeout): expected, not news.
             if (!string.IsNullOrEmpty(message.Outcome)
+                && !string.Equals(message.Outcome, "CANCELED", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(command.Outcome, message.Outcome, StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogWarning(

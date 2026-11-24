@@ -34,7 +34,7 @@ TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "PAUSED", "RECOVERY_REQUIRED"}
 # kind, source, destination, fault, trigger (when to inject), extra
 CASES: dict[int, dict[str, Any]] = {
     1: {"kind": "INBOUND", "dst": "SHELF-A-1", "fault": None},
-    2: {"kind": "INBOUND", "dst": "SHELF-A-2", "fault": "IOT-01", "trigger": "move:2"},
+    2: {"kind": "INBOUND", "dst": "SHELF-A-2", "fault": "IOT-01", "trigger": "move:2"},   # 2nd MOVE actually run
     3: {"kind": "INBOUND", "dst": "SHELF-B-2", "fault": "NAV-01", "trigger": "move:2"},
     4: {"kind": "INBOUND", "dst": "SHELF-C-1", "fault": "OPS-03", "trigger": "human:1", "checkQuality": True},
     5: {"kind": "OUTBOUND", "src": "SHELF-A-1", "fault": "IOT-02", "trigger": "move:2"},
@@ -96,7 +96,7 @@ def triggered(trigger: str, j: dict[str, Any]) -> bool:
     kind, n = trigger.split(":")
     wanted = "MOVE" if kind == "move" else "HUMAN_INTERACTION"
     state = "EXECUTING" if kind == "move" else "WAITING"
-    of_kind = [s for s in steps(j) if s.get("stepType") == wanted]
+    of_kind = [s for s in steps(j) if s.get("stepType") == wanted and s["status"] != "SKIPPED"]
     return len(of_kind) >= int(n) and of_kind[int(n) - 1]["status"] == state
 
 
@@ -177,6 +177,8 @@ def run(n: int, wait_ai: bool, ai_timeout: float) -> dict[str, Any]:
     record["journal"] = journal(api, tr)
     if wait_ai:
         record["ai"] = wait_case(api, record["journal"].get("id"), ai_timeout)
+    # Telemetry batches and video segments keep arriving after the trip: read the journal again at the end.
+    record["journal"] = journal(api, tr)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"case-{n:02d}.json"
     path.write_text(json.dumps(record, indent=1, default=str), encoding="utf-8")
