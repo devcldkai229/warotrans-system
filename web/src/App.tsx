@@ -25,6 +25,9 @@ import { FleetPage } from '@/features/robots/FleetPage'
 import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { RobotTechnicalPage } from '@/features/robots/technical/RobotTechnicalPage'
 import { JournalListPage } from '@/features/journals/JournalListPage'
+import { IncidentCasePage } from '@/features/ai-investigation/pages/IncidentCasePage'
+import { IncidentInboxPage } from '@/features/ai-investigation/pages/IncidentInboxPage'
+import { AI_ENABLED } from '@/shared/api/ai'
 import { JournalByRequestRedirect, JournalReplayPage } from '@/features/journals/JournalReplayPage'
 import { TransportRequestsPage } from '@/features/transport-requests/TransportRequestsPage'
 import { WorkflowEditorPage } from '@/features/workflows/workflow-editor-page'
@@ -62,6 +65,8 @@ function App() {
                 <Route path="journals" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalListPage /></Guard>} />
                 <Route path="journals/by-request/:transportRequestId" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalByRequestRedirect /></Guard>} />
                 <Route path="journals/:journalId" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalReplayPage /></Guard>} />
+                {AI_ENABLED && <Route path="incidents" element={<Guard permission={PERMISSIONS.evidenceRead}><IncidentInboxPage /></Guard>} />}
+                {AI_ENABLED && <Route path="incidents/:caseId" element={<Guard permission={PERMISSIONS.evidenceRead}><IncidentCasePage /></Guard>} />}
                 <Route path="audit" element={<Guard permission={PERMISSIONS.auditRead}><AuditLogPage /></Guard>} />
                 <Route path="notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
                 <Route path="*" element={<Navigate to="/tech/fleet" replace />} />

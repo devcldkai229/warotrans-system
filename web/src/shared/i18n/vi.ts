@@ -1,4 +1,5 @@
 /** Vietnamese translations, keyed by the English sentence. One file per area under ./vi/. */
+import { vi_ai_investigation } from './vi/ai-investigation'
 import { vi_dashboard_jobs } from './vi/dashboard-jobs'
 import { vi_enums } from './vi/enums'
 import { vi_failures } from './vi/failures'
@@ -18,6 +19,7 @@ export const vi: Record<string, string> = {
   ...vi_enums,
   ...vi_failures,
   ...vi_journals,
+  ...vi_ai_investigation,
   ...vi_management,
   ...vi_maps,
   ...vi_notifications,
