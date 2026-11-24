@@ -110,6 +110,8 @@ public static class FleetModule
         services.AddHostedService<TrafficAuthorityPublisher>();
         services.AddHostedService<TrafficAuthorityRenewHostedService>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
+        services.AddScoped<WaroTrans.Fleet.Features.Charging.RobotChargingService>();
+        services.AddHostedService<WaroTrans.Fleet.Features.Charging.ChargeReminderHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();
         services.AddHostedService<SemanticPolicyBootstrapHostedService>();

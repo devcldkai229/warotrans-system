@@ -21,6 +21,14 @@ export function listWorkflows(params?: { code?: string; status?: string }) {
   )
 }
 
+/** Show or hide a workflow (every version of its code) and its Jobs from Staff accounts. */
+export function setWorkflowStaffVisibility(id: string, staffVisible: boolean) {
+  return apiFetch<{ code: string; staffVisible: boolean; versions: number }>(
+    `/api/workflow-execution/workflows/${id}/staff-visibility`,
+    { method: 'PUT', body: JSON.stringify({ staffVisible }) },
+  )
+}
+
 export function getWorkflow(id: string) {
   return apiFetch<WorkflowDetail>(`/api/workflow-execution/workflows/${id}`)
 }

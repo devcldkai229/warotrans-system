@@ -8,6 +8,12 @@ public sealed class BatteryOptions
     public decimal LowPercent { get; set; } = 20m;
     public decimal CriticalPercent { get; set; } = 10m;
 
+    /// <summary>Manual charging: at this level Admins and the robot's Technicians are told to unplug the charger.</summary>
+    public decimal ChargeFullPercent { get; set; } = 90m;
+
+    /// <summary>Remind them once when the charger is still in this long after the battery was full.</summary>
+    public int UnplugReminderMinutes { get; set; } = 30;
+
     /// <summary>Below this a robot is not given new work.</summary>
     public decimal MinDispatchPercent { get; set; } = 30m;
 

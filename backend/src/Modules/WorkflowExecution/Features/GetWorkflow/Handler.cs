@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.WorkflowExecution.Features.WorkflowVisibility;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
 
 namespace WaroTrans.WorkflowExecution.Features.GetWorkflow;
 
-public sealed class GetWorkflowHandler(WorkflowExecutionDbContext db)
+public sealed class GetWorkflowHandler(WorkflowExecutionDbContext db, ICurrentUser? currentUser = null)
 {
     public async Task<WorkflowDetailDto> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -16,6 +18,7 @@ public sealed class GetWorkflowHandler(WorkflowExecutionDbContext db)
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken)
             ?? throw new NotFoundException($"Workflow '{id}' was not found.", "workflow_not_found");
 
+        StaffWorkflowVisibility.EnsureVisible(workflow, currentUser);
         return WorkflowMapping.ToDetail(workflow);
     }
 }

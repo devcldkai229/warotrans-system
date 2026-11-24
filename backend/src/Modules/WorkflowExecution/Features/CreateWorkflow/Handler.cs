@@ -50,6 +50,7 @@ public sealed class CreateWorkflowHandler(
             Id = Guid.NewGuid(),
             VersionNo = 1,
             Status = WorkflowStatus.DRAFT,
+            StaffVisible = request.StaffVisible ?? true,
             CreatedBy = currentUser.AccountId ?? Guid.Empty,
             CreatedAt = DateTimeOffset.UtcNow
         };

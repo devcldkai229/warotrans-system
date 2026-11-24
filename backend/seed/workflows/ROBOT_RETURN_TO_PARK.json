@@ -2,6 +2,7 @@
   "code": "ROBOT_RETURN_TO_PARK",
   "name": "Robot return to parking",
   "description": "An idle, empty robot drives to a parking place. Carries nothing, so it has no transport request.",
+  "staffVisible": false,
   "variables": [
     {
       "key": "parkEndpointId",

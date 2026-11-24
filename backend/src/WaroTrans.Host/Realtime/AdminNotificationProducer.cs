@@ -21,12 +21,16 @@ public sealed class AdminNotificationProducer(
     INotificationService notifications,
     INavigationModule navigation,
     IStaffOperatingWarehouse staffWarehouse,
-    ILogger<AdminNotificationProducer> logger)
+    ILogger<AdminNotificationProducer> logger,
+    WaroTrans.WorkflowExecution.Contracts.IJobStaffVisibility? jobVisibility = null)
     : IIntegrationEventHandler<JobStatusChanged>,
         IIntegrationEventHandler<RobotConnectivityChanged>,
         IIntegrationEventHandler<RobotCommandLifecycleChanged>,
         IIntegrationEventHandler<RobotBatteryLow>,
         IIntegrationEventHandler<RobotErrorReported>,
+        IIntegrationEventHandler<RobotChargeFull>,
+        IIntegrationEventHandler<RobotChargingStarted>,
+        IIntegrationEventHandler<RobotChargingEnded>,
         IIntegrationEventHandler<JobStepStatusChanged>,
         IIntegrationEventHandler<JobWaitingToStart>,
         IIntegrationEventHandler<JobStepWaitingForPerson>,
@@ -48,6 +52,7 @@ public sealed class AdminNotificationProducer(
             var reason = string.IsNullOrWhiteSpace(e.FailureCode) ? null : $" Reason: {e.FailureCode}.";
             NotificationAudience? recoveryAudience = null;
             if (e.Status == "RECOVERY_REQUIRED" && e.MapVersionId is { } mapId
+                && await StaffSeesAsync(e.JobId, cancellationToken)
                 && await navigation.GetMapVersionAsync(mapId, cancellationToken) is { } map
                 && map.WarehouseId == await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken))
                 recoveryAudience = new NotificationAudience([AppRoles.Admin, AppRoles.Staff, AppRoles.Technician],
@@ -142,6 +147,42 @@ public sealed class AdminNotificationProducer(
                 Audience: NotificationAudience.RobotCare(e.RobotId)),
             cancellationToken));
 
+    /// <summary>Manual charging: the battery is full and a person has to unplug the charger (then confirm it).</summary>
+    public Task HandleAsync(RobotChargeFull e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(() => notifications.PublishAsync(
+            new NotificationDraft(
+                e.Reminder ? NotificationType.WARNING : NotificationType.INFO,
+                e.Reminder ? "ROBOT_CHARGER_STILL_PLUGGED" : "ROBOT_CHARGE_FULL",
+                e.Reminder ? $"Robot {e.RobotCode} is still on the charger" : $"Robot {e.RobotCode} is fully charged",
+                e.BatteryPercent is { } percent
+                    ? $"Battery {percent:0}%. Unplug the charger, then confirm it on the robot page."
+                    : "Unplug the charger, then confirm it on the robot page.",
+                Robot,
+                e.RobotId,
+                e.Reminder ? $"robot:{e.RobotId}:charge-full:reminder" : $"robot:{e.RobotId}:charge-full",
+                OncePerSituation: true,
+                Audience: NotificationAudience.RobotCare(e.RobotId)),
+            cancellationToken));
+
+    /// <summary>Plugged in: the "battery low" alert is over.</summary>
+    public Task HandleAsync(RobotChargingStarted e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(() => notifications.ResolveAsync($"robot:{e.RobotId}:battery", cancellationToken));
+
+    /// <summary>Unplugged: the "fully charged" notifications are over.</summary>
+    public Task HandleAsync(RobotChargingEnded e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(async () =>
+        {
+            await notifications.ResolveAsync($"robot:{e.RobotId}:charge-full", cancellationToken);
+            await notifications.ResolveAsync($"robot:{e.RobotId}:charge-full:reminder", cancellationToken);
+        });
+
+    private async Task<bool> StaffSeesAsync(Guid jobId, CancellationToken cancellationToken) =>
+        jobVisibility is null || await jobVisibility.IsStaffVisibleAsync(jobId, cancellationToken);
+
+    /// <summary>Someone on the floor: Admins and Staff, or Admins only for a Job hidden from Staff (robot care).</summary>
+    private async Task<NotificationAudience> FloorAsync(Guid jobId, CancellationToken cancellationToken) =>
+        await StaffSeesAsync(jobId, cancellationToken) ? NotificationAudience.Floor : NotificationAudience.Admins;
+
     public Task HandleAsync(RobotErrorReported e, CancellationToken cancellationToken = default) =>
         SafelyAsync(() => notifications.PublishAsync(
             new NotificationDraft(
@@ -181,7 +222,7 @@ public sealed class AdminNotificationProducer(
             cancellationToken));
 
     public Task HandleAsync(HumanTaskOffered e, CancellationToken cancellationToken = default) =>
-        SafelyAsync(() => notifications.PublishAsync(
+        SafelyAsync(async () => await notifications.PublishAsync(
             new NotificationDraft(
                 NotificationType.WARNING,
                 "HUMAN_TASK_OFFERED",
@@ -191,11 +232,11 @@ public sealed class AdminNotificationProducer(
                 e.JobId,
                 $"step:{e.JobStepId}:offered",
                 OncePerSituation: true,
-                Audience: NotificationAudience.Floor),
+                Audience: await FloorAsync(e.JobId, cancellationToken)),
             cancellationToken));
 
     public Task HandleAsync(HumanStepOverdue e, CancellationToken cancellationToken = default) =>
-        SafelyAsync(() => notifications.PublishAsync(
+        SafelyAsync(async () => await notifications.PublishAsync(
             new NotificationDraft(
                 NotificationType.WARNING,
                 "HUMAN_STEP_OVERDUE",
@@ -205,11 +246,11 @@ public sealed class AdminNotificationProducer(
                 e.JobId,
                 $"step:{e.JobStepId}:overdue",
                 OncePerSituation: true,
-                Audience: NotificationAudience.Floor),
+                Audience: await FloorAsync(e.JobId, cancellationToken)),
             cancellationToken));
 
     public Task HandleAsync(JobStepWaitingForPerson e, CancellationToken cancellationToken = default) =>
-        SafelyAsync(() => notifications.PublishAsync(
+        SafelyAsync(async () => await notifications.PublishAsync(
             new NotificationDraft(
                 NotificationType.WARNING,
                 "JOB_STEP_WAITING_FOR_PERSON",
@@ -220,7 +261,7 @@ public sealed class AdminNotificationProducer(
                 $"step:{e.JobStepId}:person",
                 OncePerSituation: true,
                 // Someone on the floor has to confirm it: Staff hear about it too.
-                Audience: NotificationAudience.Floor),
+                Audience: await FloorAsync(e.JobId, cancellationToken)),
             cancellationToken));
 
     public Task HandleAsync(TransportRequestProgressed e, CancellationToken cancellationToken = default) =>

@@ -13,7 +13,8 @@ namespace WaroTrans.WorkflowExecution.Services;
 
 public sealed class WorkflowRequestValidator(
     WorkflowExecutionDbContext db,
-    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null) : IWorkflowRequestValidator
+    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null,
+    WaroTrans.BuildingBlocks.Abstractions.ICurrentUser? currentUser = null) : IWorkflowRequestValidator
 {
     public async Task ValidateAsync(
         Guid workflowId,
@@ -115,6 +116,14 @@ public sealed class WorkflowRequestValidator(
             .ThenInclude(t => t.Steps)
             .FirstOrDefaultAsync(w => w.Id == workflowId, cancellationToken)
             ?? throw new NotFoundException($"Workflow '{workflowId}' was not found.", "workflow_not_found");
+
+        // A workflow hidden from Staff (robot care) cannot be requested by a Staff account, even through the API.
+        if (WaroTrans.WorkflowExecution.Features.WorkflowVisibility.StaffWorkflowVisibility.IsLimited(currentUser) && !workflow.StaffVisible)
+        {
+            throw new DomainValidationException(
+                $"Workflow '{workflow.Code}' is not available to Staff accounts.",
+                WaroTrans.WorkflowExecution.Features.WorkflowVisibility.StaffWorkflowVisibility.NotAvailableCode);
+        }
 
         if (workflow.Status != WorkflowStatus.PUBLISHED)
         {

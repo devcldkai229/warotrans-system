@@ -164,4 +164,9 @@ export const vi_workflows: Record<string, string> = {
   'WAYPOINT_GROUP (any free point of a group)': 'WAYPOINT_GROUP (điểm trống bất kỳ trong nhóm)',
   'Select endpoint group…': 'Chọn nhóm điểm…',
   'No endpoint group on the published map': 'Bản đồ đang dùng chưa có nhóm điểm nào',
+  'Visible to Staff': 'Staff được thấy',
+  'Could not save.': 'Không lưu được.',
+  'Staff accounts see this workflow and its Jobs. Admins and Technicians always do.': 'Tài khoản nhân viên kho thấy quy trình này và các công việc của nó. Admin và kỹ thuật viên luôn thấy.',
+  'Admins / Technicians only': 'Chỉ admin / kỹ thuật',
+  'Hidden from Staff accounts: only Admins and Technicians see it and its Jobs.': 'Ẩn với nhân viên kho: chỉ admin và kỹ thuật viên thấy quy trình và các công việc của nó.',
 }

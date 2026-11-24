@@ -26,6 +26,7 @@ using WaroTrans.WorkflowExecution.Features.ResumeJob;
 using WaroTrans.WorkflowExecution.Features.StartJob;
 using WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 using WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
+using WaroTrans.WorkflowExecution.Features.WorkflowVisibility;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -46,6 +47,8 @@ public static class WorkflowExecutionModule
 
         services.AddScoped<ListWorkflowsHandler>();
         services.AddScoped<GetWorkflowHandler>();
+        services.AddScoped<SetStaffVisibilityHandler>();
+        services.AddScoped<IJobStaffVisibility, JobStaffVisibility>();
         services.AddScoped<GetWorkflowRequestInputSchemaHandler>();
         services.AddScoped<CreateWorkflowHandler>();
         services.AddScoped<UpdateWorkflowHandler>();
@@ -133,6 +136,7 @@ public static class WorkflowExecutionModule
         group.MapUpdateWorkflow();
         group.MapPublishWorkflow();
         group.MapCreateWorkflowVersion();
+        group.MapSetStaffVisibility();
         group.MapDeleteWorkflow();
         group.MapListJobs();
         group.MapGetJob();

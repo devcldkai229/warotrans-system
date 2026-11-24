@@ -365,6 +365,18 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("capabilities");
 
+                    b.Property<DateTimeOffset?>("ChargeFullAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("charge_full_at");
+
+                    b.Property<DateTimeOffset?>("ChargeReminderAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("charge_reminder_at");
+
+                    b.Property<DateTimeOffset?>("ChargingSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("charging_since");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(30)

@@ -10,3 +10,9 @@ public interface IWorkflowUsageQuery
     /// <summary>True when at least one TransportRequest was created from this Workflow version.</summary>
     Task<bool> IsUsedByTransportRequestAsync(Guid workflowId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>Whether Staff accounts see a Job: its workflow is shown to Staff (robot care workflows are not).</summary>
+public interface IJobStaffVisibility
+{
+    Task<bool> IsStaffVisibleAsync(Guid jobId, CancellationToken cancellationToken = default);
+}

@@ -9,7 +9,8 @@ namespace WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
 
 public sealed class GetWorkflowRequestInputSchemaHandler(
     WorkflowExecutionDbContext db,
-    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null)
+    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null,
+    WaroTrans.BuildingBlocks.Abstractions.ICurrentUser? currentUser = null)
 {
     /// <param name="mapVersionId">The request's map: fixed stops are given as its Endpoints (same code), when set.</param>
     public async Task<WorkflowRequestInputSchemaDto> HandleAsync(Guid id, CancellationToken cancellationToken, Guid? mapVersionId = null)
@@ -20,6 +21,7 @@ public sealed class GetWorkflowRequestInputSchemaHandler(
             .ThenInclude(t => t.Steps)
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken)
             ?? throw new NotFoundException($"Workflow '{id}' was not found.", "workflow_not_found");
+        WaroTrans.WorkflowExecution.Features.WorkflowVisibility.StaffWorkflowVisibility.EnsureVisible(workflow, currentUser);
 
         var model = WorkflowMapping.ToDefinitionModel(workflow);
         var schema = RequestInputSchemaBuilder.Build(model);

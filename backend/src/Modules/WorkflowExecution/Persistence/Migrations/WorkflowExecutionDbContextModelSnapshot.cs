@@ -728,6 +728,12 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("published_by");
 
+                    b.Property<bool>("StaffVisible")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("staff_visible");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)

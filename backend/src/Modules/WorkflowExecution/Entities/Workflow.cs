@@ -17,5 +17,12 @@ public sealed class Workflow
     public DateTimeOffset? PublishedAt { get; set; }
     public Guid? PublishedBy { get; set; }
 
+    /// <summary>
+    /// Whether STAFF accounts see this workflow and its Jobs. A setting of the workflow code (every version carries the
+    /// same value), changed by an administrator at any time; robot care workflows (charging, return to park) are not
+    /// for the warehouse floor. ADMIN and TECHNICIAN always see every workflow.
+    /// </summary>
+    public bool StaffVisible { get; set; } = true;
+
     public ICollection<WorkflowTask> Tasks { get; set; } = [];
 }
