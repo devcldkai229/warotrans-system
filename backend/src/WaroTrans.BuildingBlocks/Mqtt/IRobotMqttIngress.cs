@@ -18,4 +18,10 @@ public interface IRobotMqttIngress
 
     /// <summary>RB-10 diagnostics snapshot. Default: ignored (hosts without a health store).</summary>
     Task HandleHealthAsync(RobotHealthMessage message, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Map building live view (raw JSON: sessionId, pose, optional downsampled map). Default: ignored.</summary>
+    Task HandleMappingPreviewAsync(string robotCode, string payload, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>One chunk of a finished map (raw JSON). Default: ignored.</summary>
+    Task HandleMappingUploadAsync(string robotCode, string payload, CancellationToken cancellationToken) => Task.CompletedTask;
 }

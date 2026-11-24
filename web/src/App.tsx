@@ -21,6 +21,7 @@ import { RobotHistoryPage } from '@/features/operations/RobotHistoryPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
+import { MappingPage } from '@/features/maps/mapping/MappingPage'
 import { FleetPage } from '@/features/robots/FleetPage'
 import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { RobotTechnicalPage } from '@/features/robots/technical/RobotTechnicalPage'
@@ -85,6 +86,8 @@ function App() {
               <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />
               <Route path="/dashboard" element={<Guard permission={PERMISSIONS.statisticsRead}><DashboardPage /></Guard>} />
               <Route path="/configure/facility" element={<Guard permission={PERMISSIONS.mapRead}><FacilityPage /></Guard>} />
+              {/* Build a map: drive a robot while it maps; the result is a draft map version. */}
+              <Route path="/configure/facility/mapping/:sessionId" element={<Guard permission={PERMISSIONS.mapRead}><MappingPage /></Guard>} />
               <Route path="/configure/workflows" element={<Guard permission={PERMISSIONS.workflowRead}><WorkflowsListPage /></Guard>} />
               <Route path="/configure/workflows/new" element={<Guard permission={PERMISSIONS.workflowWrite}><WorkflowEditorPage /></Guard>} />
               <Route path="/configure/workflows/:id" element={<Guard permission={PERMISSIONS.workflowRead}><WorkflowEditorPage /></Guard>} />

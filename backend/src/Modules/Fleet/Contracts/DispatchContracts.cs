@@ -5,6 +5,9 @@ public static class DispatchReasons
 {
     public const string Disabled = "robot_disabled";
     public const string Offline = "robot_offline";
+
+    /// <summary>The robot is building a map (it reports map code MAPPING): driven by hand, off the operational map.</summary>
+    public const string Mapping = "robot_mapping";
     public const string InMaintenance = "robot_in_maintenance";
     public const string NotAvailable = "robot_not_available";
     public const string MotionHeld = "robot_motion_held";

@@ -44,6 +44,10 @@ public static class DispatchEligibility
         // FL-08: busy only with its own way to parking (RESERVED / EXECUTING that NAVIGATE): the Job takes it over.
         else if (robot.IsOnline && robot.Status != RobotStatus.AVAILABLE
                  && !(returningToPark && robot.Status is RobotStatus.RESERVED or RobotStatus.EXECUTING)) reasons.Add(DispatchReasons.NotAvailable);
+        if (robot.IsOnline && string.Equals(robot.MapVersionCode?.Trim(), "MAPPING", StringComparison.OrdinalIgnoreCase))
+        {
+            reasons.Add(DispatchReasons.Mapping);
+        }
         if (returningToPark) notes.Add("returning_to_park: stops for this Job");
         if (robot.MotionHeld) reasons.Add(DispatchReasons.MotionHeld);
         if (robot.HasActiveManualLease(now)) reasons.Add(DispatchReasons.ManualMode);

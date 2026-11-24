@@ -76,6 +76,11 @@ public sealed partial class RobotControlService
             throw new ConflictException($"Robot {robot.Code} is being driven by hand.", "robot_manual_mode");
         }
 
+        if (string.Equals(robot.MapVersionCode, "MAPPING", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ConflictException($"Robot {robot.Code} is building a map.", "robot_mapping");
+        }
+
         await ExpireStaleAutoLocalizeAsync(robot.Id, now, cancellationToken);
         var running = await db.RobotCommands.AnyAsync(
             c => c.RobotId == robot.Id && c.Type == RobotCommandType.AUTO_LOCALIZE

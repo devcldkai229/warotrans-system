@@ -135,6 +135,8 @@ public sealed class MqttSubscriberHostedService(
             (RobotMqttTopics.AuthorityStateFilter(prefix), reliable),
             (RobotMqttTopics.HealthFilter(prefix), sample),
             (RobotMqttTopics.CostmapFilter(prefix), sample),
+            (RobotMqttTopics.MappingFilter(prefix), sample),
+            (RobotMqttTopics.MappingUploadFilter(prefix), reliable),
         ];
         return all.Chunk(MaxFiltersPerSubscribe).Select(c => (IReadOnlyList<(string, MqttQualityOfServiceLevel)>)c).ToList();
     }
@@ -220,6 +222,12 @@ public sealed class MqttSubscriberHostedService(
                 case RobotMqttTopics.CostmapSuffix:
                     // View-only: the newest image per robot and kind, for the admin map. Nothing acts on it.
                     scope.ServiceProvider.GetService<LiveCostmapStore>()?.Put(robotCodeFromTopic, payload);
+                    break;
+                case RobotMqttTopics.MappingSuffix:
+                    await ingress.HandleMappingPreviewAsync(robotCodeFromTopic, payload, cancellationToken).ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.MappingUploadSuffix:
+                    await ingress.HandleMappingUploadAsync(robotCodeFromTopic, payload, cancellationToken).ConfigureAwait(false);
                     break;
                 case RobotMqttTopics.AuthorityStateSuffix:
                     await HandleAuthorityStateAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)

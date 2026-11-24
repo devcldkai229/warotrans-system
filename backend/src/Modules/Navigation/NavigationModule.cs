@@ -80,6 +80,7 @@ public static class NavigationModule
         services.AddScoped<UpdateZoneHandler>();
         services.AddScoped<DeleteZoneHandler>();
         services.AddScoped<ImportMapVersionHandler>();
+        services.AddScoped<IScannedMapImporter, ScannedMapImporter>();
         services.AddScoped<CloneMapVersionHandler>();
         services.AddScoped<Features.EndpointGroups.EndpointGroupService>();
         RegisterMapAssetStore(services, configuration);
