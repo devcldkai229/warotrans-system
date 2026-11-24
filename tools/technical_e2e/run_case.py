@@ -61,6 +61,7 @@ def create(w: rr.World, case: dict[str, Any], tag: str) -> tuple[str, str, str]:
         workflow = "INBOUND"
     elif kind == "OUTBOUND":
         c = [rr.stored_at(w, case["src"])]
+        rr.voucher(w, "OUTBOUND", c, f"technical e2e {tag}")   # an outbound trip needs a confirmed outbound voucher
         moves = [{"container": c[0], "src": w.loc_ep[case["src"]], "srcLoc": case["src"], "dst": "EP-OUTBOUND"}]
         workflow = "OUTBOUND_RETRIEVAL"
     else:
@@ -77,7 +78,7 @@ def create(w: rr.World, case: dict[str, Any], tag: str) -> tuple[str, str, str]:
         if m.get("dstLoc"):
             d["destinationStorageLocationId"] = w.locs[m["dstLoc"]]
         details.append(d)
-    inputs = {"checkQuality": bool(case.get("checkQuality"))} if workflow == "INBOUND" else {}
+    inputs = {"checkQuality": bool(case.get("checkQuality"))}   # every transport workflow asks it (STAFF_INPUT)
     tr = w.api.call("POST", "/api/transportation/transport-requests", {
         "warehouseId": w.warehouse, "mapVersionId": w.map_id, "workflowId": w.wf[workflow], "workflowInputs": inputs,
         "note": f"technical e2e {tag}", "details": details})["id"]
@@ -105,10 +106,13 @@ def confirm(w: rr.World, j: dict[str, Any], wrong_barcode: str | None = None) ->
     for s in steps(j):
         if s["status"] != "WAITING" or s.get("stepType") != "HUMAN_INTERACTION":
             continue
-        container = (s.get("resolvedInputs") or {}).get("containerId")
+        container = (s.get("resolvedInputs") or {}).get("containerId") or (
+            j["containers"][0]["containerId"] if j.get("containers") else None)
         if not container:
             continue
         body: dict[str, Any] = {"containerId": container, "note": "technical e2e staff"}
+        if "INSPECTION" in str(s.get("stepKey")):
+            body["inspectionResult"] = "PASSED"
         if wrong_barcode:
             try:
                 w.api.call("POST", f"/api/workflow-execution/job-steps/{s['id']}/confirm",
@@ -179,6 +183,13 @@ def run(n: int, wait_ai: bool, ai_timeout: float) -> dict[str, Any]:
         record["ai"] = wait_case(api, record["journal"].get("id"), ai_timeout)
     # Telemetry batches and video segments keep arriving after the trip: read the journal again at the end.
     record["journal"] = journal(api, tr)
+    # The bench needs the robot back: a trip the fault left PAUSED / RECOVERY_REQUIRED is a test job, cancelled.
+    final = w.api.call("GET", f"/api/workflow-execution/jobs/{job_id}")
+    if final["status"] not in ("COMPLETED", "FAILED", "CANCELLED"):
+        w.api.call("POST", f"/api/workflow-execution/jobs/{job_id}/cancel",
+                   {"reason": f"technical E2E {tag}: test job left {final['status']} by the injected fault"})
+        log(f"  test job {final['jobNo']} ({final['status']}) cancelled to free the robot")
+        record["cleanup"] = f"cancelled from {final['status']}"
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"case-{n:02d}.json"
     path.write_text(json.dumps(record, indent=1, default=str), encoding="utf-8")
