@@ -113,6 +113,7 @@ public static class FleetModule
         services.AddHostedService<TrafficGrantHostedService>();
         services.AddHostedService<SemanticPolicyBootstrapHostedService>();
         services.AddHostedService<TrafficCoordinatorLeaseHostedService>();
+        services.AddHostedService<Services.FleetPosesBroadcastHostedService>();
 
         return services;
     }

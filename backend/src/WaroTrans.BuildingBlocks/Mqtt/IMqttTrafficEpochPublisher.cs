@@ -15,4 +15,7 @@ public interface IMqttTrafficEpochPublisher
         string? waitingReason,
         string? blocker,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Where every robot is (QoS 0, not retained): see <see cref="RobotMqttTopics.FleetPoses"/>.</summary>
+    Task PublishFleetPosesAsync(object message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

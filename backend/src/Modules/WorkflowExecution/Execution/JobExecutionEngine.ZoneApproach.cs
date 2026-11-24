@@ -69,17 +69,24 @@ public sealed partial class JobExecutionEngine
             .Select(e => e!)
             .ToList();
 
-        // Already standing at one of the bay's queue points: wait there.
+        // The robot in the bay waits for THIS one (traffic: its way out runs through where this one stands): this spot
+        // is in the way, whatever the map says. Sim V022 2026-11-24: R1 waited at EP-QUEUE-B for INBOUND, R2's way out
+        // of INBOUND swept past EP-QUEUE-B, and each waited for the other. Then it moves on to another place.
+        var inTheWay = busy.Value.Robot is { } occupant && await BlocksTrafficOfAsync(robot.Id, occupant, cancellationToken);
+        bool StandsAt(EndpointPoseWithType e) =>
+            Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= Math.Max(QueueOccupiedRadiusMeters, e.PositionTolerance);
+
+        // Already standing at one of the bay's queue points: wait there (unless it is in the way out).
         foreach (var q in queues)
         {
-            if (Dist(robot.PoseX, robot.PoseY, q.X, q.Y) <= Math.Max(QueueOccupiedRadiusMeters, q.PositionTolerance))
+            if (StandsAt(q) && !inTheWay)
             {
                 return new ZoneApproachDecision(null, zoneKey, since, busy.Value.Reason, busy.Value.Robot);
             }
         }
 
-        // On its way to a queue point already (this MOVE's current NAVIGATE): keep going there while it stays free.
-        foreach (var q in queues)
+        // The first free queue point (on its way there already, or not yet): drive there.
+        foreach (var q in queues.Where(q => !StandsAt(q)))
         {
             if (await QueuePointFreeAsync(job, robot, q, policy, cancellationToken))
             {
@@ -87,19 +94,26 @@ public sealed partial class JobExecutionEngine
             }
         }
 
-        // No queue point free: where it stands, when that is a stop (a slot, or a bay it works at); else a free slot.
+        // No queue point free: where it stands, when that is a stop (a slot, or a bay it works at) out of the way out;
+        // else the nearest free slot (parking, charger, inspection, another queue point).
         var here = TrafficZones.ZoneAt(policy.TrafficZones, robot.PoseX, robot.PoseY);
-        if (here is { IsStop: true } && here.Code != bay.Code)
+        if (here is { IsStop: true } && here.Code != bay.Code && !inTheWay)
         {
             return new ZoneApproachDecision(null, zoneKey, since, busy.Value.Reason, busy.Value.Robot);
         }
 
         var slotCodes = policy.TrafficZones.Where(z => z.Kind == TrafficZoneKind.Slot).SelectMany(z => z.EndpointCodes).ToHashSet(StringComparer.Ordinal);
-        foreach (var slot in endpoints.Where(e => e.IsEnabled && slotCodes.Contains(e.Code))
+        foreach (var slot in endpoints.Where(e => e.IsEnabled && slotCodes.Contains(e.Code) && !StandsAt(e))
                      .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y)))
         {
             if (await QueuePointFreeAsync(job, robot, slot, policy, cancellationToken))
             {
+                if (inTheWay)
+                {
+                    logger.LogInformation("Robot {Robot} stands in the way out of {Bay}: it waits at {Slot} instead",
+                        robot.Code, bay.Code, slot.Code);
+                }
+
                 return new ZoneApproachDecision(Pose(slot, job.MapVersionId), zoneKey, since, busy.Value.Reason, busy.Value.Robot);
             }
         }
