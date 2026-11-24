@@ -13,5 +13,10 @@ public enum RobotCommandType
     /// <summary>RESTART_STACK / REBOOT / SHUTDOWN of the robot computer (RB-09).</summary>
     SYSTEM_ACTION,
     /// <summary>Re-localize: the robot sets its pose estimate to a map endpoint where an operator says it stands.</summary>
-    LOCALIZE
+    LOCALIZE,
+    /// <summary>
+    /// The robot finds where it stands by itself: scan matching against candidate poses, then (only when allowed) a
+    /// global localization with a turn on the spot. It takes a pose only when sure; otherwise it returns suggestions.
+    /// </summary>
+    AUTO_LOCALIZE
 }

@@ -15,7 +15,10 @@ public sealed record StartMaintenanceRequest(string Reason);
 
 public sealed record SystemActionRequest(string Action, string ConfirmRobotCode);
 
-public sealed record LocalizeRobotRequest(Guid EndpointId);
+/// <summary>Where the robot stands: an endpoint of its map, or a pose (a suggestion of AUTO_LOCALIZE).</summary>
+public sealed record LocalizeRobotRequest(Guid? EndpointId = null, double? X = null, double? Y = null, double? Yaw = null);
+
+public sealed record AutoLocalizeRobotRequest(bool AllowSpin = false);
 
 /// <summary>Robot control endpoints: stop / resume (RB-03), manual lease (RB-04), maintenance (RB-08), power (RB-09).</summary>
 public static class RobotControlEndpoints
@@ -87,12 +90,36 @@ public static class RobotControlEndpoints
             .WithDescription("Returns the robot to service only when sensorsOk, localizationOk, stopTestOk and trafficClear are all true.");
 
         group.MapPost("/robots/{id:guid}/commands/localize", async (Guid id, LocalizeRobotRequest request, RobotControlService control, CancellationToken ct) =>
-                Results.Accepted(null, new { commandId = await control.LocalizeAsync(id, request.EndpointId, ct) }))
+                Results.Accepted(null, new
+                {
+                    commandId = request.EndpointId is { } endpointId
+                        ? await control.LocalizeAsync(id, endpointId, ct)
+                        : request is { X: { } x, Y: { } y }
+                            ? await control.LocalizeAtPoseAsync(id, x, y, request.Yaw ?? 0, ct)
+                            : throw new WaroTrans.BuildingBlocks.Exceptions.DomainValidationException(
+                                "Give an endpoint or a pose.", "localize_target_required")
+                }))
             .RequirePermission(Permissions.RobotLocalize)
             .RequireRobotScope()
             .Audited("robot.localize_requested", "ROBOT", "id")
             .WithName("LocalizeRobot")
-            .WithDescription("The robot sets its pose estimate to the given endpoint of its map (where an operator placed it). Refused while it runs a command. Follow localizationStatus on the robot.");
+            .WithDescription("The robot sets its pose estimate to the given endpoint of its map (where an operator placed it), or to a pose (x, y, yaw) such as a suggestion of auto-localize. Refused while it runs a command. Follow localizationStatus on the robot.");
+
+        group.MapPost("/robots/{id:guid}/commands/auto-localize", async (Guid id, AutoLocalizeRobotRequest? request, RobotControlService control, CancellationToken ct) =>
+                Results.Accepted(
+                    $"/api/fleet/robots/{id}/auto-localize",
+                    new { commandId = await control.AutoLocalizeAsync(id, request?.AllowSpin ?? false, AutoLocalizeTriggers.Operator, ct) }))
+            .RequirePermission(Permissions.RobotLocalize)
+            .RequireRobotScope()
+            .Audited("robot.auto_localize_requested", "ROBOT", "id")
+            .WithName("AutoLocalizeRobot")
+            .WithDescription("The robot finds where it stands: scan matching against its last pose, home and every endpoint of its map; a turn on the spot only with allowSpin. It takes a pose only when sure, otherwise it answers with suggestions. Follow GET auto-localize.");
+
+        group.MapGet("/robots/{id:guid}/auto-localize", async (Guid id, RobotControlService control, CancellationToken ct) =>
+                Results.Ok(await control.GetAutoLocalizeAsync(id, ct)))
+            .RequirePermission(Permissions.RobotRead)
+            .RequireRobotScope()
+            .WithName("GetRobotAutoLocalize");
 
         group.MapPost("/robots/{id:guid}/system-actions", async (Guid id, SystemActionRequest request, RobotControlService control, CancellationToken ct) =>
                 Results.Accepted(null, new { commandId = await control.SystemActionAsync(id, request.Action, request.ConfirmRobotCode, ct) }))

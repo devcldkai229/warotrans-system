@@ -73,7 +73,7 @@ public sealed record MaintenanceRecordResponse(
 /// Robot-level control outside of jobs: STOP / PAUSE / RESUME (RB-03), the exclusive manual-drive lease (RB-04),
 /// maintenance sessions (RB-08) and system actions (RB-09).
 /// </summary>
-public sealed class RobotControlService(
+public sealed partial class RobotControlService(
     FleetDbContext db,
     IMqttRobotCommandPublisher publisher,
     IIntegrationEventPublisher events,
@@ -83,7 +83,8 @@ public sealed class RobotControlService(
     TimeProvider clock,
     WaroTrans.Navigation.Contracts.INavigationModule? navigation = null,
     WaroTrans.Fleet.Contracts.IRobotWorkQuery? work = null,
-    IOptions<ManualDriveOptions>? manualDrive = null)
+    IOptions<ManualDriveOptions>? manualDrive = null,
+    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? traffic = null)
 {
     /// <summary>A lease is renewed by the client while the operator keeps driving; it lapses on its own otherwise.</summary>
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);

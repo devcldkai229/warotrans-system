@@ -24,6 +24,8 @@ import { shownRobotStatus } from './robotStatus'
 import { FleetMap } from './FleetMap'
 import { RegisterRobotDialog } from './RegisterRobotDialog'
 import { RobotDetailPanel } from './RobotDetailPanel'
+import { OffMapBanner } from './OffMapBanner'
+import { robotsOffPublishedMap } from './robotMaps'
 import { ROBOT_STATUS_ORDER } from './constants'
 import { t } from '@/shared/i18n'
 const chipClass = (active: boolean) =>
@@ -167,6 +169,13 @@ export function FleetPage() {
     [robotsForCounts, monitorMap.warehouseId],
   )
 
+  // Robots of the shown warehouse on another map than its published one: offered a one-click move.
+  const publishedMap = monitorMap.maps.find((map) => map.id === monitorMap.activeMapId && map.status === 'PUBLISHED') ?? null
+  const robotsOffMap = useMemo(
+    () => robotsOffPublishedMap(countsQuery.data?.items ?? [], monitorMap.warehouseId, publishedMap?.id ?? null),
+    [countsQuery.data, monitorMap.warehouseId, publishedMap],
+  )
+
   function scrollStatuses(direction: 1 | -1) {
     statusRailRef.current?.scrollBy({ left: direction * 160, behavior: 'smooth' })
   }
@@ -199,6 +208,12 @@ export function FleetPage() {
 
             {robotNotFound ? (
               <p role="status" className="mx-4 mt-3 rounded-md bg-amber-soft px-3 py-2 text-xs text-amber-ink">{t('That robot was not found. It may have been removed, or you may not have access to it.')}</p>
+            ) : null}
+
+            {publishedMap ? (
+              <Can permission={PERMISSIONS.robotManage}>
+                <OffMapBanner robots={robotsOffMap} published={publishedMap} />
+              </Can>
             ) : null}
 
             <div className="px-4 pt-3">

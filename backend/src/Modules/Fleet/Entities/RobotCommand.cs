@@ -24,6 +24,9 @@ public sealed class RobotCommand
     public string? ErrorCode { get; set; }
     public string? RejectReasonCode { get; set; }
 
+    /// <summary>What the robot reported with its result (command_result.result), as JSON; null when it sent none.</summary>
+    public string? ResultJson { get; set; }
+
     public static RobotCommand CreateNavigate(
         Guid robotId,
         Guid commandId,

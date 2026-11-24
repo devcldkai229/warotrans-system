@@ -75,6 +75,9 @@ public static class FleetModule
         services.AddScoped<TeleopRobotHandler>();
         services.Configure<ManualDriveOptions>(configuration.GetSection(ManualDriveOptions.SectionName));
         services.AddScoped<WaroTrans.Fleet.Features.RobotControl.RobotControlService>();
+        services.Configure<WaroTrans.Fleet.Features.RobotControl.AutoLocalizeOptions>(
+            configuration.GetSection(WaroTrans.Fleet.Features.RobotControl.AutoLocalizeOptions.SectionName));
+        services.AddHostedService<WaroTrans.Fleet.Features.RobotControl.AutoLocalizeHostedService>();
         services.AddSingleton<WaroTrans.Fleet.Features.RobotHealth.RobotHealthStore>();
         services.AddScoped<WaroTrans.Fleet.Features.RobotHealth.ProcessRobotHealthHandler>();
         services.Configure<RobotCameraOptions>(configuration.GetSection(RobotCameraOptions.SectionName));

@@ -39,6 +39,7 @@ public static class RobotCommandTypes
     public const string Resume = "RESUME";
     public const string SystemAction = "SYSTEM_ACTION";
     public const string Localize = "LOCALIZE";
+    public const string AutoLocalize = "AUTO_LOCALIZE";
 }
 
 /// <summary>STOP payload. PAUSE is the same hold, named so the robot can report why it stopped.</summary>
