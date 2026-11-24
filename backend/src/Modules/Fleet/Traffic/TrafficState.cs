@@ -2776,6 +2776,16 @@ public sealed class TrafficState
 
     private bool IsPhysicallyClear(RobotRuntime robot, string resourceId, double x, double y)
     {
+        // Zone chain: a robot is in the zone its centre is in (a slot inside a corridor wins over the corridor), the
+        // same rule it holds zones by. The body circle against the ring kept a robot standing at EP-QUEUE-B, a slot
+        // inside the right column, holding the whole column for ever (sim V022 2026-11-24). Its body cells still hold
+        // what it covers there.
+        if (_semantic is { UsesZoneChain: true } && resourceId.StartsWith("zone:", StringComparison.Ordinal)
+            && TrafficZones.Find(_semantic.TrafficZones, resourceId) is not null)
+        {
+            return SemanticReservation.StandingZoneResource(_semantic, x, y) != resourceId;
+        }
+
         if (_semantic is not null && resourceId.StartsWith("zone:", StringComparison.Ordinal)
             && _semantic.SingleOccupancyZones.FirstOrDefault(z => $"zone:{z.Code}" == resourceId) is { } zone)
         {

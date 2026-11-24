@@ -26,6 +26,9 @@ public sealed partial class JobExecutionEngine
     /// <summary>A robot this close to a queue point stands on it.</summary>
     private const double QueueOccupiedRadiusMeters = 0.30;
 
+    /// <summary>A waiting place closer than this to the bay robot's plan out is in its way (both bodies plus a margin).</summary>
+    private const double OccupantWayClearanceMeters = 0.55;
+
     private sealed record ZoneApproachDecision(
         /// <summary>Where to drive now: the goal itself, a queue point, a stop slot; null = stay and wait.</summary>
         EndpointPoseSnapshot? DriveTo,
@@ -72,12 +75,26 @@ public sealed partial class JobExecutionEngine
         // The robot in the bay waits for THIS one (traffic: its way out runs through where this one stands): this spot
         // is in the way, whatever the map says. Sim V022 2026-11-24: R1 waited at EP-QUEUE-B for INBOUND, R2's way out
         // of INBOUND swept past EP-QUEUE-B, and each waited for the other. Then it moves on to another place.
-        var inTheWay = busy.Value.Robot is { } occupant && await BlocksTrafficOfAsync(robot.Id, occupant, cancellationToken);
+        // Only a robot that is trying to leave counts: an idle one in the bay keeps a stale wait-for edge (sim V022
+        // 2026-11-24: R1 was sent back and forth between EP-QUEUE-A and EP-INSPECTION 221 times for an idle R2).
+        var occupantView = busy.Value.Robot is { } occupant && segmentedTraffic is not null
+            ? (await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken)).Robots.FirstOrDefault(r => r.RobotId == occupant)
+            : null;
+        var occupantLeaving = occupantView is not null && occupantView.WaitingReason != TrafficWaitingReason.None
+                              && occupantView.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined);
+        // The robot in the bay wants out along this plan: a place this close to it is in its way (sim V022: R2 went back
+        // and forth between EP-QUEUE-A and EP-INSPECTION, both on R1's way out of bay A, 142 times).
+        var occupantPath = occupantLeaving && !occupantView!.ProposedPath.IsDefaultOrEmpty ? occupantView.ProposedPath : [];
+        bool OnItsWay(double x, double y) => occupantPath.Any(p => Dist(p.X, p.Y, x, y) < OccupantWayClearanceMeters);
+        var inTheWay = (occupantLeaving && occupantView!.BlockingOwner == robot.Id) || OnItsWay(robot.PoseX, robot.PoseY);
         bool StandsAt(EndpointPoseWithType e) =>
             Dist(robot.PoseX, robot.PoseY, e.X, e.Y) <= Math.Max(QueueOccupiedRadiusMeters, e.PositionTolerance);
 
-        // Already standing at one of the bay's queue points: wait there (unless it is in the way out).
-        foreach (var q in queues)
+        // Already standing at one of the bay's queue points, or at any stop slot it was sent to instead: wait there
+        // (unless it is in the way out). Never drive back and forth between two waiting places.
+        var slotCodesHere = policy.TrafficZones.Where(z => z.Kind == TrafficZoneKind.Slot).SelectMany(z => z.EndpointCodes)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var q in queues.Concat(endpoints.Where(e => e.IsEnabled && slotCodesHere.Contains(e.Code))))
         {
             if (StandsAt(q) && !inTheWay)
             {
@@ -86,7 +103,7 @@ public sealed partial class JobExecutionEngine
         }
 
         // The first free queue point (on its way there already, or not yet): drive there.
-        foreach (var q in queues.Where(q => !StandsAt(q)))
+        foreach (var q in queues.Where(q => !StandsAt(q) && !OnItsWay(q.X, q.Y)))
         {
             if (await QueuePointFreeAsync(job, robot, q, policy, cancellationToken))
             {
@@ -103,7 +120,7 @@ public sealed partial class JobExecutionEngine
         }
 
         var slotCodes = policy.TrafficZones.Where(z => z.Kind == TrafficZoneKind.Slot).SelectMany(z => z.EndpointCodes).ToHashSet(StringComparer.Ordinal);
-        foreach (var slot in endpoints.Where(e => e.IsEnabled && slotCodes.Contains(e.Code) && !StandsAt(e))
+        foreach (var slot in endpoints.Where(e => e.IsEnabled && slotCodes.Contains(e.Code) && !StandsAt(e) && !OnItsWay(e.X, e.Y))
                      .OrderBy(e => Dist(robot.PoseX, robot.PoseY, e.X, e.Y)))
         {
             if (await QueuePointFreeAsync(job, robot, slot, policy, cancellationToken))

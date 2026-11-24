@@ -28,7 +28,9 @@ public class ZoneChainTrafficTests
         new("YARD", TrafficZoneKind.Yard, Rect(-1.0, -0.6, 1.0, 1.8), [], []),
         new("SPINE", TrafficZoneKind.Transit, Rect(1.0, -0.6, 3.0, 0.6), [], []),
         new("BAY-E", TrafficZoneKind.Bay, Rect(3.0, -0.6, 4.2, 0.6), ["EP-PARK-B"], ["EP-EAST"]),
-        new("BAY-N", TrafficZoneKind.Bay, Rect(2.0, 0.6, 3.0, 1.8), ["EP-PARK-A"], ["EP-NORTH"])
+        new("BAY-N", TrafficZoneKind.Bay, Rect(2.0, 0.6, 3.0, 1.8), ["EP-PARK-A"], ["EP-NORTH"]),
+        // A queue slot inside the corridor (like MAP-ONE-V022 EP-QUEUE-B in the right column).
+        new("SLOT-Q", TrafficZoneKind.Slot, Rect(1.3, -0.6, 1.7, -0.3), [], ["EP-Q"])
     ];
 
     private readonly FakeTimeProvider _clock = new();
@@ -241,5 +243,21 @@ public class ZoneChainTrafficTests
 
         Assert.Equal(TrafficRobotPhase.Quarantined, View(s, _r1).Phase);
         Assert.False(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, ToEast())).Granted);
+    }
+
+    [Fact]
+    public void A_robot_that_stops_at_a_slot_inside_the_corridor_lets_the_corridor_go()
+    {
+        var s = NewState();
+        var g1 = s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, Path((1.2, 0), (1.5, -0.45))));
+        Assert.True(g1.Granted);
+        Assert.Contains("zone:SPINE", g1.Authority!.ResourceIds);
+
+        var held = View(s, _r1).OccupiedResourceIds.Where(r => r.StartsWith("cell:", StringComparison.Ordinal)).ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_r1, g1.Authority.Seq + 1, 100, held, 1.5, -0.45, true).Ok);
+
+        var r1 = View(s, _r1).OccupiedResourceIds;
+        Assert.DoesNotContain("zone:SPINE", r1);
+        Assert.Contains("zone:SLOT-Q", r1);
     }
 }
