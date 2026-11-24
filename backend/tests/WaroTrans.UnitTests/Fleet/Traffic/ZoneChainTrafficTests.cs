@@ -229,4 +229,17 @@ public class ZoneChainTrafficTests
 
         Assert.False(w2.Granted);
     }
+
+    [Fact]
+    public void A_robot_that_refused_its_grant_stays_quarantined_through_heartbeats()
+    {
+        var s = NewState();
+        Assert.True(s.MarkOnline(_r1, 0, 0, true, 0).Ok);
+        s.MarkBlocked(_r1, TrafficState.AuthorityRefusedPrefix + "EXPIRED_ON_ARRIVAL");
+
+        Assert.True(s.MarkOnline(_r1, 0, 0, true, 0).Ok);
+
+        Assert.Equal(TrafficRobotPhase.Quarantined, View(s, _r1).Phase);
+        Assert.False(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, ToEast())).Granted);
+    }
 }

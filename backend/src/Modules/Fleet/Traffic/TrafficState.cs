@@ -1754,6 +1754,9 @@ public sealed class TrafficState
         return TrafficOpResult.Success();
     }
 
+    /// <summary>MarkBlocked reason of a robot that refused its grant: <c>AUTHORITY_REFUSED:EXPIRED_ON_ARRIVAL</c>.</summary>
+    public const string AuthorityRefusedPrefix = "AUTHORITY_REFUSED:";
+
     public TrafficOpResult MarkBlocked(Guid robotId, string reason)
     {
         var robot = GetOrCreate(robotId);
@@ -1794,8 +1797,11 @@ public sealed class TrafficState
 
         var reason = robot.QuarantineReason ?? "";
         // Pose/localization faults need telemetry evidence, not HB alone.
+        // AUTHORITY_REFUSED: the robot refused its grant (clock off, wrong map bundle); a heartbeat does not fix that, an
+        // operator does (then reconciles the robot). Lifting it on the next heartbeat re-granted and re-refused for ever.
         if (reason is "LOCALIZATION_LOSS" or "RECONCILE_LOCALIZATION" or "POSE_UNCERTAIN"
-            or "RECONCILE_UNCERTAIN" or "EXIT_UNCERTAIN" or "RECONNECT_UNVERIFIED" or "RECONCILE_IN_MOTION")
+            or "RECONCILE_UNCERTAIN" or "EXIT_UNCERTAIN" or "RECONNECT_UNVERIFIED" or "RECONCILE_IN_MOTION"
+            || reason.StartsWith("BLOCKED:" + AuthorityRefusedPrefix, StringComparison.Ordinal))
         {
             Log($"mark-online-keep:{robot.RobotId}:{reason}");
             return TrafficOpResult.Success();
