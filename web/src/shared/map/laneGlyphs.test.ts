@@ -48,6 +48,39 @@ describe('laneGlyphs', () => {
     expect(glyphs.chevrons.length).toBeGreaterThanOrEqual(5) // a 10-long, 2-wide lane
   })
 
+  it('every arrow stays inside its lane, the last one too (no arrow sticks out of the end)', () => {
+    for (const length of [1.4, 2.6, 3.3, 7.9, 10]) {
+      const lane = [
+        { x: 0, y: 0 },
+        { x: length, y: 0 },
+      ]
+      for (const direction of ['ONE_WAY', 'BIDIRECTIONAL'] as const) {
+        const glyphs = laneGlyphs(lane, 1, direction)
+        for (const c of glyphs.chevrons) {
+          expect(c.x - glyphs.chevronSize / 2).toBeGreaterThanOrEqual(-1e-9)
+          expect(c.x + glyphs.chevronSize / 2).toBeLessThanOrEqual(length + 1e-9)
+        }
+      }
+    }
+  })
+
+  it('a lane shorter than an arrow gets one smaller arrow, whole, in the middle', () => {
+    const tiny = [
+      { x: 0, y: 0 },
+      { x: 0.3, y: 0 },
+    ]
+    const glyphs = laneGlyphs(tiny, 1, 'ONE_WAY')
+    expect(glyphs.chevrons).toHaveLength(1)
+    expect(glyphs.chevrons[0].x).toBeCloseTo(0.15)
+    expect(glyphs.chevronSize).toBeCloseTo(0.18)
+  })
+
+  it('arrows are spread evenly, the same room left at both ends', () => {
+    const glyphs = laneGlyphs(eastward, 2, 'ONE_WAY')
+    const xs = glyphs.chevrons.map((c) => c.x)
+    expect(xs[0]).toBeCloseTo(10 - xs[xs.length - 1])
+  })
+
   it('a lane shorter than the spacing still gets one chevron in the middle', () => {
     const short = chevronsAlong(
       [

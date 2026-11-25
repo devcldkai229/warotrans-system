@@ -39,8 +39,8 @@ export const ZONE_DESCRIPTION: Record<string, string> = {
   JUNCTION: 'Shared traffic intersection',
 };
 
-/** OTTO electric cyan first, matching web console plan swath palette. */
-export const PLAN_COLORS = ['#00d2ff', '#ec5b9a', '#2dc7b4', '#a66cff', '#f7b928', '#45bd62'] as const;
+/** Lime first, matching the web console: no blue, because the lanes are blue and a blue plan disappeared on them. */
+export const PLAN_COLORS = ['#a3e635', '#ff5fa2', '#ff9f43', '#c084fc', '#f7d046', '#5eead4'] as const;
 
 export const JOB_HIGHLIGHT_COLOR = {
   pickup: '#10b981',

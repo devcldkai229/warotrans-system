@@ -478,7 +478,9 @@ function MapCanvas({
     robots,
     mapId: map.id,
   });
-  const canReadRobot = !onPickEndpoint && sessionCan(session, PERMISSIONS.robotRead);
+  // Staff see where a robot is about to drive (its plan), not where it has been: the recorded trail is for Admins
+  // and Technicians looking into what happened.
+  const canReadRobot = !onPickEndpoint && session?.role !== 'STAFF' && sessionCan(session, PERMISSIONS.robotRead);
   const { trailSegments } = useMapJobTrail({
     enabled: canReadRobot && layers.paths && active,
     jobContext,

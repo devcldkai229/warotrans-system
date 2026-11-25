@@ -277,13 +277,13 @@ test('mapTraffic builds live Nav2 paths only for online robots on the active map
   assert.equal(paths.length, 2);
 
   const p1 = paths.find(p => p.robotCode === 'AMR-01');
-  assert.equal(p1.color, '#00d2ff');
+  assert.equal(p1.color, '#a3e635');
   assert.equal(p1.points.length, 3);
   assert.equal(p1.grantedCount, 2);
   assert.equal(p1.waiting, false);
 
   const p2 = paths.find(p => p.robotCode === 'AMR-02');
-  assert.equal(p2.color, '#ec5b9a');
+  assert.equal(p2.color, '#ff5fa2');
   assert.equal(p2.points.length, 2);
   assert.equal(p2.grantedCount, 0);
   assert.equal(p2.waiting, true);

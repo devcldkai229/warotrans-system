@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/features/auth/authContext'
 import { PERMISSIONS } from '@/shared/auth/permissions'
+import { useTrafficOverlay } from '@/features/robots/useTrafficOverlay'
 import { Can } from '@/features/auth/RequirePermission'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -349,6 +350,18 @@ export function TransportRequestsPage() {
     [mapEndpoints],
   )
 
+  // Where each running robot is about to drive (its live plan), as on the Fleet and Job pages.
+  const mayReadTraffic = useAuth().can(PERMISSIONS.trafficRead)
+  const robotRefs = useMemo(
+    () => (robotsQuery.data?.items ?? []).map((robot) => ({ id: robot.id, code: robot.code })),
+    [robotsQuery.data],
+  )
+  const traffic = useTrafficOverlay(robotRefs, mayReadTraffic && !composing)
+  const planOverlay = useMemo(
+    () => (traffic.overlay?.plannedPaths ? { plannedPaths: traffic.overlay.plannedPaths } : null),
+    [traffic.overlay],
+  )
+
   const mapRobots = useMemo<MapRobot[]>(
     () =>
       (robotsQuery.data?.items ?? []).map((robot) => ({
@@ -529,6 +542,7 @@ export function TransportRequestsPage() {
             composing ? composerMap?.occupancyImageUrl ?? null : monitorMap.geometry.occupancyImageUrl
           }
           robots={composing ? [] : mapRobots}
+          trafficOverlay={composing ? null : planOverlay}
           layers={{ occupancy: true }}
           labels="all"
           focusEndpointIds={mapFocus}

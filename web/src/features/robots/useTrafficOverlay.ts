@@ -3,8 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { getTrafficSnapshot, type TrafficSnapshot } from '@/shared/api/fleet'
 import type { MapTrafficOverlay } from '@/shared/map/WarehouseMap'
 
-/** Plan swath colours, one per robot (by code order); distinct from the status colours of the robot bodies. */
-export const PLAN_COLORS = ['#2d88ff', '#ec5b9a', '#2dc7b4', '#a66cff', '#f7b928', '#45bd62']
+/**
+ * Plan colours, one per robot (by code order). None is blue: the lanes are blue, and a blue plan disappeared on them.
+ * Also distinct from the status colours of the robot bodies.
+ */
+export const PLAN_COLORS = ['#a3e635', '#ff5fa2', '#ff9f43', '#c084fc', '#f7d046', '#5eead4']
 
 /**
  * What the map draws of the traffic coordinator's snapshot: the lanes a robot holds the authority of, the zones and cells
