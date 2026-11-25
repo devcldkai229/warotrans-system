@@ -61,7 +61,11 @@ def create(w: rr.World, case: dict[str, Any], tag: str) -> tuple[str, str, str]:
         workflow = "INBOUND"
     elif kind == "OUTBOUND":
         c = [rr.stored_at(w, case["src"])]
-        rr.voucher(w, "OUTBOUND", c, f"technical e2e {tag}")   # an outbound trip needs a confirmed outbound voucher
+        try:  # an outbound trip needs a confirmed outbound voucher
+            rr.voucher(w, "OUTBOUND", c, f"technical e2e {tag}")
+        except AssertionError as exc:  # a rerun: the container already sits on the voucher of a broken try
+            if "voucher_container_on_other_voucher" not in str(exc):
+                raise
         moves = [{"container": c[0], "src": w.loc_ep[case["src"]], "srcLoc": case["src"], "dst": "EP-OUTBOUND"}]
         workflow = "OUTBOUND_RETRIEVAL"
     else:
@@ -175,6 +179,13 @@ def run(n: int, wait_ai: bool, ai_timeout: float) -> dict[str, Any]:
                 log(f"  {msg}")
                 record["events"].append({"t": round(time.time() - t0, 1), "staff": msg})
         time.sleep(1.0)
+    if injected is not None and injected.get("id"):
+        # A fault outliving its trip leaks into the next case (lab 2026-11-25: IOT-03's clock offset showed as a
+        # CLOCK_JUMP in case 9): it ends with the trip.
+        try:
+            api.host("POST", f"/api/lab/injections/{injected['id']}/stop", {})
+        except Exception as exc:  # noqa: BLE001 - already expired
+            log(f"  lab stop: {str(exc)[:120]}")
     record["job"] = {k: j.get(k) for k in ("jobNo", "status", "failureCode", "failureMessage", "completedSteps", "totalSteps")}
     record["endedAt"] = datetime.now(UTC).isoformat()
     log(f"case {n}: job {record['job']}")

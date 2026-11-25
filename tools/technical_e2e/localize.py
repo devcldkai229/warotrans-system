@@ -8,7 +8,7 @@ from api import Api
 x, y, yaw = (float(v) for v in (sys.argv[1:4] if len(sys.argv) >= 4 else ("0.104", "-1.588", "1.571")))
 c = pi.connect()
 for _ in range(40):
-    _, out = pi.run(c, "journalctl -u warotrans-rbt002 --since '-150s' --no-pager | grep -c 'lifecycle_manager_navigation.*Managed nodes are active'", sudo=True)
+    _, out = pi.run(c, "journalctl -u warotrans-rbt002 -b --no-pager | tac | sed '/Started warotrans/q' | grep -c 'lifecycle_manager_navigation.*Managed nodes are active'", sudo=True)
     if out.strip() not in ("", "0"):
         break
     time.sleep(6)
