@@ -13,6 +13,7 @@ import {
   ROBOT_WIDTH_METERS,
   computeOttoStationArchitecture,
   endpointVisualKind,
+  endpointVisualKindLabel,
   resolveOttoRobotTagPlacements,
   visualKindColor,
   type RobotTagPlacement,
@@ -250,7 +251,7 @@ export function WarehouseMap({
   onUserPan,
   drawing,
   occupancyImageUrl,
-  appearance = 'classic',
+  appearance = 'otto',
   costmapImages = [],
   cellSets = [],
   className,
@@ -260,6 +261,7 @@ export function WarehouseMap({
   const isOtto = appearance === 'otto'
   const maxZoom = isOtto ? 6 : 4
   const show = { zones: true, edges: true, endpoints: true, robots: true, legend: true, controls: true, coordinates: true, ...layers }
+  const zoomInteractive = show.controls || Boolean(onZoomChange)
   const rawWidth = bounds.maxX - bounds.minX
   const rawHeight = bounds.maxY - bounds.minY
   const ottoArch = useMemo(
@@ -320,7 +322,7 @@ export function WarehouseMap({
 
   useEffect(() => {
     const el = containerRef.current
-    if (!isOtto || !el) return
+    if (!isOtto || !zoomInteractive || !el) return
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
       const state = zoomStateRef.current
@@ -352,7 +354,7 @@ export function WarehouseMap({
     }
     el.addEventListener('wheel', handleWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleWheel)
-  }, [isOtto])
+  }, [isOtto, zoomInteractive])
 
   // Follow: pan so `follow` sits in the frame centre.
   const followX = follow?.x
@@ -456,6 +458,7 @@ export function WarehouseMap({
     robots: Array.from(new Set(robots.map((robot) => robot.status))),
     edges: Array.from(new Set(edges.map((edge) => edge.direction))),
     endpointTypes: Array.from(new Set(endpoints.map((endpoint) => endpoint.endpointType))),
+    stationKinds: Array.from(new Set(endpoints.map((endpoint) => endpointVisualKind(endpoint)))),
   }
 
   const basePxPerMetre = isOtto && stageSize.width > 0 && width > 0 ? stageSize.width / width : 110
@@ -522,7 +525,7 @@ export function WarehouseMap({
       )}
       onPointerDown={startPan}
       onDoubleClick={
-        isOtto
+        isOtto && zoomInteractive
           ? (event) => {
               if ((event.target as HTMLElement).closest('[data-map-ui], [data-map-overlay] > :not([data-map-tip])')) return
               changeZoom(zoom > 1.2 ? 1 : 2.2)
@@ -1609,7 +1612,8 @@ export function WarehouseMap({
               key={index}
               data-map-tip
               className={cx(
-                'absolute flex origin-bottom -translate-x-1/2 translate-y-[calc(-100%-24px)] scale-[calc(1/var(--z,1))] flex-col rounded-sm px-3 py-2 text-xs whitespace-nowrap text-white shadow-float',
+                'absolute flex origin-bottom -translate-x-1/2 translate-y-[calc(-100%-24px)] scale-[calc(1/var(--z,1))] flex-col px-3 py-2 text-xs whitespace-nowrap text-white shadow-float',
+                isOtto ? 'rounded-lg' : 'rounded-sm',
                 "after:absolute after:-bottom-1 after:left-1/2 after:size-2 after:-translate-x-1/2 after:rotate-45 after:bg-inherit after:content-['']",
                 CALLOUT_TONE[callout.tone ?? 'dark'],
               )}
@@ -1629,7 +1633,12 @@ export function WarehouseMap({
       {show.legend ? (
         <details
           data-map-ui
-          className={cx(CHROME, 'top-3 left-3 min-w-40 rounded-md px-3.5 py-2.5 text-xs text-ink-2')}
+          className={cx(
+            isOtto ? OTTO_CHROME : CHROME,
+            isOtto
+              ? 'top-3 left-3 max-h-[calc(100%-64px)] min-w-44 overflow-y-auto rounded-xl px-3.5 py-2.5 text-xs text-ink-2'
+              : 'top-3 left-3 min-w-40 rounded-md px-3.5 py-2.5 text-xs text-ink-2',
+          )}
           open={show.legendOpen ? true : undefined}
         >
           <summary className="font-medium text-ink">{t('Guide')}</summary>
@@ -1637,12 +1646,24 @@ export function WarehouseMap({
             <GuideSection title={t('Robots')}>
               {present.robots.map((status) => (
                 <GuideItem key={status} label={humanize(status)}>
-                  <svg className="shrink-0" width="18" height="18" viewBox="-1.2 -1.2 2.4 2.4" color={ROBOT_COLOR[status]}>
-                    <circle r={1.05} fill="currentColor" />
-                    <g color="#fff">
-                      <MapGlyph icon="robot" size={1.3} />
-                    </g>
-                  </svg>
+                  {isOtto ? (
+                    <span
+                      className="inline-flex h-4 w-5 shrink-0 items-center justify-center rounded-sm border border-[var(--otto-chassis-stroke)] bg-[var(--otto-chassis-fill)]"
+                      aria-hidden="true"
+                    >
+                      <span
+                        className="h-1 w-3.5 rounded-full"
+                        style={{ backgroundColor: ROBOT_COLOR[status] }}
+                      />
+                    </span>
+                  ) : (
+                    <svg className="shrink-0" width="18" height="18" viewBox="-1.2 -1.2 2.4 2.4" color={ROBOT_COLOR[status]}>
+                      <circle r={1.05} fill="currentColor" />
+                      <g color="#fff">
+                        <MapGlyph icon="robot" size={1.3} />
+                      </g>
+                    </svg>
+                  )}
                 </GuideItem>
               ))}
             </GuideSection>
@@ -1676,16 +1697,25 @@ export function WarehouseMap({
               ))}
             </GuideSection>
           ) : null}
-          {show.endpoints && present.endpointTypes.length > 0 ? (
+          {show.endpoints && (isOtto ? present.stationKinds.length > 0 : present.endpointTypes.length > 0) ? (
             <GuideSection title={t('Endpoints')} note={t('The wedge shows the arrival heading.')} columns>
-              {present.endpointTypes.map((type) => (
-                <GuideItem key={type} label={ENDPOINT_NAME[type]}>
-                  <svg className="shrink-0" width="18" height="18" viewBox="-1 -1 2 2" color={ENDPOINT_COLOR[type]}>
-                    <rect x={-0.85} y={-0.85} width={1.7} height={1.7} rx={0.42} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16} />
-                    <MapGlyph icon={type} size={1.05} />
-                  </svg>
-                </GuideItem>
-              ))}
+              {isOtto
+                ? present.stationKinds.map((kind) => (
+                    <GuideItem key={kind} label={endpointVisualKindLabel(kind)}>
+                      <svg className="shrink-0" width="18" height="18" viewBox="-1 -1 2 2" color={visualKindColor(kind)}>
+                        <rect x={-0.85} y={-0.85} width={1.7} height={1.7} rx={0.42} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16} />
+                        <MapGlyph icon={kind} size={1.05} />
+                      </svg>
+                    </GuideItem>
+                  ))
+                : present.endpointTypes.map((type) => (
+                    <GuideItem key={type} label={ENDPOINT_NAME[type]}>
+                      <svg className="shrink-0" width="18" height="18" viewBox="-1 -1 2 2" color={ENDPOINT_COLOR[type]}>
+                        <rect x={-0.85} y={-0.85} width={1.7} height={1.7} rx={0.42} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16} />
+                        <MapGlyph icon={type} size={1.05} />
+                      </svg>
+                    </GuideItem>
+                  ))}
             </GuideSection>
           ) : null}
         </details>

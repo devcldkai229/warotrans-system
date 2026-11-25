@@ -247,7 +247,7 @@ export function RobotManualPage() {
       <div className="absolute top-4 right-4 flex flex-col gap-2">
         <ToolButton icon="layers" label={t('Zones')} active={showZones} onClick={() => setShowZones(!showZones)} />
         <ToolButton icon="navigate" label={t('Follow robot')} active={follow} onClick={() => setFollow(!follow)} />
-        <ToolButton icon="plus" label={t('Zoom in')} onClick={() => setZoom(Math.min(4, zoom + 0.5))} />
+        <ToolButton icon="plus" label={t('Zoom in')} onClick={() => setZoom(Math.min(6, zoom + 0.5))} />
         <ToolButton icon="minus" label={t('Zoom out')} onClick={() => setZoom(Math.max(1, zoom - 0.5))} />
         <ToolButton
           icon="fit"
