@@ -18,6 +18,8 @@ export interface ConsolePaths {
   robotManual: (robotCode: string) => string
   job: (jobId: string) => string
   issues: (issueId?: string) => string
+  /** Technical tickets (phiếu kỹ thuật): the list, or one ticket. */
+  tickets: (ticketId?: string) => string
   robotHistory: (robotCode?: string) => string
   notifications: string
   audit: string
@@ -45,6 +47,7 @@ const ADMIN_PATHS: ConsolePaths = {
   robotManual: (robotCode) => `/monitor/fleet/${robotCode}/manual`,
   job: (jobId) => `/monitor/jobs/${jobId}`,
   issues: (issueId) => (issueId ? `/operations/issues/${issueId}` : '/operations/issues'),
+  tickets: (ticketId) => (ticketId ? `/operations/tickets/${ticketId}` : '/operations/tickets'),
   robotHistory: (robotCode) => historyRoute('/operations/robot-history', robotCode),
   notifications: '/operations/notifications',
   audit: '/operations/audit',
@@ -58,6 +61,7 @@ const TECH_PREFIXES: [string, string][] = [
   ['/monitor/fleet', '/tech/fleet'],
   ['/monitor/jobs/', '/tech/jobs/'],
   ['/operations/issues', '/tech/issues'],
+  ['/operations/tickets', '/tech/tickets'],
   ['/operations/robot-history', '/tech/robot-history'],
   ['/operations/notifications', '/tech/notifications'],
   ['/operations/audit', '/tech/audit'],
@@ -96,6 +100,7 @@ const TECH_PATHS: ConsolePaths = {
   robotManual: (robotCode) => `/tech/fleet/${robotCode}/manual`,
   job: (jobId) => `/tech/jobs/${jobId}`,
   issues: (issueId) => (issueId ? `/tech/issues/${issueId}` : '/tech/issues'),
+  tickets: (ticketId) => (ticketId ? `/tech/tickets/${ticketId}` : '/tech/tickets'),
   robotHistory: (robotCode) => historyRoute('/tech/robot-history', robotCode),
   notifications: '/tech/notifications',
   audit: '/tech/audit',

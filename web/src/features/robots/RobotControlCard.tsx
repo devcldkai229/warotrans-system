@@ -10,6 +10,9 @@ import {
   getRobotCharging,
   getRobotCommandCatalog,
   getStopState,
+  emergencyStopRobot,
+  DISRUPTIVE_ACTIONS,
+  type SystemAction,
   resumeRobot,
   returnRobotToPark,
   sendRobotToCharger,
@@ -23,6 +26,16 @@ import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
 import { t } from '@/shared/i18n'
+/** What each SYSTEM_ACTION does, in the words of the button and its hint. */
+const ACTION_COPY: Record<SystemAction, { label: string; hint: string }> = {
+  RESTART_NAV: { label: t('Restart Nav2'), hint: t('Planner, controller and costmaps start again (about 20 s). Use when the robot plans badly or Nav2 reports errors.') },
+  RESTART_LOCALIZATION: { label: t('Restart localization'), hint: t('Map server and AMCL start again; the robot keeps the pose it had. Use when the pose drifts or jumps.') },
+  RESTART_CAMERA: { label: t('Restart camera'), hint: t('Camera stream and evidence recording start again.') },
+  RESTART_STACK: { label: t('Restart whole stack'), hint: t('Every program of the robot starts again: it is off line for about a minute.') },
+  REBOOT: { label: t('Reboot robot'), hint: t('The robot computer restarts: off line for about two minutes.') },
+  SHUTDOWN: { label: t('Power off'), hint: t('The robot computer shuts down. It cannot be switched on from here.') },
+}
+
 const STOP_COPY: Record<StopStateName, { label: string; tone: Tone }> = {
 
   NONE: { label: t('No stop requested'), tone: 'grey' },
@@ -46,6 +59,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
   const queryClient = useQueryClient()
   const { capabilities } = useAuth()
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [checklist, setChecklist] = useState({ sensorsOk: false, localizationOk: false, stopTestOk: false, trafficClear: false })
 
   const robot = useQuery({ queryKey: ['robot', robotId], queryFn: () => getRobot(robotId), refetchInterval: 5_000 })
@@ -74,6 +88,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
       setError(null)
       refresh()
     },
+    onMutate: () => setNotice(null),
     onError: (failure) => {
       setError(message(failure))
       refresh()
@@ -140,6 +155,39 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
       ) : (
         <p className="mt-1 text-xs text-muted">{t('A software stop is not an emergency stop: use the robot\'s physical E-stop when people are at risk.')}</p>
       )}
+
+      {mayStop ? (
+        <Button
+          block
+          variant="danger"
+          className="mt-3"
+          disabled={act.isPending}
+          title={t('Stops the robot now, pauses its running Job and clears every command it was given.')}
+          onClick={() =>
+            act.mutate(async () => {
+              const result = await emergencyStopRobot(robotId, t('Emergency stop from the console'))
+              setNotice(
+                !result.robotOnline
+                  ? t('{robot} is offline: no stop could reach it. Use its physical E-stop. Its commands were cleared.', { robot: result.robotCode })
+                  : result.pausedJobs.length > 0
+                    ? t('{robot} stopped. Paused {jobs}; resume the Job to continue. {count} command(s) cleared.', {
+                        robot: result.robotCode,
+                        jobs: result.pausedJobs.join(', '),
+                        count: result.clearedCommands,
+                      })
+                    : t('{robot} stopped. {count} command(s) cleared. Resume the robot to let it move.', {
+                        robot: result.robotCode,
+                        count: result.clearedCommands,
+                      }),
+              )
+              return result
+            })
+          }
+        >
+          {t('Emergency stop & clear commands')}
+        </Button>
+      ) : null}
+      {notice ? <p role="status" className="mt-2 rounded-sm bg-amber-soft px-3 py-2 text-xs text-amber-ink">{notice}</p> : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {mayStop && offered('STOP') ? (
@@ -244,24 +292,50 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
         </div>
       ) : null}
 
-      {mayPower && announced.length > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-muted">{t('Power:')}</span>
-          {announced.map((action) => (
-            <Button
-              key={action}
-              size="sm"
-              variant="ghost"
-              disabled={!held || act.isPending || offline}
-              title={offlineReason ?? (held ? undefined : t('Stop the robot first'))}
-              onClick={() => {
-                const typed = window.prompt(t('Type {robotCode} to confirm {action}.', { robotCode, action }))
-                if (typed) act.mutate(() => robotSystemAction(robotId, action as 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN', typed))
-              }}
-            >
-              {action.replace('_', ' ').toLowerCase()}
-            </Button>
-          ))}
+      {mayPower ? (
+        <div className="mt-4 border-t border-outline-soft pt-3">
+          <p className="text-xs font-medium">{t('Restart / power')}</p>
+          {announced.length === 0 ? (
+            <p className="mt-1 text-xs text-muted">{t('This robot announces no restart actions (its software needs the update with SYSTEM_ACTION).')}</p>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-muted">
+                {held ? t('The robot is stopped: choose what to restart.') : t('Stop the robot first: restarts are only allowed while it holds motion and runs no Job.')}
+              </p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {(Object.keys(ACTION_COPY) as SystemAction[])
+                  .filter((action) => announced.includes(action))
+                  .map((action) => {
+                    const disruptive = DISRUPTIVE_ACTIONS.includes(action)
+                    return (
+                      <li key={action} className="flex items-start justify-between gap-3">
+                        <span className="min-w-0 text-xs text-ink-2">{ACTION_COPY[action].hint}</span>
+                        <Button
+                          size="sm"
+                          variant={disruptive ? 'dangerGhost' : 'outline'}
+                          disabled={!held || act.isPending || offline}
+                          title={offlineReason ?? (held ? undefined : t('Stop the robot first'))}
+                          onClick={() => {
+                            if (disruptive) {
+                              const typed = window.prompt(t('Type {robotCode} to confirm: {action}.', { robotCode, action: ACTION_COPY[action].label }))
+                              if (typed) act.mutate(() => robotSystemAction(robotId, action, typed))
+                            } else if (window.confirm(t('{action} on {robotCode}?', { action: ACTION_COPY[action].label, robotCode }))) {
+                              act.mutate(async () => {
+                                const sent = await robotSystemAction(robotId, action)
+                                setNotice(t('{action} sent. The robot reports when it is done (see its history).', { action: ACTION_COPY[action].label }))
+                                return sent
+                              })
+                            }
+                          }}
+                        >
+                          {ACTION_COPY[action].label}
+                        </Button>
+                      </li>
+                    )
+                  })}
+              </ul>
+            </>
+          )}
         </div>
       ) : null}
 

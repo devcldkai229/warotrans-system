@@ -15,6 +15,7 @@ import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { notificationTarget, TYPE_TONE } from './notificationTarget'
 import { localizedNotificationText } from './notificationText'
+import { NotificationLinks } from './NotificationLinks'
 
 import { t } from '@/shared/i18n'
 const PAGE_SIZE = 30
@@ -143,6 +144,14 @@ export function NotificationsPage() {
                     <Td className="max-w-[520px] align-top">
                       <div className={notification.isRead ? 'text-ink-2' : 'font-medium text-ink'}>{localizedNotificationText(notification).title}</div>
                       <p className="mt-0.5 text-xs whitespace-pre-line text-ink-2">{localizedNotificationText(notification).content}</p>
+                      <NotificationLinks
+                        links={notification.links}
+                        paths={paths}
+                        onOpen={() => {
+                          if (!notification.isRead) markRead.mutate(notification.id)
+                        }}
+                        className="mt-2"
+                      />
                     </Td>
                     <Td className="align-top">
                       <span className="flex flex-wrap items-center gap-2">

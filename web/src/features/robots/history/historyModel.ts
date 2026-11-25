@@ -95,13 +95,79 @@ function reasonText(code: string, item: RobotHistoryItem): string {
  * is shown beside the line (see `historyStatus`), so the words only say what changed and from what.
  */
 export function describeHistoryItem(item: RobotHistoryItem): string {
+  if (item.kind === 'TICKET') {
+    return t('Ticket {no}: {title}', { no: item.ticketNo ?? '', title: item.ticketTitle ?? '' })
+  }
   if (item.kind === 'COMMAND') {
-    const command = item.commandType ? humanize(item.commandType) : t('Command')
+    const command = commandText(item)
     return item.commandOutcome ? t('{command}: {outcome}', { command, outcome: outcomeText(item.commandOutcome) }) : command
   }
   const codes = (item.reason ?? '').split(',').map((code) => code.trim()).filter(Boolean)
   if (codes.length === 0) return t('State recorded')
   return codes.map((code) => reasonText(code, item)).join(' · ')
+}
+
+const SYSTEM_ACTION_TEXT: Record<string, string> = {
+  RESTART_NAV: t('Restart Nav2'),
+  RESTART_LOCALIZATION: t('Restart localization'),
+  RESTART_CAMERA: t('Restart camera'),
+  RESTART_STACK: t('Restart whole stack'),
+  REBOOT: t('Reboot robot'),
+  SHUTDOWN: t('Power off'),
+}
+
+/** A command in words: where a MOVE went, which stop, which restart. Older lines without details read as before. */
+export function commandText(item: RobotHistoryItem): string {
+  const target = item.target ?? null
+  switch (item.commandType) {
+    case 'NAVIGATE_TO_POSE':
+      return target ? t('Move to {target}', { target }) : humanize(item.commandType)
+    case 'LOCALIZE':
+      return target ? t('Localize at {target}', { target }) : t('Localize')
+    case 'AUTO_LOCALIZE':
+      return t('Auto-localize')
+    case 'STOP':
+      return target === 'PAUSE' ? t('Stop (pause of a Job)') : t('Stop')
+    case 'RESUME':
+      return t('Resume')
+    case 'CANCEL':
+      return t('Cancel the running move')
+    case 'SYSTEM_ACTION':
+      return target ? (SYSTEM_ACTION_TEXT[target] ?? humanize(target)) : t('System action')
+    case 'START_MAPPING':
+      return t('Start map building')
+    case 'STOP_MAPPING':
+      return t('Stop map building')
+    default:
+      return item.commandType ? humanize(item.commandType) : t('Command')
+  }
+}
+
+/** The second line of a command or ticket: why it was refused or failed, the operator's reason, how long it took. */
+export function describeCommandDetails(item: RobotHistoryItem): string | null {
+  const parts: string[] = []
+  if (item.kind === 'TICKET') {
+    if (item.byName) parts.push(t('by {who}', { who: item.byName }))
+    if (item.ticketResult) parts.push(t('result {value}', { value: humanize(item.ticketResult) }))
+    return parts.length > 0 ? parts.join(' · ') : null
+  }
+  if (item.kind !== 'COMMAND') return null
+  if (item.jobNo) parts.push(t('Job {job}', { job: item.jobNo }))
+  if (item.errorCode) {
+    parts.push(
+      item.errorCode === 'EMERGENCY_STOP'
+        ? t('cleared by an emergency stop')
+        : item.commandStatus === 'REJECTED'
+          ? t('refused: {code}', { code: item.errorCode })
+          : t('error {code}', { code: item.errorCode }),
+    )
+  }
+  if (item.note) parts.push(t('reason: {text}', { text: item.note }))
+  if (item.completedAt) {
+    const seconds = Math.round((Date.parse(item.completedAt) - Date.parse(item.occurredAt)) / 1000)
+    if (Number.isFinite(seconds) && seconds >= 0) parts.push(t('took {seconds} s', { seconds }))
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 /**
@@ -156,6 +222,11 @@ const ROBOT_TONE: Record<string, Tone> = {
 
 /** The badge beside a line: the status the robot is in after a change, or how a command stands. */
 export function historyStatus(item: RobotHistoryItem): HistoryBadge | null {
+  if (item.kind === 'TICKET') {
+    const status = item.commandStatus
+    if (!status) return null
+    return { label: humanize(status), tone: status === 'OPEN' ? 'amber' : status === 'COMPLETED' ? 'green' : 'grey' }
+  }
   const status = item.kind === 'COMMAND' ? item.commandStatus : item.toStatus
   if (!status) return null
   const tones = item.kind === 'COMMAND' ? COMMAND_TONE : ROBOT_TONE
@@ -164,7 +235,7 @@ export function historyStatus(item: RobotHistoryItem): HistoryBadge | null {
 
 /** A page boundary can repeat a line when something is written between two requests; one line is shown once. */
 export function lineKey(item: RobotHistoryItem): string {
-  return [item.kind, item.occurredAt, item.commandId ?? '', item.toStatus ?? '', item.reason ?? '', item.source ?? ''].join('|')
+  return [item.kind, item.occurredAt, item.commandId ?? item.ticketId ?? '', item.toStatus ?? '', item.reason ?? '', item.source ?? ''].join('|')
 }
 
 export function uniqueLines(items: readonly RobotHistoryItem[]): RobotHistoryItem[] {
