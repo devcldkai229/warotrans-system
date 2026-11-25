@@ -692,8 +692,11 @@ public sealed class RobotCareService(
             // goes back to its own).
             var otherHomes = (trafficOptions?.Value.RobotHomeEndpoints ?? new Dictionary<string, string>())
                 .Where(h => h.Key != robot.Code).Select(h => h.Value).ToHashSet(StringComparer.Ordinal);
-            var alreadyParked = endpoints.Any(e => e.EndpointType == EndpointType.PARK && !otherHomes.Contains(e.Code)
-                                                   && Distance(robot, e) <= ParkedRadius(e));
+            // On another robot's home it stays while its own home is taken (lab 2026-11-25: two robots on each other's
+            // homes were sent "home" to the place they stood on, again and again).
+            var onPark = endpoints.Where(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= ParkedRadius(e)).ToList();
+            var alreadyParked = onPark.Any(e => !otherHomes.Contains(e.Code))
+                                || (onPark.Count > 0 && await FreeHomeAsync(robot, cancellationToken) is null);
             if (holdsJob || alreadyParked)
             {
                 continue;
