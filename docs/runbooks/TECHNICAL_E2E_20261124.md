@@ -54,7 +54,8 @@ IssueReport đã tạo (trong Host) cho 9 case cuối: 3, 5, 6, 7, 8, 9, 10, 11,
 1. **Bug traffic A1/A2 trên develop (N1).** Với prefix grant (horizon 0,6 m), robot đi hết phần được cấp thì cổng đóng
    `OUTSIDE_RESERVATION`. Không ai cấp thêm, robot đứng tới RESULT_TIMEOUT.
    - Bàn thử phải chạy Host với `Traffic__SemanticPrefixGrant=false` và `Traffic__SemanticHorizonMeters=20`.
-   - **Jira chưa tạo:** hệ thống quyền đã chặn thao tác ra ngoài (xem mục 4).
+   - **Jira: [WTCP-218](https://devopsidian.atlassian.net/browse/WTCP-218)** (IssueReport ISS-9C9B94BC), tạo 2026-11-25
+     sau khi bạn đồng ý.
 2. **AI kẹt vĩnh viễn ở INVESTIGATING** nếu tiến trình AI chết giữa lúc điều tra, và không huỷ được case đó.
    - Đã sửa: worker tự chuyển case sang ANALYSIS_INCOMPLETE sau 10 phút, tính từ lúc bắt đầu điều tra, rồi điều tra lại.
 3. **Trần token 90k quá thấp** cho journal dài (case 7: 94,5k tokens, ANALYSIS_INCOMPLETE).
@@ -108,16 +109,12 @@ Test: AI 67, gateway 452, evidence agent 20, tất cả xanh.
 
 ## 4. Còn lại — cần bạn quyết định
 
-1. **Jira.** Hệ thống quyền (auto mode) chặn việc tạo issue Jira vì đây là thao tác ra bên ngoài. Script đã sẵn:
-   - bug traffic A1/A2: `python tools/technical_e2e/jira_traffic_bug.py`;
-   - các case AI kết luận là lỗi code (DEVELOPER): case 3, 6 và 11, tức `case-62775602ae`, `case-2fde7f63a3`,
-     `case-70e86ac364`. Chạy `python tools/technical_e2e/ticket.py <case id> --jira`.
-
-   Lưu ý: 3 case này là lỗi **bơm giả**. Nên chỉ đẩy một case để thử luồng Jira, còn bug traffic là lỗi thật.
+1. **Jira:** đã đẩy bug traffic thật thành WTCP-218. Các case lỗi bơm giả (3, 6, 11) không đẩy, theo ý bạn: chỉ task
+   thật. Lần sau, lỗi code thật do AI tìm ra thì đẩy bằng `python tools/technical_e2e/ticket.py <case id> --jira`.
 2. Điều tra hiện tượng POSE_UNKNOWN chập chờn trên bàn thử (2.4).
 3. Case 2 robot (TRA-02, REASSIGN) chờ RBT-001.
 4. Push các nhánh (4 repo), sau khi bạn duyệt.
-5. **Đổi Jira token** (đã lộ trong chat).
+5. Jira token: bạn quyết định giữ nguyên.
 
 ## 5. Cách bật lại bàn thử
 
