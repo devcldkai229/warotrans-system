@@ -188,6 +188,34 @@ public class SemanticPrefixGrantTests
     }
 
     [Fact]
+    public void A_robot_on_a_Job_gets_the_zone_before_an_idle_robot_that_asked_first()
+    {
+        var s = LeaderInTheZone(out var leader);
+        var idle = new Guid("00000000-0000-0000-0000-0000000000c3");
+        var idlePlan = Plan(idle, Guid.NewGuid(), 1, Line(3.5, 0, 7.5, 0)) with
+        {
+            Priority = TrafficProgressIngress.PlanPriority(null)
+        };
+        var jobPlan = Plan(_follower, _cmd2, 1, Line(9.5, 0, 6.6, 0)) with
+        {
+            JobId = Guid.NewGuid(),
+            Priority = TrafficProgressIngress.PlanPriority(Guid.NewGuid())
+        };
+        Assert.False(s.AcquireSemanticPlan(idlePlan).Authority?.ResourceIds.Contains(Zone) ?? false);
+        Assert.False(s.AcquireSemanticPlan(jobPlan).Authority?.ResourceIds.Contains(Zone) ?? false);
+        s.DrainEvents();
+
+        var left = View(s, _leader).OccupiedResourceIds
+            .Where(rid => SemanticReservation.IsPhysicallyClearOfResources(_policy, 6.5, -3, [rid], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_leader, leader.Authority!.Seq + 1, 100, left, 6.5, -3, true).Ok);
+
+        Assert.Contains(Zone, View(s, _follower).OccupiedResourceIds);
+        Assert.DoesNotContain(Zone, View(s, idle).OccupiedResourceIds);
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
     public void Re_proposing_the_held_part_sends_it_again_after_a_lost_extend()
     {
         var s = LeaderInTheZone(out _);
