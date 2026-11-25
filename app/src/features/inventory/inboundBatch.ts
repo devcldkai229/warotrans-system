@@ -8,11 +8,9 @@ export interface InboundBatchGroup {
   product: ProductItem | null;
   containerCount: string;
   quantity: string;
-  unit: string;
 }
 /** Explicit box contents defaults used by quick container creation without a contents form. */
 export const DEFAULT_QUANTITY = '1';
-export const DEFAULT_UNIT = 'container';
 
 /** The batch total is the sum of the product rows; there is no separate total to keep in step. */
 export function batchTotal(groups: InboundBatchGroup[]): string {
@@ -20,10 +18,10 @@ export function batchTotal(groups: InboundBatchGroup[]): string {
   return sum > 0 ? String(sum) : '';
 }
 export interface BatchProblem { message: string; groupKey?: string }
-export function newBatchGroup(groups: InboundBatchGroup[], count = '', quantity = '', unit = ''): InboundBatchGroup {
+export function newBatchGroup(groups: InboundBatchGroup[], count = '', quantity = ''): InboundBatchGroup {
   let index = 1;
   while (groups.some(group => group.key === `group-${index}`)) index++;
-  return { key: `group-${index}`, product: null, containerCount: count, quantity, unit };
+  return { key: `group-${index}`, product: null, containerCount: count, quantity };
 }
 export function batchCounts(requested: string, groups: InboundBatchGroup[]) {
   const total = preparationCount(requested);
@@ -46,7 +44,6 @@ export function inboundBatchProblem(requested: string, groups: InboundBatchGroup
     if (count === null || count > 9999) return { groupKey: group.key, message: 'Enter a positive whole number of containers for this product.' };
     const problem = contentProblem(group);
     if (problem) return { groupKey: group.key, message: problem };
-    if (group.unit.trim().length > 32) return { groupKey: group.key, message: 'Unit must be 32 characters or fewer.' };
   }
   if (grouped !== total) return { message: 'Product group counts must equal the batch container count.' };
   return null;
@@ -92,7 +89,6 @@ export function buildContainerBatchBody(
       productId: group.product!.id,
       containerCount: preparationCount(group.containerCount)!,
       quantityPerContainer: contentsQuantity(group.quantity)!,
-      unit: group.unit.trim(),
       ...(supplierBarcode ? { supplierPackageBarcode: supplierBarcode } : {}),
     };
   });

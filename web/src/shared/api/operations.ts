@@ -67,7 +67,6 @@ export interface ContainerHold {
   /** Where it stands when it is on no shelf (a gate, the inspection point). */
   holdEndpointId: string | null
   contentsQuantity: number | null
-  contentsUnit: string | null
 }
 
 /** What resolving an issue does with the package it holds (a container is a packed box of goods, not a tote). */

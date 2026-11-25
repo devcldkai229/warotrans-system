@@ -12,7 +12,6 @@ const {
   clearPendingBatch,
   createBatchRequestId,
   DEFAULT_QUANTITY,
-  DEFAULT_UNIT,
   inboundBatchProblem,
   isDefinitiveBatchRejection,
   isPendingBatchForVoucher,
@@ -25,7 +24,7 @@ const { createPreparationStorage } = load('src/features/inventory/preparationSto
 const { canAllocateInboundBatch } = load('src/features/inventory/stockVoucherData.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const product = { id: 'p-1', sku: 'RICE', name: 'Rice', isActive: true };
-const group = (key = 'group-1', overrides = {}) => ({ key, product, containerCount: '6', quantity: '24', unit: 'pcs', ...overrides });
+const group = (key = 'group-1', overrides = {}) => ({ key, product, containerCount: '6', quantity: '24', ...overrides });
 
 test('batch counts separate requested, grouped and active Product-assigned containers', () => {
   const groups = [group('group-1'), group('group-2', { containerCount: '4', product: null })];
@@ -39,14 +38,13 @@ test('new planning groups start with empty box contents unless defaults are pass
   assert.notEqual(first.key, next.key);
   assert.equal(next.containerCount, '2');
   assert.equal(next.quantity, '');
-  assert.equal(next.unit, '');
+  assert.equal('unit' in next, false);
   assert.equal(next.product, null);
   assert.equal('barcode' in next, false);
   assert.equal('containerId' in next, false);
   assert.equal('quantities' in next, false);
-  const quick = newBatchGroup([], '3', DEFAULT_QUANTITY, DEFAULT_UNIT);
+  const quick = newBatchGroup([], '3', DEFAULT_QUANTITY);
   assert.equal(quick.quantity, '1');
-  assert.equal(quick.unit, 'container');
 });
 
 test('batch review accepts a fully assigned mixed-product lot and never changes stock or actual contents', () => {
@@ -58,7 +56,7 @@ test('batch review accepts a fully assigned mixed-product lot and never changes 
   assert.equal(inboundBatchProblem('9', groups).message, 'Product group counts must equal the batch container count.');
 });
 
-test('review identifies the group with invalid Product, box count, quantity per box or unit', () => {
+test('review identifies the group with invalid Product, box count or quantity per box', () => {
   for (const patch of [
     { product: null },
     { product: { ...product, isActive: false } },
@@ -67,9 +65,6 @@ test('review identifies the group with invalid Product, box count, quantity per 
     { quantity: '' },
     { quantity: '0' },
     { quantity: '1.2345' },
-    { unit: '' },
-    { unit: '   ' },
-    { unit: 'u'.repeat(33) },
   ]) {
     const problem = inboundBatchProblem('6', [group('group-1', patch)]);
     assert.equal(problem.groupKey, 'group-1');
@@ -78,7 +73,7 @@ test('review identifies the group with invalid Product, box count, quantity per 
   assert.match(inboundBatchProblem('10000', [group()]).message, /1 and 9,999/);
   assert.ok(inboundBatchProblem('6', []));
   assert.ok(inboundBatchProblem('12', [group(), group()]));
-  assert.equal(inboundBatchProblem('6', [group('group-1', { containerCount: '6', quantity: '24', unit: 'chai' })]), null);
+  assert.equal(inboundBatchProblem('6', [group('group-1', { containerCount: '6', quantity: '24' })]), null);
 });
 
 test('old preparations and legacy cached quantities remain readable while malformed batch caches are rejected', () => {
@@ -86,7 +81,7 @@ test('old preparations and legacy cached quantities remain readable while malfor
   assert.equal(validPreparation(old, 'INBOUND'), true);
   assert.equal(validPreparation({ ...old, groups: [group()] }, 'INBOUND'), true);
   assert.equal(validPreparation({ ...old, groups: [group('group-1', { quantities: { 1: '24' } })] }, 'INBOUND'), true);
-  for (const groups of [null, {}, [null], [group(), group()], [group('x', { containerCount: 6 })], [group('x', { unit: null })]]) {
+  for (const groups of [null, {}, [null], [group(), group()], [group('x', { containerCount: 6 })], [group('x', { quantity: null })]]) {
     assert.equal(validPreparation({ ...old, groups }, 'INBOUND'), false);
   }
   assert.equal(Object.keys(old.contents).length, 0);
@@ -115,13 +110,13 @@ test('selecting a new product updates or clears only the target group', () => {
   assert.equal(replaced[0].product.id, 'p-3');
 });
 
-test('batch request builder maps groups, decimal precision, unit limits and supplier barcode accurately', () => {
+test('batch request builder maps groups, decimal precision and supplier barcode accurately', () => {
   const reqId = createBatchRequestId();
   assert.match(reqId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.notEqual(reqId, createBatchRequestId());
   const groups = [
-    group('group-1', { product: { ...product, supplierBarcode: ' 8930001 ' }, containerCount: '6', quantity: '12,5', unit: ' pcs ' }),
-    group('group-2', { product: { ...product, id: 'p-2', sku: 'BEANS' }, containerCount: '4', quantity: '10', unit: 'kg' }),
+    group('group-1', { product: { ...product, supplierBarcode: ' 8930001 ' }, containerCount: '6', quantity: '12,5' }),
+    group('group-2', { product: { ...product, id: 'p-2', sku: 'BEANS' }, containerCount: '4', quantity: '10' }),
   ];
   const body = plain(buildContainerBatchBody('wh-1', reqId, '10', groups, 'voucher-1'));
   assert.deepEqual(body, {
@@ -130,16 +125,16 @@ test('batch request builder maps groups, decimal precision, unit limits and supp
     stockVoucherId: 'voucher-1',
     containerCount: 10,
     groups: [
-      { groupKey: 'group-1', productId: 'p-1', containerCount: 6, quantityPerContainer: 12.5, unit: 'pcs', supplierPackageBarcode: '8930001' },
-      { groupKey: 'group-2', productId: 'p-2', containerCount: 4, quantityPerContainer: 10, unit: 'kg' },
+      { groupKey: 'group-1', productId: 'p-1', containerCount: 6, quantityPerContainer: 12.5, supplierPackageBarcode: '8930001' },
+      { groupKey: 'group-2', productId: 'p-2', containerCount: 4, quantityPerContainer: 10 },
     ],
   });
   assert.throws(() => buildContainerBatchBody('', reqId, '10', groups), /WarehouseId/);
   assert.throws(() => buildContainerBatchBody('wh-1', ' ', '10', groups), /RequestId/);
-  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '', unit: '' })]), /quantity/i);
-  const quickBody = plain(buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: DEFAULT_QUANTITY, unit: DEFAULT_UNIT })]));
+  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '' })]), /quantity/i);
+  const quickBody = plain(buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: DEFAULT_QUANTITY })]));
   assert.equal(quickBody.groups[0].quantityPerContainer, 1);
-  assert.equal(quickBody.groups[0].unit, 'container');
+  assert.equal('unit' in quickBody.groups[0], false);
 });
 
 test('preparation requestId validation and batch allocation permission gate work as expected', () => {
@@ -152,11 +147,11 @@ test('preparation requestId validation and batch allocation permission gate work
   assert.equal(canAllocateInboundBatch({ ...staff, permissions: [...staff.permissions, 'container.create'] }), true);
 });
 
-test('missing local preparation on an existing draft inbound voucher can be re-entered with product, quantity and unit', () => {
+test('missing local preparation on an existing draft inbound voucher can be re-entered with product and quantity', () => {
   const { batchTotal } = load('src/features/inventory/inboundBatch.ts');
   const lost = emptyPreparation('INBOUND');
   assert.equal(lost.groups, undefined);
-  const recovered = [{ ...newBatchGroup([], '2'), product, quantity: '24', unit: 'chai' }];
+  const recovered = [{ ...newBatchGroup([], '2'), product, quantity: '24' }];
   const total = batchTotal(recovered);
   assert.equal(total, '2');
   assert.equal(inboundBatchProblem(total, recovered), null);
@@ -164,7 +159,7 @@ test('missing local preparation on an existing draft inbound voucher can be re-e
   assert.equal(body.stockVoucherId, 'draft-voucher-1');
   assert.equal(body.containerCount, 2);
   assert.deepEqual(body.groups, [
-    { groupKey: 'group-1', productId: 'p-1', containerCount: 2, quantityPerContainer: 24, unit: 'chai' },
+    { groupKey: 'group-1', productId: 'p-1', containerCount: 2, quantityPerContainer: 24 },
   ]);
 });
 

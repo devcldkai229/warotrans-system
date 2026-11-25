@@ -2,7 +2,7 @@ import type { InboundBatchGroup } from './inboundBatch';
 import type { CreateContainerBatchBody, ProductItem } from '../../shared/api/warehouseApi';
 import type { StockVoucherType } from '../../shared/types/contracts';
 
-export interface PreparedContent { product: ProductItem | null; quantity: string; unit: string }
+export interface PreparedContent { product: ProductItem | null; quantity: string; unit?: string }
 export interface PreparedContainer { id: string; barcode: string; productName: string; productSku: string; endpointId: string }
 export interface PendingBatchSubmission { requestId: string; body: CreateContainerBatchBody }
 /** Device preparation only. None of these fields asserts server allocation, stock posting or synchronization. */
@@ -38,7 +38,6 @@ function validPendingBatch(value: unknown): value is PendingBatchSubmission {
     if (typeof group.productId !== 'string' || !group.productId.trim()) return false;
     if (!Number.isInteger(group.containerCount) || group.containerCount < 1 || group.containerCount > 9999) return false;
     if (typeof group.quantityPerContainer !== 'number' || !Number.isFinite(group.quantityPerContainer) || group.quantityPerContainer <= 0) return false;
-    if (typeof group.unit !== 'string' || !group.unit.trim() || group.unit.trim().length > 32) return false;
     if (group.supplierPackageBarcode !== undefined && group.supplierPackageBarcode !== null && typeof group.supplierPackageBarcode !== 'string') return false;
     sum += group.containerCount;
   }
@@ -54,10 +53,10 @@ export function validPreparation(value: unknown, type: StockVoucherType): value 
     && record(item.contents) && record(item.selected)
     && (item.groups === undefined || (Array.isArray(item.groups) && new Set(item.groups.map(group => group?.key)).size === item.groups.length
       && item.groups.every(group => group && typeof group.key === 'string' && !!group.key
-        && [group.containerCount, group.quantity, group.unit].every(value => typeof value === 'string')
+        && [group.containerCount, group.quantity].every(value => typeof value === 'string')
         && (group.product === null || (group.product && typeof group.product.id === 'string' && typeof group.product.name === 'string'
           && typeof group.product.sku === 'string' && typeof group.product.isActive === 'boolean')))))
-    && Object.values(item.contents).every(value => value && typeof value.quantity === 'string' && typeof value.unit === 'string'
+    && Object.values(item.contents).every(value => value && typeof value.quantity === 'string'
       && (value.product === null || (value.product && typeof value.product.id === 'string' && typeof value.product.name === 'string'
         && typeof value.product.sku === 'string' && typeof value.product.isActive === 'boolean')))
     && Object.values(item.selected).every(value => value && [value.id, value.barcode, value.productName, value.productSku, value.endpointId].every(field => typeof field === 'string'));
@@ -75,7 +74,6 @@ export function contentsQuantity(value: string): number | null {
 export function contentProblem(value?: PreparedContent) {
   if (!value?.product?.isActive) return 'Choose an active product.';
   if (contentsQuantity(value.quantity) === null) return 'Enter a quantity greater than zero.';
-  if (!value.unit.trim()) return 'Enter a unit.';
   return null;
 }
 export function inboundPreparationProblem(ids: string[], prep: VoucherPreparation) {

@@ -56,7 +56,7 @@ public sealed class ContainerProblemIssueTests
     }
 
     private static ContainerHoldSnapshot Held(decimal quantity) =>
-        new(Guid.NewGuid(), "C1", "HOLD", ContainerProblemCodes.ContentsDamaged, Guid.NewGuid(), DateTimeOffset.UtcNow, null, null, null, quantity, "PCS");
+        new(Guid.NewGuid(), "C1", "HOLD", ContainerProblemCodes.ContentsDamaged, Guid.NewGuid(), DateTimeOffset.UtcNow, null, null, null, quantity);
 
     [Theory]
     [InlineData(ContainerProblemCodes.ContentsDamaged, "ADJUST_QUANTITY,SCRAP,RELEASE")]

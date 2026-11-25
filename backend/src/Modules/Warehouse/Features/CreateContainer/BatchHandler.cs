@@ -91,7 +91,7 @@ public sealed class CreateContainerBatchHandler(
             {
                 Id = Guid.NewGuid(), ProductId = row.ProductId, Barcode = barcodes[index],
                 SupplierPackageBarcode = row.SupplierBarcode ?? byId[row.ProductId].SupplierBarcode,
-                ContentsQuantity = row.Quantity, ContentsUnit = row.Unit,
+                ContentsQuantity = row.Quantity,
                 WarehouseId = warehouseId,
                 Status = ContainerStatus.CREATED, CreatedBy = actor, CreatedAt = now, UpdatedAt = now,
                 CreationRequestId = request.RequestId, CreationRequestHash = fingerprint, CreationOrdinal = index + 1,
@@ -158,7 +158,7 @@ public sealed class CreateContainerBatchHandler(
     private static CreateContainerBatchResponse Response(CreateContainerRequest request, IReadOnlyList<Container> containers, IReadOnlyDictionary<Guid, Guid> endpoints, bool replayed, StockVoucherDetailResponse? voucher = null) =>
         new(request.RequestId!.Value, request.WarehouseId!.Value, containers.Count, replayed,
             containers.Select(c => new CreatedContainerBatchItem(c.Id, c.Barcode, c.ProductId, c.CreationGroupKey!, c.CreationGroupOrdinal!.Value,
-                c.ContentsQuantity!.Value, c.ContentsUnit!, c.SupplierPackageBarcode, c.Status.ToString(), c.CurrentStorageLocationId,
+                c.ContentsQuantity!.Value, c.SupplierPackageBarcode, c.Status.ToString(), c.CurrentStorageLocationId,
                 c.CurrentStorageLocationId is { } id && endpoints.TryGetValue(id, out var endpoint) ? endpoint : c.CurrentEndpointId, c.CreatedAt)).ToList(), voucher);
 
     private static List<PlannedContainer> Expand(CreateContainerRequest request)
@@ -170,7 +170,7 @@ public sealed class CreateContainerBatchHandler(
             for (var number = 1; number <= group.ContainerCount; number++)
                 result.Add(new(group.GroupKey.Trim(), number, group.ProductId,
                     overrides.TryGetValue(number, out var quantity) ? quantity : group.QuantityPerContainer,
-                    group.Unit.Trim(), string.IsNullOrWhiteSpace(group.SupplierPackageBarcode) ? null : group.SupplierPackageBarcode.Trim()));
+                    string.IsNullOrWhiteSpace(group.SupplierPackageBarcode) ? null : group.SupplierPackageBarcode.Trim()));
         }
         return result;
     }
@@ -178,7 +178,7 @@ public sealed class CreateContainerBatchHandler(
     private static string Fingerprint(CreateContainerRequest request, IEnumerable<PlannedContainer> rows, string? label = null)
     {
         // Hash effective quantities, not JSON decimal scale or override ordering. Scope/location are part of intent.
-        var effectiveRows = rows.Select(row => new { row.GroupKey, row.ContainerNo, row.ProductId, Quantity = row.Quantity.ToString("G29", CultureInfo.InvariantCulture), row.Unit, row.SupplierBarcode });
+        var effectiveRows = rows.Select(row => new { row.GroupKey, row.ContainerNo, row.ProductId, Quantity = row.Quantity.ToString("G29", CultureInfo.InvariantCulture), row.SupplierBarcode });
         // Preserve both older hash shapes for receipts created before a pre-printed label was part of the intent.
         var normalized = label is not null
             ? JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, request.StockVoucherId, LabelBarcode = label, Rows = effectiveRows })
@@ -188,5 +188,5 @@ public sealed class CreateContainerBatchHandler(
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 
-    private sealed record PlannedContainer(string GroupKey, int ContainerNo, Guid ProductId, decimal Quantity, string Unit, string? SupplierBarcode);
+    private sealed record PlannedContainer(string GroupKey, int ContainerNo, Guid ProductId, decimal Quantity, string? SupplierBarcode);
 }

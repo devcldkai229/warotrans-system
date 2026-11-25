@@ -16,6 +16,8 @@ import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
 import { toast } from '../../shared/context/ToastContext';
 import { t } from '../../shared/i18n';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { problemsFor } from '../../shared/containerProblems';
+import { ProblemCodeChips } from '../../shared/components/ProblemCodeChips';
 
 const api = createScanApi();
 
@@ -93,18 +95,21 @@ function ContainerCard({ container, tasks, onClose, onScanAgain, onInspect, onOp
 }
 
 /** Quality inspection: the result goes to the job's INSPECTION_CONFIRM step; a failure needs a reason. */
-function InspectionSheet({ task, container, onClose, onDone }: { task: ContainerTask; container: ContainerListItem; onClose: () => void; onDone: () => void }) {
+export function InspectionSheet({ task, container, onClose, onDone }: { task: Pick<ContainerTask, 'stepId' | 'jobNo'>; container: Pick<ContainerListItem, 'id' | 'barcode'>; onClose: () => void; onDone: () => void }) {
   const { styles, colors } = useThemedStyles(createStyles);
   const [result, setResult] = useState<'PASSED' | 'FAILED' | null>(null);
   const [note, setNote] = useState('');
+  const [defects, setDefects] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async () => {
     if (!result || pending) return;
+    if (result === 'FAILED' && !defects.length) { setError(t('Choose what is wrong with the container.')); return; }
     if (result === 'FAILED' && !note.trim()) { setError(t('Say what is wrong with the container.')); return; }
     setPending(true); setError(null);
     try {
-      await confirmInspection(task.stepId, result, note, container.barcode, container.id);
+      const scanned = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(container.barcode) ? null : container.barcode;
+      await confirmInspection(task.stepId, result, note, scanned, container.id, defects);
       triggerHaptic('success');
       toast.success(result === 'PASSED' ? t('{code} passed inspection.', { code: container.barcode }) : t('{code} failed inspection.', { code: container.barcode }));
       onDone();
@@ -125,6 +130,12 @@ function InspectionSheet({ task, container, onClose, onDone }: { task: Container
           <Text variant="bodyMedium" fontWeight="700" color={result === 'FAILED' ? '#ffffff' : colors.textPrimary}>Failed</Text>
         </Pressable>
       </View>
+      <Text variant="caption" color="textSecondary">Fail each bad container first. Passed closes the inspection for every container still on the robot.</Text>
+      {result === 'FAILED' ? <>
+        <Text variant="bodyMedium" fontWeight="700">What is wrong? (one or more)</Text>
+        <ProblemCodeChips problems={problemsFor('INSPECTION')} selected={defects} onChange={setDefects} multiple disabled={pending} />
+        <Text variant="caption" color="textSecondary">The container leaves the job and is held at the inspection point.</Text>
+      </> : null}
       <TextInput style={styles.note} value={note} onChangeText={setNote} multiline placeholder={t(result === 'FAILED' ? 'What is wrong (required)' : 'Note (optional)')}
         placeholderTextColor={colors.textMuted} accessibilityLabel="Inspection note" />
       {error ? <Text variant="caption" color="dangerText" accessibilityRole="alert">{error}</Text> : null}

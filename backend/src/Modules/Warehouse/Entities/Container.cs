@@ -10,9 +10,8 @@ public sealed class Container
     public string Barcode { get; set; } = string.Empty;
     public string? SupplierPackageBarcode { get; set; }
 
-    // Descriptive goods inside a box, not InventoryStock.ContainerCount. Null means unknown on legacy rows.
+    // How many goods are inside the box (descriptive, not InventoryStock.ContainerCount). Null means unknown on legacy rows.
     public decimal? ContentsQuantity { get; set; }
-    public string? ContentsUnit { get; set; }
 
     // Durable creation receipt on the created rows, avoiding a separate receiving-batch domain/table.
     public Guid? CreationRequestId { get; set; }

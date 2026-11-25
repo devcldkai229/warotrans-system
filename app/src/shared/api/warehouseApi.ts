@@ -10,7 +10,7 @@ export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
-  supplierPackageBarcode?: string | null; contentsQuantity?: number | null; contentsUnit?: string | null;
+  supplierPackageBarcode?: string | null; contentsQuantity?: number | null;
   updatedAt?: string; inActiveTransport?: boolean; voucher?: ContainerVoucherSummary | null;
   qty?: number; category?: string; zoneLabel?: string;
 }
@@ -52,7 +52,8 @@ function queryString(params: Record<string, string | number | boolean | undefine
 export function listWarehouses(params: { isActive?: boolean; skip?: number; take?: number } = {}, signal?: AbortSignal) {
   return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${queryString(params)}`, { signal });
 }
-export async function listContainers(params: { warehouseId: string; status?: string; search?: string; eligibleOnly?: boolean; take?: number; skip?: number }, signal?: AbortSignal): Promise<ListContainersResponse> {
+/** `awaitingInbound`: received boxes on no open inbound voucher (what a new inbound voucher can take). */
+export async function listContainers(params: { warehouseId: string; status?: string; search?: string; eligibleOnly?: boolean; take?: number; skip?: number; awaitingInbound?: boolean }, signal?: AbortSignal): Promise<ListContainersResponse> {
   const response = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${queryString(params)}`, { signal });
   containersSnapshot = response.items;
   return response;
@@ -65,6 +66,12 @@ async function getContainerDetails(path: string): Promise<ContainerListItem> {
   // The detail route does not return a Navigation endpoint. Callers may resolve it
   // from currentStorageLocationId; never reuse an endpoint from another snapshot.
   return { ...response, currentEndpointId: null };
+}
+/** How many goods each box holds, while it is still being received (refused with container_contents_locked after). */
+export function setContainerContents(items: { containerId: string; quantity: number }[], signal?: AbortSignal) {
+  return apiFetch<{ items: { containerId: string; barcode: string; contentsQuantity: number }[] }>('/api/warehouse/containers/contents', {
+    method: 'PUT', body: JSON.stringify({ items }), signal,
+  });
 }
 export function getContainer(id: string) { return getContainerDetails(`/api/warehouse/containers/${id}`); }
 export function getContainerByBarcode(barcode: string) {
@@ -145,7 +152,7 @@ export interface CreateContainerResponse {
 }
 export interface CreateContainerBatchGroupInput {
   groupKey: string; productId: string; containerCount: number; quantityPerContainer: number;
-  unit: string; quantityOverrides?: { containerNo: number; quantity: number }[] | null; supplierPackageBarcode?: string | null;
+  quantityOverrides?: { containerNo: number; quantity: number }[] | null; supplierPackageBarcode?: string | null;
 }
 export interface CreateContainerBatchBody {
   warehouseId: string; requestId: string; stockVoucherId?: string | null; containerCount: number; groups: CreateContainerBatchGroupInput[];
@@ -158,7 +165,7 @@ export function issueContainerLabels(count: number) {
 }
 export interface CreatedBatchContainerItem {
   id: string; barcode: string; productId: string; groupKey: string; containerNo: number;
-  contentsQuantity: number; contentsUnit: string; supplierPackageBarcode: string | null;
+  contentsQuantity: number; supplierPackageBarcode: string | null;
   status: ContainerStatus | string; currentStorageLocationId: string | null; currentEndpointId: string | null; createdAt: string;
 }
 export interface CreateContainerBatchResponse {
@@ -177,8 +184,7 @@ function validContainerBatchResponse(result: CreateContainerBatchResponse | null
   const itemValid = result.items.every(item => !!item && typeof item.id === 'string' && !!item.id.trim()
     && typeof item.barcode === 'string' && !!item.barcode.trim() && typeof item.productId === 'string' && !!item.productId.trim()
     && typeof item.groupKey === 'string' && !!item.groupKey.trim() && Number.isInteger(item.containerNo) && item.containerNo >= 1
-    && typeof item.contentsQuantity === 'number' && Number.isFinite(item.contentsQuantity) && item.contentsQuantity > 0
-    && typeof item.contentsUnit === 'string' && !!item.contentsUnit.trim());
+    && typeof item.contentsQuantity === 'number' && Number.isFinite(item.contentsQuantity) && item.contentsQuantity > 0);
   if (!itemValid) return false;
   if (new Set(result.items.map(item => item.id)).size !== result.items.length
     || new Set(result.items.map(item => item.barcode)).size !== result.items.length) {
@@ -215,7 +221,7 @@ export interface StockVoucherPage { items: StockVoucherListItem[]; total: number
 export interface StockVoucherLine {
   id: string; lineNo: number; containerId: string; containerBarcode: string; containerStatus: string;
   productId: string; productSku: string; productName: string;
-  contentsQuantity?: number | null; contentsUnit?: string | null;
+  contentsQuantity?: number | null;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentLevelNo: number | null; done: boolean;
   /** The voucher was closed short before this Container got done: it left the voucher. */

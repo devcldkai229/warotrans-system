@@ -104,7 +104,7 @@ public sealed class ConfirmStockVoucherHandler(
                 throw new ConflictException($"Container '{box.Barcode}' belongs to another warehouse.", "voucher_container_wrong_warehouse");
             if (box.CurrentEndpointId.HasValue || (box.CurrentStorageLocationId is { } location && !receivingLocations.Contains(location)))
                 throw new ConflictException($"Container '{box.Barcode}' already has a non-receiving location.", "voucher_container_already_located");
-            if (box.ContentsQuantity is null or <= 0 || string.IsNullOrWhiteSpace(box.ContentsUnit))
+            if (box.ContentsQuantity is null or <= 0)
                 throw new DomainValidationException($"Container '{box.Barcode}' has incomplete contents.", "container_contents_incomplete");
             if (box.InboundStockVoucherId.HasValue || box.InventoryStorageLocationId.HasValue)
                 throw new ConflictException($"Container '{box.Barcode}' has already been admitted to inventory.", "container_stock_already_admitted");

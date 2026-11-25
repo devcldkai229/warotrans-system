@@ -157,9 +157,21 @@ public sealed class RobotCareService(
     public async Task<Job> ReturnToParkAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow)
+        // The robot's own home first (Traffic:RobotHomeEndpoints), like an idle robot going back: a robot that ended a Job
+        // away from home may only start again from there, so the nearest other parking place would be refused.
+        var target = endpointId ?? await FreeHomeAsync(robot, cancellationToken)
+            ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow)
             ?? throw new ConflictException("No parking place is free on this map.", "no_free_parking");
         return await RunAsync(robot, ParkWorkflow, ParkInput, target, actor, cancellationToken);
+    }
+
+    private async Task<Guid?> FreeHomeAsync(RobotSnapshot robot, CancellationToken cancellationToken)
+    {
+        var homeCode = trafficOptions?.Value.RobotHomeEndpoints.TryGetValue(robot.Code, out var hc) == true ? hc : null;
+        if (homeCode is null) return null;
+        var home = (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken))
+            .FirstOrDefault(e => e.IsEnabled && e.Code == homeCode);
+        return home is not null && !(await TakenEndpointsAsync(robot, [home], cancellationToken)).Contains(home.Id) ? home.Id : null;
     }
 
     /// <summary>

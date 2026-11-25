@@ -186,7 +186,7 @@ public sealed partial class ContainerBatchPostgresTests
                 {
                     // Contents and receipt must remain structurally valid: use a legacy row attached to this draft.
                     var box = await db.Containers.FindAsync(batch.Items[0].Id);
-                    box!.ContentsQuantity = null; box.ContentsUnit = null;
+                    box!.ContentsQuantity = null;
                     box.CreationRequestId = null; box.CreationRequestHash = null; box.CreationOrdinal = null;
                     box.CreationGroupKey = null; box.CreationGroupOrdinal = null;
                 }
@@ -297,7 +297,7 @@ public sealed partial class ContainerBatchPostgresTests
     {
         var draft = await DraftAsync(client);
         var request = Request() with { StockVoucherId = draft.Id };
-        if (count is { } boxes) request = request with { ContainerCount = boxes, Groups = [new("a", _productA, boxes, 24, "pcs")] };
+        if (count is { } boxes) request = request with { ContainerCount = boxes, Groups = [new("a", _productA, boxes, 24)] };
         var response = await client.PostAsJsonAsync(Route, request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (request, (await response.Content.ReadFromJsonAsync<CreateContainerBatchResponse>())!);

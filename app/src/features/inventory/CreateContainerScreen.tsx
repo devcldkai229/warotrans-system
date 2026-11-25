@@ -19,14 +19,16 @@ import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { t } from '../../shared/i18n';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
-import { batchTotal, buildContainerBatchBody, createBatchRequestId, DEFAULT_QUANTITY, DEFAULT_UNIT, newBatchGroup } from './inboundBatch';
+import { batchTotal, buildContainerBatchBody, createBatchRequestId, newBatchGroup } from './inboundBatch';
+import { contentsQuantity } from './voucherPreparation';
 
 type Scan = 'product' | 'package' | null;
 
 /**
  * Create containers and put a product in them: scan (or type) the product barcode or pick it from the catalog, scan the
  * supplier's package barcode when there is one, choose how many containers, create. The system gives each container its
- * code (C + ddMMyy + number) to stick on it. Camera scanning is the scanner screen's job; it also takes a typed code.
+ * code (C + ddMMyy + number) to stick on it, and holds the quantity of goods given here. "New Inbound Voucher" takes the
+ * containers just made onto the voucher. Camera scanning is the scanner screen's job; it also takes a typed code.
  */
 export function CreateContainerScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
@@ -42,16 +44,18 @@ export function CreateContainerScreen() {
   const [count, setCount] = useState('1');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ codes: string[]; product: ProductItem } | null>(null);
+  const [perBox, setPerBox] = useState('');
+  const [created, setCreated] = useState<{ codes: string[]; ids: string[]; product: ProductItem } | null>(null);
   const [mode, setMode] = useState<'new' | 'labels'>('new');
   const [labelScanner, setLabelScanner] = useState(false);
-  const [claimed, setClaimed] = useState<string[]>([]);
+  const [claimed, setClaimed] = useState<{ code: string; id: string }[]>([]);
   const [blankCount, setBlankCount] = useState('24');
   const [printing, setPrinting] = useState(false);
   const lock = useRef(false);
   const allowed = sessionCan(session, PERMISSIONS.containerCreate);
   const number = Number.parseInt(count, 10) || 0;
   const setNumber = (next: number) => setCount(String(Math.max(1, Math.min(200, next))));
+  const quantity = contentsQuantity(perBox);
 
   const onScanned = (code: string) => {
     const value = code.trim();
@@ -65,29 +69,31 @@ export function CreateContainerScreen() {
 
   const create = async () => {
     if (lock.current || !product || !operating.data || number < 1) return;
+    if (quantity === null) { setError(t('Enter how many goods each container holds.')); return; }
     lock.current = true; setPending(true); setError(null);
     try {
-      const group = { ...newBatchGroup([], String(number), DEFAULT_QUANTITY, DEFAULT_UNIT), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
+      const group = { ...newBatchGroup([], String(number), perBox.trim()), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
       const body = buildContainerBatchBody(operating.data.warehouse.id, createBatchRequestId(), batchTotal([group]), [group]);
       const result = await createContainerBatch(body);
       triggerHaptic('success');
       void client.invalidateQueries({ queryKey: ['inventory-containers'] });
-      setCreated({ codes: result.items.map(item => item.barcode), product });
+      setCreated({ codes: result.items.map(item => item.barcode), ids: result.items.map(item => item.id), product });
     } catch (failure) {
       setError(getUserErrorMessage(failure, 'The containers could not be created.'));
     } finally { lock.current = false; setPending(false); }
   };
 
-  const reset = () => { setCreated(null); setProduct(null); setPackageBarcode(''); setCount('1'); setError(null); setClaimed([]); };
+  const reset = () => { setCreated(null); setProduct(null); setPackageBarcode(''); setCount('1'); setPerBox(''); setError(null); setClaimed([]); };
 
   // A pre-printed label scanned while a product is chosen becomes that container (the server checks the label).
   const claimLabel = async (label: string) => {
     if (!product || !operating.data) return { ok: false, message: t('Choose the product first.') };
-    const group = { ...newBatchGroup([], '1', DEFAULT_QUANTITY, DEFAULT_UNIT), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
+    if (quantity === null) return { ok: false, message: t('Enter how many goods each container holds.') };
+    const group = { ...newBatchGroup([], '1', perBox.trim()), product: packageBarcode.trim() ? { ...product, supplierBarcode: packageBarcode.trim() } : product };
     try {
       const body = { ...buildContainerBatchBody(operating.data.warehouse.id, createBatchRequestId(), '1', [group]), labelBarcode: label };
-      await createContainerBatch(body);
-      setClaimed(previous => [label, ...previous]);
+      const result = await createContainerBatch(body);
+      setClaimed(previous => [{ code: label, id: result.items[0]?.id ?? '' }, ...previous]);
       void client.invalidateQueries({ queryKey: ['inventory-containers'] });
       return { ok: true, message: t('Now holds {product}', { product: product.name }) };
     } catch (failure) {
@@ -131,7 +137,7 @@ export function CreateContainerScreen() {
         </View>)}
         <Button title="Print All Labels" icon={Printer} variant="outline" fullWidth onPress={() => { void printLabels(containerLabels(created.codes, created.product.name, created.product.sku), created.product.name).catch(() => {}); }} />
         <Button title="Create More" icon={Plus} variant="outline" fullWidth onPress={reset} />
-        <Button title="New Inbound Voucher" fullWidth onPress={() => navigate('stock_voucher_create', { voucherType: 'INBOUND' })} />
+        <Button title="New Inbound Voucher" fullWidth onPress={() => navigate('stock_voucher_create', { voucherType: 'INBOUND', containerIds: created.ids })} />
       </ScrollView>
     </View>;
   }
@@ -172,8 +178,13 @@ export function CreateContainerScreen() {
           </Pressable>
         </View>
 
+        <View style={styles.stepHeader}><View style={[styles.stepNo, !product && styles.stepNoIdle]}><Text variant="caption" fontWeight="800" color="#fff">3</Text></View><Text variant="headline">Goods per container</Text></View>
+        <TextInput style={styles.input} value={perBox} onChangeText={text => setPerBox(text.replace(/[^0-9.,]/g, '').slice(0, 16))} placeholder={t('e.g. 24')}
+          placeholderTextColor={colors.textMuted} keyboardType="decimal-pad" editable={!!product} accessibilityLabel="Goods per container" />
+        {!!perBox && quantity === null ? <Text variant="caption" color="dangerText">Enter a quantity greater than zero.</Text> : null}
+
         {mode === 'new' ? <>
-        <View style={styles.stepHeader}><View style={[styles.stepNo, !product && styles.stepNoIdle]}><Text variant="caption" fontWeight="800" color="#fff">3</Text></View><Text variant="headline">How many containers</Text></View>
+        <View style={styles.stepHeader}><View style={[styles.stepNo, !product && styles.stepNoIdle]}><Text variant="caption" fontWeight="800" color="#fff">4</Text></View><Text variant="headline">How many containers</Text></View>
         <View style={styles.countCard}>
           <Pressable style={({ pressed }) => [styles.countButton, pressed && styles.pressed]} disabled={number <= 1} onPress={() => setNumber(number - 1)} accessibilityRole="button" accessibilityLabel="Fewer">
             <Minus size={22} color={number <= 1 ? colors.textMuted : colors.textPrimary} />
@@ -185,15 +196,16 @@ export function CreateContainerScreen() {
         </View>
         <Text variant="caption" color="textSecondary">Each container gets its own code, for example C181126001.</Text>
         </> : <>
-          <View style={styles.stepHeader}><View style={[styles.stepNo, !product && styles.stepNoIdle]}><Text variant="caption" fontWeight="800" color="#fff">3</Text></View><Text variant="headline">Scan the labels</Text></View>
-          <Pressable style={({ pressed }) => [styles.bigAction, !product && styles.disabled, pressed && styles.pressed]} disabled={!product} onPress={() => setLabelScanner(true)} accessibilityRole="button" accessibilityLabel="Scan QR labels">
+          <View style={styles.stepHeader}><View style={[styles.stepNo, !product && styles.stepNoIdle]}><Text variant="caption" fontWeight="800" color="#fff">4</Text></View><Text variant="headline">Scan the labels</Text></View>
+          <Pressable style={({ pressed }) => [styles.bigAction, (!product || quantity === null) && styles.disabled, pressed && styles.pressed]} disabled={!product || quantity === null} onPress={() => setLabelScanner(true)} accessibilityRole="button" accessibilityLabel="Scan QR labels">
             <ScanLine size={26} color={colors.primaryText} />
             <Text variant="bodyMedium" fontWeight="700" color={colors.primaryText}>Scan QR</Text>
             <Text variant="caption" color="textSecondary" textAlign="center">Each label scanned becomes a container of this product</Text>
           </Pressable>
           {claimed.length ? <View style={{ gap: 6 }}>
             <Text variant="caption" color="textSecondary">{t('{count} containers created', { count: claimed.length })}</Text>
-            {claimed.map(code => <View key={code} style={styles.codeRow}><CheckCircle2 size={16} color={colors.success} /><Text variant="code" fontWeight="700" style={{ flex: 1 }}>{code}</Text></View>)}
+            {claimed.map(item => <View key={item.code} style={styles.codeRow}><CheckCircle2 size={16} color={colors.success} /><Text variant="code" fontWeight="700" style={{ flex: 1 }}>{item.code}</Text></View>)}
+            <Button title="New Inbound Voucher" fullWidth onPress={() => navigate('stock_voucher_create', { voucherType: 'INBOUND', containerIds: claimed.map(item => item.id).filter(Boolean) })} />
           </View> : null}
           <View style={styles.printBlank}>
             <Text variant="bodyMedium" fontWeight="700">Print blank labels</Text>
@@ -209,7 +221,7 @@ export function CreateContainerScreen() {
       </ScrollView>
       {mode === 'new' ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <Button title={number > 1 ? t('Create {count} Containers', { count: number }) : 'Create Container'} fullWidth loading={pending}
-          disabled={!product || number < 1 || !operating.data || pending} onPress={() => { void create(); }} />
+          disabled={!product || number < 1 || quantity === null || !operating.data || pending} onPress={() => { void create(); }} />
       </View> : null}
     </KeyboardAvoidingView>
 

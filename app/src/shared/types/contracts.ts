@@ -674,6 +674,8 @@ export type HandoverProblemCode =
   | 'MISSING_CONTAINER'
   | 'BARCODE_UNREADABLE'
   | 'CONTAINER_DAMAGED'
+  | 'UNSAFE_LOAD'
+  | 'OTHER'
   | 'QUANTITY_MISMATCH';
 
 export type HazardType =
