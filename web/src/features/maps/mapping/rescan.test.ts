@@ -33,12 +33,15 @@ describe('rescanMapping', () => {
     const next = await rescanMapping(session('MAPPING'), d)
     expect(next.id).toBe('s2')
     expect(d.calls).toEqual(['cancel s1', 'get CANCELLING', 'get CANCELLING', 'get CANCELLED', 'start r1'])
+    // slam_toolbox of the old session gets time to exit before the new one starts.
+    expect(d.sleep).toHaveBeenLastCalledWith(5000)
   })
 
   it('starts again at once when the session already ended (slam_toolbox failed to start)', async () => {
     const d = deps([])
     await rescanMapping(session('FAILED'), d)
     expect(d.calls).toEqual(['start r1'])
+    expect(d.sleep).not.toHaveBeenCalled()
   })
 
   it('gives up when the robot never stops mapping, and does not open a second session', async () => {

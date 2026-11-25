@@ -45,7 +45,7 @@ export const canRescan = (status: MappingSession['status']) =>
 export async function rescanMapping(
   session: Pick<MappingSession, 'id' | 'robotId' | 'status'>,
   deps: RescanDeps = defaultRescanDeps,
-  { pollMs = 1000, timeoutMs = 90_000 }: { pollMs?: number; timeoutMs?: number } = {},
+  { pollMs = 1000, timeoutMs = 90_000, settleMs = 5000 }: { pollMs?: number; timeoutMs?: number; settleMs?: number } = {},
 ): Promise<MappingSession> {
   if (!canRescan(session.status)) {
     throw new RescanError(t('A {status} session cannot be scanned again.', { status: session.status }), 'not_cancellable')
@@ -63,6 +63,10 @@ export async function rescanMapping(
       await deps.sleep(pollMs)
       waited += pollMs
     }
+    // The robot reports the stop when `ros2 launch` exits; slam_toolbox itself can still be shutting down. A new
+    // slam_toolbox started at once then published no map within 30 s (lab 2026-11-25, RBT-001: MAPPING_NO_MAP 0.7 s
+    // after the stop, fine 7 s later), so give it a few seconds.
+    await deps.sleep(settleMs)
   }
   return deps.start(session.robotId)
 }
