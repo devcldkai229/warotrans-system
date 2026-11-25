@@ -135,23 +135,37 @@ def other_barcode(w: rr.World, not_container: str) -> str:
     return rows[0][0]
 
 
-def run(n: int, wait_ai: bool, ai_timeout: float) -> dict[str, Any]:
+def run(n: int, wait_ai: bool, ai_timeout: float, resume: str | None = None) -> dict[str, Any]:
     case = CASES[n]
     tag = f"E2E-{n:02d}-{case['fault'] or 'CTRL'}"
     api, w = Api(), rr.World()
     started = datetime.now(UTC)
-    tr, code, job_id = create(w, case, tag)
+    if resume:  # finish a case whose runner died (the job already exists; its fault was already injected)
+        jb = w.api.call("GET", f"/api/workflow-execution/jobs/{resume}")
+        tr, job_id = jb["transportRequestIds"][0], jb["id"]
+        code = tr
+        try:
+            code = w.api.call("GET", f"/api/transportation/transport-requests/{tr}").get("requestCode", tr)
+        except Exception:  # noqa: BLE001 - only a label
+            pass
+    else:
+        tr, code, job_id = create(w, case, tag)
     log(f"case {n} {tag}: TR {code} job {job_id[:8]} on {ROBOT}")
     record: dict[str, Any] = {"case": n, "tag": tag, "spec": case, "robot": ROBOT, "transportRequestId": tr,
                               "requestCode": code, "jobId": job_id, "startedAt": started.isoformat(), "events": []}
-    injected: dict[str, Any] | None = None
+    injected: dict[str, Any] | None = {"resumed": True} if resume else None
     hold_confirm_until = 0.0
     wrong_scan_pending = case["fault"] == "OPS-02"
     t0 = time.time()
     last = ""
     j: dict[str, Any] = {}
     while time.time() - t0 < 1500:
-        j = w.api.call("GET", f"/api/workflow-execution/jobs/{job_id}")
+        try:
+            j = w.api.call("GET", f"/api/workflow-execution/jobs/{job_id}")
+        except Exception as exc:  # noqa: BLE001 - OPS-01 restarts the Host: keep polling until it is back
+            log(f"  Host unreachable ({type(exc).__name__}), polling")
+            time.sleep(3)
+            continue
         line = f"{j['status']} {j['completedSteps']}/{j['totalSteps']} {j.get('blockingReason') or ''}"
         if line != last:
             log(f"  {line}")
@@ -268,9 +282,10 @@ def main() -> None:
     ap.add_argument("cases", type=int, nargs="+")
     ap.add_argument("--no-wait-ai", action="store_true")
     ap.add_argument("--ai-timeout", type=float, default=600)
+    ap.add_argument("--resume", help="job id of a case whose runner died: finish it and write its record")
     a = ap.parse_args()
     for n in a.cases:
-        run(n, not a.no_wait_ai, a.ai_timeout)
+        run(n, not a.no_wait_ai, a.ai_timeout, a.resume)
 
 
 if __name__ == "__main__":
