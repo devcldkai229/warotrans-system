@@ -66,7 +66,7 @@ Trạng thái mỗi lỗi:
 |---|---|---|
 | D1 | Lidar quét ở ~18 cm, thân RBT-002 cao 10 cm, nên robot gần như không thấy nhau | ✅ Đã code: `fleet/poses` → `fleet_obstacles` → `warotrans_fleet_layer` và collision monitor (overlay `nav2_params_fleet.yaml`). ⬜ Còn phải đo `/scan` thật ở lab |
 | D2 | Robot đứng yên thì không replan; `inf_is_valid` false | ✅ BT dùng `IsPathValid` + `RateController` 1 Hz; `inf_is_valid` true |
-| D3 | Map tĩnh không có kệ | ⬜ Cần costmap thật từ robot (P0 lab) |
+| D3 | ~~Map tĩnh không có kệ~~ — **không phải lỗi**: kệ chỉ là hình dán trên tường (người dùng xác nhận 2026-11-24). Map tĩnh chỉ có tường là đúng. Vì vậy phần costmap mất ô trống (18–21% so với 38%) là vết ma (robot kia, vị trí cũ, nhiễu), không phải chân kệ → xử lý bằng `inf_is_valid` + fleet layer (D1, D2) | ✅ không cần làm |
 
 ## E/F. Map, workflow, kiểm thử
 
