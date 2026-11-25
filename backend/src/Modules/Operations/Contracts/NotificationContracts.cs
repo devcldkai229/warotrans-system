@@ -45,7 +45,16 @@ public sealed record NotificationDraft(
     Guid? EntityId = null,
     string? DedupeKey = null,
     bool OncePerSituation = false,
-    NotificationAudience? Audience = null);
+    NotificationAudience? Audience = null,
+    IReadOnlyList<NotificationLink>? Links = null);
+
+/// <summary>
+/// One more place a notification leads to besides its main route (the robot, its Job, the request, the replay …).
+/// </summary>
+/// <param name="Kind">ROBOT, JOB, REQUEST, ISSUE, TICKET, JOURNAL, HISTORY or TECHNICAL: the web words the label from it.</param>
+/// <param name="Text">What is linked, as shown (a robot code, a Job number).</param>
+/// <param name="Route">Admin console route; the Technician portal rewrites it (or hides it when it has no such screen).</param>
+public sealed record NotificationLink(string Kind, string Text, string Route);
 
 /// <summary>Public contract of the Operations module for raising notifications.</summary>
 public interface INotificationService
@@ -69,6 +78,7 @@ public static class NotificationRoutes
                 "REQUEST" => $"/monitor/requests?requestId={id}",
                 "ROBOT" => $"/monitor/fleet?robotId={id}",
                 "ISSUE" => $"/operations/issues/{id}",
+                "TICKET" => $"/operations/tickets/{id}",
                 _ => null
             };
 }
@@ -87,7 +97,8 @@ public sealed record NotificationCreated(
     IReadOnlyList<string>? RecipientRoles = null,
     Guid? RobotId = null,
     string? Route = null,
-    Guid? WarehouseId = null) : IIntegrationEvent
+    Guid? WarehouseId = null,
+    IReadOnlyList<NotificationLink>? Links = null) : IIntegrationEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;

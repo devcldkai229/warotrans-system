@@ -84,7 +84,8 @@ public sealed partial class RobotControlService(
     WaroTrans.Navigation.Contracts.INavigationModule? navigation = null,
     WaroTrans.Fleet.Contracts.IRobotWorkQuery? work = null,
     IOptions<ManualDriveOptions>? manualDrive = null,
-    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? traffic = null)
+    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? traffic = null,
+    WaroTrans.Fleet.Features.TechnicalTickets.TechnicalTicketService? tickets = null)
 {
     /// <summary>A lease is renewed by the client while the operator keeps driving; it lapses on its own otherwise.</summary>
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
@@ -106,6 +107,40 @@ public sealed partial class RobotControlService(
         var payload = new StopCommandPayload { Mode = mode, Reason = Trim(reason, 200) };
         await SendAsync(robot, RobotCommandType.STOP, RobotCommandTypes.Stop, payload, cancellationToken);
         return await GetStopStateAsync(robotId, cancellationToken);
+    }
+
+    /// <summary>See <see cref="WaroTrans.Fleet.Contracts.IFleetModule.ClearOpenCommandsAsync"/>.</summary>
+    public async Task<int> ClearOpenCommandsAsync(Guid robotId, Guid? keep, string reason, CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+        var open = await db.RobotCommands
+            .Where(c => c.RobotId == robotId && c.Id != keep
+                && (c.Status == RobotCommandStatus.SENT || c.Status == RobotCommandStatus.ACKED || c.Status == RobotCommandStatus.RUNNING))
+            .ToListAsync(cancellationToken);
+        foreach (var command in open)
+        {
+            command.Status = RobotCommandStatus.CANCELED;
+            command.Outcome = "CLEARED";
+            command.ErrorCode = "EMERGENCY_STOP";
+            command.CompletedAt = now;
+        }
+
+        var robot = await db.Robots.FirstAsync(r => r.Id == robotId, cancellationToken);
+        if (robot.CurrentCommandId is { } current && current != keep)
+        {
+            robot.CurrentCommandId = null;
+            if (robot.Status == RobotStatus.EXECUTING) robot.Status = robot.IsOnline ? RobotStatus.AVAILABLE : RobotStatus.OFFLINE;
+        }
+
+        robot.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        await RobotStateJournal.WriteAsync(db, robotId, robot.Status, "emergency_stop", RobotStateEventSource.OPERATOR, cancellationToken);
+        await audit.RecordAsync(
+            new AuditEntry("robot.commands_cleared", "ROBOT", robotId,
+                After: new Dictionary<string, object?> { ["cleared"] = open.Count, ["commands"] = open.Select(c => c.Type.ToString()).ToList() },
+                Reason: reason),
+            cancellationToken);
+        return open.Count;
     }
 
     public async Task<StopStateResponse> ResumeAsync(
@@ -348,6 +383,8 @@ public sealed partial class RobotControlService(
         robot.MaintenanceSince = now;
         robot.UpdatedAt = now;
         db.MaintenanceRecords.Add(record);
+        // The session has its MAINTENANCE ticket: repair actions are logged on it until the robot returns to service.
+        if (tickets is not null) await tickets.OpenForMaintenanceAsync(robot, record, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         await audit.RecordAsync(
@@ -400,6 +437,17 @@ public sealed partial class RobotControlService(
         record.ChecklistJson = JsonSerializer.Serialize(checklist with { Notes = null }, JsonOptions);
         record.Notes = Trim(checklist.Notes, 2000);
 
+        if (tickets is not null)
+        {
+            await tickets.CloseForMaintenanceAsync(robot, record,
+            [
+                new("Sensors checked", checklist.SensorsOk),
+                new("Localization checked", checklist.LocalizationOk),
+                new("Stop test passed", checklist.StopTestOk),
+                new("Traffic area clear", checklist.TrafficClear)
+            ], record.Notes, cancellationToken);
+        }
+
         robot.Status = robot.IsOnline ? RobotStatus.AVAILABLE : RobotStatus.OFFLINE;
         robot.MaintenanceReason = null;
         robot.MaintenanceSince = null;
@@ -429,15 +477,16 @@ public sealed partial class RobotControlService(
     /// RESTART_STACK / REBOOT / SHUTDOWN. Two-step: the caller must type the robot code back. Only when the robot
     /// announced the action, is held (stopped) and has no job. There is no remote power-on: that needs its own circuit.
     /// </summary>
-    public async Task<Guid> SystemActionAsync(Guid robotId, string action, string confirmRobotCode, CancellationToken cancellationToken)
+    public async Task<Guid> SystemActionAsync(Guid robotId, string action, string? confirmRobotCode, CancellationToken cancellationToken)
     {
         if (!SystemActionPayload.All.Contains(action))
         {
-            throw new DomainValidationException("Action must be RESTART_STACK, REBOOT or SHUTDOWN.", "system_action_unknown");
+            throw new DomainValidationException($"Action must be one of {string.Join(", ", SystemActionPayload.All)}.", "system_action_unknown");
         }
 
         var robot = await LoadAsync(robotId, cancellationToken);
-        if (!string.Equals(confirmRobotCode?.Trim(), robot.Code, StringComparison.Ordinal))
+        if (SystemActionPayload.Disruptive.Contains(action)
+            && !string.Equals(confirmRobotCode?.Trim(), robot.Code, StringComparison.Ordinal))
         {
             throw new DomainValidationException($"Type the robot code {robot.Code} to confirm.", "system_action_not_confirmed");
         }

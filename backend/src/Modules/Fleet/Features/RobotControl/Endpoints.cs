@@ -13,7 +13,7 @@ public sealed record AcquireLeaseRequest(bool Takeover = false, string? Reason =
 
 public sealed record StartMaintenanceRequest(string Reason);
 
-public sealed record SystemActionRequest(string Action, string ConfirmRobotCode);
+public sealed record SystemActionRequest(string Action, string? ConfirmRobotCode = null);
 
 /// <summary>Where the robot stands: an endpoint of its map, or a pose (a suggestion of AUTO_LOCALIZE).</summary>
 public sealed record LocalizeRobotRequest(Guid? EndpointId = null, double? X = null, double? Y = null, double? Yaw = null);
@@ -127,7 +127,7 @@ public static class RobotControlEndpoints
             .RequireRobotScope()
             .Audited("robot.system_action", "ROBOT", "id")
             .WithName("RobotSystemAction")
-            .WithDescription("RESTART_STACK / REBOOT / SHUTDOWN, only those the robot announced. The robot must be stopped (held) and idle; confirmRobotCode must repeat the robot code. There is no remote power-on.");
+            .WithDescription("RESTART_NAV / RESTART_LOCALIZATION / RESTART_CAMERA / RESTART_STACK / REBOOT / SHUTDOWN, only those the robot announced. The robot must be stopped (held) and idle; for RESTART_STACK, REBOOT and SHUTDOWN confirmRobotCode must repeat the robot code. There is no remote power-on.");
 
         return group;
     }
