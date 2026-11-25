@@ -11,4 +11,8 @@ public sealed record ListContainersRequest(
     // Only Containers on a CONFIRMED stock voucher of this type (INBOUND / OUTBOUND) of the warehouse.
     string? VoucherType = null,
     // Only CREATED Containers not admitted and on no open inbound voucher: what a new inbound voucher can take.
-    bool AwaitingInbound = false);
+    bool AwaitingInbound = false,
+    Guid? ProductId = null,
+    // Containers standing at this location, or counted in its stock (with LevelNo: at that level).
+    Guid? StorageLocationId = null,
+    short? LevelNo = null);

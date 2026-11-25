@@ -19,6 +19,9 @@ public static class ListContainersEndpoint
             string? status,
             string? voucherType,
             bool? awaitingInbound,
+            Guid? productId,
+            Guid? storageLocationId,
+            short? levelNo,
             IValidator<ListContainersRequest> validator,
             ListContainersHandler handler,
             CancellationToken cancellationToken) =>
@@ -31,7 +34,10 @@ public static class ListContainersEndpoint
                 skip ?? 0,
                 status,
                 voucherType,
-                awaitingInbound ?? false);
+                awaitingInbound ?? false,
+                productId,
+                storageLocationId,
+                levelNo);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
@@ -45,7 +51,8 @@ public static class ListContainersEndpoint
             "`status` narrows the list to one container status; `voucherType` (INBOUND / OUTBOUND) to Containers on a CONFIRMED " +
             "voucher of that type, newest voucher first; `skip` / `take` page it and `total` counts every match. Each item tells " +
             "its latest voucher (not cancelled). `awaitingInbound=true`: CREATED Containers not admitted and on no open inbound " +
-            "voucher (what a new inbound voucher can take).");
+            "voucher (what a new inbound voucher can take). `productId`, `storageLocationId` and `levelNo` narrow it to one product " +
+            "and to the Containers standing at, or counted in the stock of, that location (and level).");
 
         return group;
     }

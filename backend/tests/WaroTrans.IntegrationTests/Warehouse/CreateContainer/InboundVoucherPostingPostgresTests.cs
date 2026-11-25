@@ -321,5 +321,7 @@ public sealed partial class ContainerBatchPostgresTests
         public HashSet<Guid> Moving { get; } = [];
         public Task<IReadOnlySet<Guid>> GetContainersInActiveTransportAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlySet<Guid>>(ids.Where(Moving.Contains).ToHashSet());
+        public Task<int> CountActiveTransportsAtLocationAsync(Guid storageLocationId, Guid endpointId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 }

@@ -50,6 +50,19 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                                          && l.ClosedShortAt == null));
         }
 
+        if (request.ProductId is { } productId)
+        {
+            query = query.Where(c => c.ProductId == productId);
+        }
+
+        if (request.StorageLocationId is { } locationId)
+        {
+            var level = request.LevelNo;
+            query = query.Where(c =>
+                (c.CurrentStorageLocationId == locationId && (level == null || c.CurrentLevelNo == level))
+                || (c.InventoryStorageLocationId == locationId && (level == null || c.InventoryLevelNo == level)));
+        }
+
         var byVoucher = !string.IsNullOrEmpty(request.VoucherType);
         if (byVoucher)
         {

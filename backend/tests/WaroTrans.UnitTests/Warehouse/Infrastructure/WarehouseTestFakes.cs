@@ -24,6 +24,12 @@ public sealed class FakeContainerTransportLookup : IContainerTransportLookup
         IReadOnlyCollection<Guid> containerIds,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlySet<Guid>>(containerIds.Where(Moving.Contains).ToHashSet());
+
+    /// <summary>What <see cref="CountActiveTransportsAtLocationAsync"/> answers.</summary>
+    public int ActiveTransportsAtLocation { get; set; }
+
+    public Task<int> CountActiveTransportsAtLocationAsync(Guid storageLocationId, Guid endpointId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(ActiveTransportsAtLocation);
 }
 
 public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-20261006-000001") : IBusinessCodeGenerator
