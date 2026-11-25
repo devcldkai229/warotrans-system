@@ -178,6 +178,24 @@ public class SemanticPrefixGrantTests
     }
 
     [Fact]
+    public void A_robot_starting_beside_a_locked_zone_never_waits_inside_it()
+    {
+        // Lab 2026-11-25 U2: the robot's body touched ZONE-CENTER where it stood; its grant ended deep inside the zone
+        // and it held the zone while it waited for the other robot, which needed that zone to get out.
+        var s = NewState();
+        // The leader holds what lies past the zone on the follower's way.
+        Assert.True(s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(7.6, 0, 7.6, -3))).Granted);
+        // The follower stands 0.2 m before the zone edge (x = 6.0): its body touches the zone.
+        var result = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(5.8, 0, 9.0, 0)));
+        if (result.Granted)
+        {
+            Assert.DoesNotContain(Zone, result.Authority!.ResourceIds);
+        }
+
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
     public void A_grant_too_short_to_be_useful_is_not_given()
     {
         var s = NewState();

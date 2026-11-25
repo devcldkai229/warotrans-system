@@ -501,8 +501,12 @@ public sealed class TrafficState
             .Select(o => (X: o.X!.Value, Y: o.Y!.Value))
             .ToList();
 
-        var zonesAtStart = samples[0].Resources
-            .Where(rid => rid.StartsWith("zone:", StringComparison.Ordinal))
+        // A locked zone the robot may wait in: only one its centre already stands in. A body that merely touched the
+        // edge of one at the start (lab 2026-11-25 U2: RBT-002 at EP-SHELF-C, beside ZONE-CENTER) drove deep into it
+        // and held it while it waited, and the robot it waited for needed that zone: DEADLOCK_RISK for 2.5 minutes.
+        var zonesAtStart = policy.SingleOccupancyZones
+            .Where(z => SemanticReservation.PointInRing(samples[0].X, samples[0].Y, z.Ring))
+            .Select(z => $"zone:{z.Code}")
             .ToHashSet(StringComparer.Ordinal);
         var held = new HashSet<string>(StringComparer.Ordinal);
         ImmutableArray<string> best = [];
