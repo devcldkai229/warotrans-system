@@ -23,8 +23,8 @@ public static class TechnicalTicketEndpoints
             .WithSummary("Technical tickets, newest first (filters: robotId, type, status, search, from, to)")
             .WithTags("Technical tickets");
 
-        group.MapGet("/tickets/{ticketId:guid}", async (Guid ticketId, TechnicalTicketService tickets, CancellationToken ct) =>
-                Results.Ok(await tickets.GetAsync(ticketId, ct)))
+        group.MapGet("/tickets/{id:guid}", async (Guid id, TechnicalTicketService tickets, CancellationToken ct) =>
+                Results.Ok(await tickets.GetAsync(id, ct)))
             .RequirePermission(Permissions.RobotRead)
             .WithName("GetTechnicalTicket")
             .WithTags("Technical tickets");
@@ -37,27 +37,27 @@ public static class TechnicalTicketEndpoints
             .WithDescription("Opens a ticket on the robot: MAINTENANCE, DIAGNOSTIC, INSPECTION, REPAIR or TECHNICAL_REPORT. The robot's status and health are kept with it.")
             .WithTags("Technical tickets");
 
-        group.MapPatch("/tickets/{ticketId:guid}", async (Guid ticketId, UpdateTicketRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
-                Results.Ok(await tickets.UpdateAsync(ticketId, request, ct)))
+        group.MapPatch("/tickets/{id:guid}", async (Guid id, UpdateTicketRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
+                Results.Ok(await tickets.UpdateAsync(id, request, ct)))
             .RequirePermission(Permissions.RobotMaintenance)
             .WithName("UpdateTechnicalTicket")
             .WithTags("Technical tickets");
 
-        group.MapPost("/tickets/{ticketId:guid}/actions", async (Guid ticketId, AddTicketActionRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
-                Results.Ok(await tickets.AddActionAsync(ticketId, request, ct)))
+        group.MapPost("/tickets/{id:guid}/actions", async (Guid id, AddTicketActionRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
+                Results.Ok(await tickets.AddActionAsync(id, request, ct)))
             .RequirePermission(Permissions.RobotMaintenance)
             .WithName("AddTechnicalTicketAction")
             .WithTags("Technical tickets");
 
-        group.MapPost("/tickets/{ticketId:guid}/complete", async (Guid ticketId, CompleteTicketRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
-                Results.Ok(await tickets.CompleteAsync(ticketId, request, ct)))
+        group.MapPost("/tickets/{id:guid}/complete", async (Guid id, CompleteTicketRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
+                Results.Ok(await tickets.CompleteAsync(id, request, ct)))
             .RequirePermission(Permissions.RobotMaintenance)
             .WithName("CompleteTechnicalTicket")
             .WithDescription("Result: PASSED, FIXED, NEEDS_FOLLOW_UP or FAILED. A maintenance ticket closes when the robot returns to service.")
             .WithTags("Technical tickets");
 
-        group.MapPost("/tickets/{ticketId:guid}/cancel", async (Guid ticketId, CancelTicketRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
-                Results.Ok(await tickets.CancelAsync(ticketId, request, ct)))
+        group.MapPost("/tickets/{id:guid}/cancel", async (Guid id, CancelTicketRequest request, TechnicalTicketService tickets, CancellationToken ct) =>
+                Results.Ok(await tickets.CancelAsync(id, request, ct)))
             .RequirePermission(Permissions.RobotMaintenance)
             .WithName("CancelTechnicalTicket")
             .WithTags("Technical tickets");
