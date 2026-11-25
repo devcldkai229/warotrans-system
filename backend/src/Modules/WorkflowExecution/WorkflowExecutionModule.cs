@@ -82,6 +82,9 @@ public static class WorkflowExecutionModule
         services.AddScoped<IHandoverIssueVerifier, HandoverIssueVerifier>();
         services.Configure<Execution.RecoveryOptions>(configuration.GetSection(Execution.RecoveryOptions.SectionName));
         services.AddHostedService<Services.RobotOfflineJobHostedService>();
+        services.Configure<Services.NavigationBlockedAutoResumeOptions>(
+            configuration.GetSection(Services.NavigationBlockedAutoResumeOptions.SectionName));
+        services.AddHostedService<Services.NavigationBlockedAutoResumeHostedService>();
         services.AddScoped<WaroTrans.Fleet.Contracts.IRobotWorkQuery, Services.RobotWorkQuery>();
         services.AddSingleton<IJobBatchPlanner>(sp => new CollectThenDeliverJobBatchPlanner(
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
