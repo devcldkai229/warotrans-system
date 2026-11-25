@@ -688,15 +688,23 @@ public sealed class RobotCareService(
 
             var holdsJob = await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == robot.Id && a.EndedAt == null, cancellationToken);
             var endpoints = await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken);
-            var alreadyParked = endpoints.Any(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= ParkedRadius(e));
+            // Parked = on a parking place that is not another robot's home (standing on RBT-002's home, RBT-001 still
+            // goes back to its own).
+            var otherHomes = (trafficOptions?.Value.RobotHomeEndpoints ?? new Dictionary<string, string>())
+                .Where(h => h.Key != robot.Code).Select(h => h.Value).ToHashSet(StringComparer.Ordinal);
+            var alreadyParked = endpoints.Any(e => e.EndpointType == EndpointType.PARK && !otherHomes.Contains(e.Code)
+                                                   && Distance(robot, e) <= ParkedRadius(e));
             if (holdsJob || alreadyParked)
             {
                 continue;
             }
 
-            // A parking place first; when all are taken, a wait point (= queue = recovery point), unless the robot
-            // already stands on one.
-            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
+            // Its own home first (Traffic:RobotHomeEndpoints), then a parking place; when all are taken, a wait point
+            // (= queue = recovery point), unless the robot already stands on one. Lab 2026-11-25 (V024): RBT-001, idle at
+            // SHELF-A-1 after a Job, was sent to the nearest free place, EP-PARKING-B (RBT-002's home), and stood in the
+            // way of RBT-002 coming down the same corridor; the two then met head-on.
+            var target = await FreeHomeAsync(robot, cancellationToken)
+                         ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
                 var atFallback = endpoints.Any(e => IsRecoveryPoint(e) && Distance(robot, e) <= ParkedRadius(e));
