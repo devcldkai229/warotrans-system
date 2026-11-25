@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { getActiveMapVersion, listEndpointGroups, listEndpoints } from '@/shared/api/navigation'
+import { getActiveMapVersion, getPlace, listEndpointGroups, listEndpoints } from '@/shared/api/navigation'
 import { listWarehouses } from '@/shared/api/warehouses'
 import { t } from '@/shared/i18n'
 import {
   buildEndpointOptions,
   buildGroupOptions,
   findEndpointOption,
+  findOptionByCode,
   type EndpointGroupMapGroup,
   type EndpointMapGroup,
 } from './endpointOptions'
@@ -52,12 +53,37 @@ function usePublishedGroupOptions(enabled: boolean) {
   })
 }
 
+/** A value that is not on a published map: the place it was on (an older map version), by code. */
+function useOlderPlace(id: string, needed: boolean) {
+  return useQuery({
+    queryKey: ['navigation', 'place', id],
+    queryFn: () => getPlace(id),
+    enabled: needed && /^[0-9a-f-]{36}$/i.test(id),
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
 /** Shows a configured Endpoint ID as its code and name (read-only views); falls back to the ID itself. */
 export function EndpointLabel({ id, group = false }: { id: string; group?: boolean }) {
   const endpoints = usePublishedEndpointOptions()
   const groups = usePublishedGroupOptions(group)
-  const known = findEndpointOption((group ? groups.data : endpoints.data) ?? [], id)
-  return known ? <span title={id}>{known.label}</span> : <span>{id}</span>
+  const options = (group ? groups.data : endpoints.data) ?? []
+  const known = findEndpointOption(options, id)
+  const older = useOlderPlace(id, !known && options.length > 0)
+  const sameCode = findOptionByCode(options, older.data?.code)
+  if (known) return <span title={id}>{known.label}</span>
+  if (sameCode && older.data) {
+    return (
+      <span title={id}>
+        {sameCode.label} <span className="muted">{t('(set on {map}; same code on the published map)', { map: older.data.mapVersionCode })}</span>
+      </span>
+    )
+  }
+  if (older.data) {
+    return <span className="endpoint-picker__warn">{t('{code} (from {map}) is not on the published map', { code: older.data.code, map: older.data.mapVersionCode })}</span>
+  }
+  return <span>{id}</span>
 }
 
 interface EndpointValuePickerProps {
@@ -80,6 +106,9 @@ export function EndpointValuePicker({ value, onChange, required, ariaLabel, grou
   const current = typeof value === 'string' ? value : ''
   const groups = query.data ?? []
   const known = findEndpointOption(groups, current)
+  // Configured while another map version was published: the same code on the published map is what runs.
+  const older = useOlderPlace(current, Boolean(current) && !known && !query.isLoading)
+  const sameCode = findOptionByCode(groups, older.data?.code)
   const [manual, setManual] = useState(false)
 
   if (manual || query.isError) {
@@ -129,7 +158,13 @@ export function EndpointValuePicker({ value, onChange, required, ariaLabel, grou
                 : t('No endpoint')}
         </option>
         {current && !known && !query.isLoading ? (
-          <option value={current}>{t('Unknown ID {id} (not on a published map)', { id: current })}</option>
+          <option value={current}>
+            {sameCode && older.data
+              ? t('{label} (set on {map}; same code on the published map)', { label: sameCode.label, map: older.data.mapVersionCode })
+              : older.data
+                ? t('{code} (from {map}) is not on the published map', { code: older.data.code, map: older.data.mapVersionCode })
+                : t('Unknown ID {id} (not on a published map)', { id: current })}
+          </option>
         ) : null}
         {groups.map((group) => (
           <optgroup key={group.label} label={group.label}>
@@ -142,8 +177,12 @@ export function EndpointValuePicker({ value, onChange, required, ariaLabel, grou
         ))}
         <option value={MANUAL}>{t('Enter ID…')}</option>
       </select>
-      {current && !known && !query.isLoading ? (
-        <span className="endpoint-picker__warn">{t('This ID is not on any published map.')}</span>
+      {current && !known && !query.isLoading && !sameCode ? (
+        <span className="endpoint-picker__warn">
+          {older.data
+            ? t('Add {code} to the published map (same name) or pick another place.', { code: older.data.code })
+            : t('This ID is not on any published map.')}
+        </span>
       ) : null}
     </span>
   )

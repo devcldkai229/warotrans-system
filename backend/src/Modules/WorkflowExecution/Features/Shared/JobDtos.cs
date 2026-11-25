@@ -138,6 +138,8 @@ public sealed class JobQueries(
             .AsSplitQuery()
             .FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken)
             ?? throw new NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
+        await WaroTrans.WorkflowExecution.Features.WorkflowVisibility.StaffWorkflowVisibility.EnsureJobVisibleAsync(
+            db, job.Id, job.WorkflowId, currentUser, cancellationToken);
 
         // Config is a JSON column: load the template steps and map in memory.
         var steps = (await db.WorkflowSteps.AsNoTracking()
@@ -256,7 +258,8 @@ public sealed class JobQueries(
         string? search = null,
         int skip = 0)
     {
-        var query = db.Jobs.AsNoTracking().AsQueryable();
+        var query = WaroTrans.WorkflowExecution.Features.WorkflowVisibility.StaffWorkflowVisibility.Visible(
+            db.Jobs.AsNoTracking(), db, currentUser);
         if (jobIds is not null)
         {
             query = query.Where(j => jobIds.Contains(j.Id));

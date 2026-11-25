@@ -103,6 +103,9 @@ builder.Services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, A
 builder.Services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotBatteryLow>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotErrorReported>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotChargeFull>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotChargingStarted>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotChargingEnded>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepWaitingForPerson>, AdminNotificationProducer>();

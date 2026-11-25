@@ -68,6 +68,18 @@ public sealed class Robot
     public string? MaintenanceReason { get; set; }
     public DateTimeOffset? MaintenanceSince { get; set; }
 
+    /// <summary>
+    /// Manual charging: since when a person plugged the charger in (status CHARGING). Charging ends only when a person
+    /// confirms the charger is unplugged; a full battery only notifies Admins / Technicians (<see cref="ChargeFullAt"/>).
+    /// </summary>
+    public DateTimeOffset? ChargingSince { get; set; }
+
+    /// <summary>When the battery was first seen full during this charge (the "unplug the charger" notification).</summary>
+    public DateTimeOffset? ChargeFullAt { get; set; }
+
+    /// <summary>When the one "still plugged in" reminder was sent during this charge.</summary>
+    public DateTimeOffset? ChargeReminderAt { get; set; }
+
     /// <summary>System actions the robot announced in its heartbeat (RESTART_STACK, REBOOT, SHUTDOWN), comma separated.</summary>
     public string? Capabilities { get; set; }
 
@@ -312,11 +324,52 @@ public sealed class Robot
         UpdatedAt = utcNow;
     }
 
+    /// <summary>A person plugged the charger in: CHARGING until a person confirms it is unplugged.</summary>
+    public void StartCharging(DateTimeOffset utcNow)
+    {
+        if (Status == RobotStatus.CHARGING)
+        {
+            return;
+        }
+
+        if (Status == RobotStatus.MAINTENANCE)
+        {
+            throw new ConflictException($"Robot {Code} is in maintenance.", "robot_in_maintenance");
+        }
+
+        if (CurrentCommandId is not null || Status is RobotStatus.RESERVED or RobotStatus.EXECUTING)
+        {
+            throw new ConflictException($"Robot {Code} is still moving; it can be plugged in once it stands still.", "robot_busy");
+        }
+
+        Status = RobotStatus.CHARGING;
+        ChargingSince = utcNow;
+        ChargeFullAt = null;
+        ChargeReminderAt = null;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>A person unplugged the charger: the robot is back in service.</summary>
+    public void EndCharging(DateTimeOffset utcNow)
+    {
+        if (Status != RobotStatus.CHARGING)
+        {
+            throw new ConflictException($"Robot {Code} is not charging.", "robot_not_charging");
+        }
+
+        Status = RobotStatus.AVAILABLE;
+        ChargingSince = null;
+        ChargeFullAt = null;
+        ChargeReminderAt = null;
+        UpdatedAt = utcNow;
+    }
+
     /// <summary>Backend-owned: clear command and return to AVAILABLE.</summary>
     public void MarkAvailable(DateTimeOffset utcNow)
     {
         // A command finishing does not end a maintenance session: only an authorized Technician does (RB-08).
-        if (Status != RobotStatus.MAINTENANCE)
+        // Nor a charge: the charger is unplugged by a person, who confirms it.
+        if (Status is not (RobotStatus.MAINTENANCE or RobotStatus.CHARGING))
         {
             Status = RobotStatus.AVAILABLE;
         }

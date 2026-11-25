@@ -246,6 +246,9 @@ export interface Robot {
   /** RB-08 */
   maintenanceReason?: string | null
   maintenanceSince?: string | null
+  /** Manual charging: plugged in since (status CHARGING), and when the battery was first seen full. */
+  chargingSince?: string | null
+  chargeFullAt?: string | null
   /** RB-09: system actions the robot announced. */
   capabilities?: string[]
   /** HW-04: what the robot said about its battery estimate; null when it did not say. */

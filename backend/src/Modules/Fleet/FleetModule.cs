@@ -58,6 +58,7 @@ public static class FleetModule
         services.AddScoped<DisableRobotHandler>();
         services.AddScoped<PutRobotInServiceHandler>();
         services.AddScoped<ChangeRobotMapHandler>();
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishGuard, FleetMapPublishGuard>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<Services.InFlightCommandAborter>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
@@ -109,6 +110,8 @@ public static class FleetModule
         services.AddHostedService<TrafficAuthorityPublisher>();
         services.AddHostedService<TrafficAuthorityRenewHostedService>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
+        services.AddScoped<WaroTrans.Fleet.Features.Charging.RobotChargingService>();
+        services.AddHostedService<WaroTrans.Fleet.Features.Charging.ChargeReminderHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();
         services.AddHostedService<SemanticPolicyBootstrapHostedService>();

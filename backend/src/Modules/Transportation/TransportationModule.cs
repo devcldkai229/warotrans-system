@@ -25,6 +25,10 @@ public static class TransportationModule
         services.AddValidatorsFromAssembly(typeof(TransportationModule).Assembly);
 
         services.AddScoped<CreateTransportRequestHandler>();
+        // Publishing a map: requests not started yet follow it (Endpoints by code); ones it cannot carry block it.
+        services.AddScoped<Features.Shared.TransportMapPublish>();
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishGuard>(sp => sp.GetRequiredService<Features.Shared.TransportMapPublish>());
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishFollower>(sp => sp.GetRequiredService<Features.Shared.TransportMapPublish>());
         services.AddScoped<OutboundPickHandler>();
         services.AddScoped<ListTransportRequestsHandler>();
         services.AddScoped<GetTransportRequestHandler>();

@@ -40,6 +40,10 @@ const TEMPLATES: string[] = [
   msg('The {command} command was refused ({error}).'),
   msg('Robot {robot} battery is low'),
   msg('{percent}% left and the robot is not charging.'),
+  msg('Robot {robot} is fully charged'),
+  msg('Robot {robot} is still on the charger'),
+  msg('Battery {percent}%. Unplug the charger, then confirm it on the robot page.'),
+  msg('Unplug the charger, then confirm it on the robot page.'),
   msg('Robot {robot} reported an error'),
   msg('Error code: {code}.'),
   // Transport request

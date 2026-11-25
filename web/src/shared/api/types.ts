@@ -150,6 +150,8 @@ export interface WorkflowListItem {
   status: WorkflowStatus
   createdAt: string
   publishedAt?: string | null
+  /** Shown to Staff accounts (and its Jobs); robot care workflows are hidden. Admins / Technicians see all. */
+  staffVisible?: boolean
 }
 
 export interface WorkflowDetail extends WorkflowListItem {

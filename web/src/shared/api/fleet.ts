@@ -212,6 +212,35 @@ export function sendRobotToCharger(robotId: string) {
   return apiFetch<{ id: string }>(`/api/workflow-execution/robots/${robotId}/go-to-charger`, { method: 'POST', body: JSON.stringify({}) })
 }
 
+export interface RobotCharging {
+  robotId: string
+  robotCode: string
+  status: string
+  batteryPercent?: number | null
+  chargingSince?: string | null
+  chargeFullAt?: string | null
+  fullPercent: number
+  /** The robot stands at a charger and this charging Job waits for someone to plug it in. */
+  awaitingPlugJobNo?: string | null
+}
+
+export function getRobotCharging(robotId: string) {
+  return apiFetch<RobotCharging>(`/api/workflow-execution/robots/${robotId}/charging`)
+}
+
+/** Manual charging: a person plugged the charger in (completes the robot's charging Job when it waits for it). */
+export function confirmChargerPluggedIn(robotId: string) {
+  return apiFetch<RobotCharging>(`/api/workflow-execution/robots/${robotId}/charging/plugged-in`, { method: 'POST', body: '{}' })
+}
+
+/** A person unplugged the charger; below the full level only with `force` (refused with charge_not_full otherwise). */
+export function confirmChargerUnplugged(robotId: string, force = false) {
+  return apiFetch<RobotCharging>(`/api/workflow-execution/robots/${robotId}/charging/unplugged`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  })
+}
+
 /** FLT-02: what this robot can be asked now. An unsupported item must not be offered. */
 export type RobotHistoryKind = 'STATE' | 'COMMAND'
 

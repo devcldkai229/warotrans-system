@@ -698,6 +698,11 @@ public sealed partial class JobExecutionEngine(
         CompleteHumanStep(job, task, step, workflowStep, source, now, issueId, inspectionResult);
         await SaveAndPublishAsync(cancellationToken, transaction);
 
+        if (operation == nameof(HumanActionCode.CHARGE_CONNECT_CONFIRM) && AssignedRobot(job) is { } chargingRobot)
+        {
+            await StartChargingAsync(chargingRobot, job, cancellationToken);
+        }
+
         if (handoverType.HasValue)
             await ContinueUnderJobLockAsync(job, CancellationToken.None);
         else
@@ -2601,6 +2606,21 @@ public sealed partial class JobExecutionEngine(
         }
 
         var endpointId = step.ResolvedInputs["targetEndpointId"].GetGuid();
+        // A workflow configured while another map was published names that map's endpoint or group: the place with the
+        // same code on the Job's map is meant (maps are re-published, workflows are not re-configured each time).
+        var place = await navigation.ResolvePlaceOnMapAsync(endpointId, job.MapVersionId, cancellationToken);
+        if (place is { Found: false })
+        {
+            Fail(job, task, step, stepKey, "workflow_place_not_on_map",
+                $"'{place.Code}' is not on the Job's map. Add it to the map (same name) or choose another place in the workflow.", now);
+            return true;
+        }
+
+        if (place?.TargetId is { } onJobMap)
+        {
+            endpointId = onJobMap;
+        }
+
         // TRN-03: a cancelled Job's robot takes its cargo to a recovery point instead of the step's own target. That
         // place was chosen by the operator (a real endpoint), so it wins over the step's endpoint group, if any.
         var recoveryTo = RecoveryTarget(step);
@@ -3342,7 +3362,13 @@ public sealed partial class JobExecutionEngine(
 
             case nameof(CheckConditionCode.ENDPOINT_AVAILABLE):
             {
-                var pose = await navigation.GetEndpointPoseAsync(inputs["endpointId"].GetGuid(), cancellationToken);
+                var checkedId = inputs["endpointId"].GetGuid();
+                if (await navigation.ResolvePlaceOnMapAsync(checkedId, job.MapVersionId, cancellationToken) is { TargetId: { } onMap })
+                {
+                    checkedId = onMap;
+                }
+
+                var pose = await navigation.GetEndpointPoseAsync(checkedId, cancellationToken);
                 passed = pose is { IsEnabled: true } && pose.MapVersionId == job.MapVersionId;
                 reason = pose is null ? "endpoint_not_found" : passed ? "available" : "endpoint_disabled_or_other_map";
                 outputs["endpointStatus"] = JsonSerializer.SerializeToElement(passed ? "AVAILABLE" : "UNAVAILABLE");
@@ -3893,6 +3919,22 @@ public sealed partial class JobExecutionEngine(
     private static string DescribeRejections(IReadOnlyList<DispatchCandidate> candidates) =>
         candidates.Count == 0 ? " (no robot on this map)"
         : ": " + string.Join("; ", candidates.Take(5).Select(c => $"{c.RobotCode} {string.Join(", ", c.Reasons)}"));
+
+    /// <summary>
+    /// The charger is plugged in (manual charging): the robot is CHARGING, given no work, until a person confirms it is
+    /// unplugged. The step is confirmed either way; a robot that cannot be marked is left as it is, and logged.
+    /// </summary>
+    private async Task StartChargingAsync(Guid robotId, Job job, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await fleet.StartChargingAsync(robotId, job.Id, cancellationToken);
+        }
+        catch (Exception ex) when (ex is AppException or NotSupportedException)
+        {
+            logger.LogWarning(ex, "Job {JobNo}: robot {Robot} was plugged in but could not be marked CHARGING", job.JobNo, robotId);
+        }
+    }
 
     private static Guid? AssignedRobot(Job job) =>
         job.ContextValues.TryGetValue(AssignedRobotKey, out var value) && value.ValueKind == JsonValueKind.String

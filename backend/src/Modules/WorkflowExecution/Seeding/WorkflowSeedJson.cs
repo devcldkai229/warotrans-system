@@ -108,6 +108,7 @@ public static class WorkflowSeedJson
             Code = model.Code,
             Name = model.Name,
             Description = model.Description,
+            StaffVisible = workflow.StaffVisible ? null : false,
             Variables = variables,
             Tasks = model.Tasks.Select(t => new UpsertWorkflowTaskRequest
             {

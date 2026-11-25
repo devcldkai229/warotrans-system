@@ -52,7 +52,10 @@ public sealed class HumanTaskQueries(
         var rows = await db.JobSteps.AsNoTracking()
             .Where(s => s.StepType == StepType.HUMAN_INTERACTION
                         && s.Status == JobStepStatus.WAITING
-                        && s.JobTask.Job.Status == JobStatus.RUNNING)
+                        && s.JobTask.Job.Status == JobStatus.RUNNING
+                        // Staff do not get the steps of workflows hidden from them (charger plugged in: Admin / Technician).
+                        && (currentUser.Role != WaroTrans.BuildingBlocks.Authorization.AppRoles.Staff
+                            || db.Workflows.Any(w => w.Id == s.JobTask.Job.WorkflowId && w.StaffVisible)))
             .Select(s => new
             {
                 Step = s,

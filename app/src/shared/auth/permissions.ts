@@ -24,6 +24,8 @@ export const PERMISSIONS = {
   robotManage: 'robot.manage',
   robotConfigure: 'robot.configure',
   robotStop: 'robot.stop',
+  /** Robot care (return to park, charger plugged in / unplugged): Admins and Technicians, not Staff. */
+  robotCommand: 'robot.command',
   /** LOCALIZE at a known endpoint; never makes the robot move. */
   robotLocalize: 'robot.localize',
   robotManualDrive: 'robot.manual.drive',

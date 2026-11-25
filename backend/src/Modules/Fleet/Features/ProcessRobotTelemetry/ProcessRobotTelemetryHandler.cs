@@ -20,7 +20,8 @@ public sealed class ProcessRobotTelemetryHandler(
     TrafficShadowObserver? trafficShadow,
     ILogger<ProcessRobotTelemetryHandler> logger,
     RobotPoseHistoryRecorder? poseHistory,
-    Microsoft.Extensions.Options.IOptions<WaroTrans.Fleet.Features.Dispatch.BatteryOptions>? battery = null)
+    Microsoft.Extensions.Options.IOptions<WaroTrans.Fleet.Features.Dispatch.BatteryOptions>? battery = null,
+    WaroTrans.Fleet.Features.Charging.RobotChargingService? charging = null)
 {
     private decimal LowBattery => battery?.Value.LowPercent is { } low ? (decimal)low : GetRobotStatisticsHandler.LowBatteryPercent;
 
@@ -134,6 +135,12 @@ public sealed class ProcessRobotTelemetryHandler(
             && robot.Status != RobotStatus.CHARGING)
         {
             await events.PublishAsync(new RobotBatteryLow(robot.Id, robot.Code, robot.BatteryPercent), cancellationToken);
+        }
+
+        if (robot.Status == RobotStatus.CHARGING && robot.ChargeFullAt is null && charging is not null)
+        {
+            await charging.NoticeFullAsync(
+                robot.Id, robot.Code, message.BatteryPercent is null ? null : robot.BatteryPercent, message.BatteryChargingState, cancellationToken);
         }
 
         if (string.IsNullOrEmpty(errorBefore) && !string.IsNullOrEmpty(robot.ErrorCode))

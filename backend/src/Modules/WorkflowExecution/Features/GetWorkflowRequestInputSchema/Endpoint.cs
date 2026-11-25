@@ -11,10 +11,11 @@ public static class GetWorkflowRequestInputSchemaEndpoint
     {
         group.MapGet("/workflows/{id:guid}/request-input-schema", async (
             Guid id,
+            Guid? mapVersionId,
             GetWorkflowRequestInputSchemaHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var response = await handler.HandleAsync(id, cancellationToken);
+            var response = await handler.HandleAsync(id, cancellationToken, mapVersionId);
             return Results.Ok(response);
         })
             .RequirePermission(Permissions.WorkflowRead);

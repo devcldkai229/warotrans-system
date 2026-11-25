@@ -60,6 +60,52 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
             .Select(e => new EndpointPoseSnapshot(e.Id, e.MapVersionId, e.Code, e.X, e.Y, e.Yaw, e.IsEnabled, e.PositionTolerance))
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<MapPlaceResolution?> ResolvePlaceOnMapAsync(Guid id, Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        (await ResolvePlacesOnMapAsync([id], mapVersionId, cancellationToken)).FirstOrDefault();
+
+    public async Task<IReadOnlyList<MapPlaceResolution>> ResolvePlacesOnMapAsync(
+        IReadOnlyCollection<Guid> ids, Guid mapVersionId, CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0) return [];
+        var wanted = ids.Distinct().ToList();
+        var endpoints = await dbContext.Endpoints.AsNoTracking()
+            .Where(e => wanted.Contains(e.Id))
+            .Select(e => new { e.Id, e.MapVersionId, e.Code })
+            .ToListAsync(cancellationToken);
+        var groups = await dbContext.EndpointGroups.AsNoTracking()
+            .Where(g => wanted.Contains(g.Id))
+            .Select(g => new { g.Id, g.MapVersionId, g.Code })
+            .ToListAsync(cancellationToken);
+
+        var endpointCodes = endpoints.Where(e => e.MapVersionId != mapVersionId).Select(e => e.Code).Distinct().ToList();
+        var groupCodes = groups.Where(g => g.MapVersionId != mapVersionId).Select(g => g.Code).Distinct().ToList();
+        var endpointsOnMap = endpointCodes.Count == 0
+            ? new Dictionary<string, Guid>()
+            : await dbContext.Endpoints.AsNoTracking()
+                .Where(e => e.MapVersionId == mapVersionId && endpointCodes.Contains(e.Code))
+                .ToDictionaryAsync(e => e.Code, e => e.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var groupsOnMap = groupCodes.Count == 0
+            ? new Dictionary<string, Guid>()
+            : await dbContext.EndpointGroups.AsNoTracking()
+                .Where(g => g.MapVersionId == mapVersionId && groupCodes.Contains(g.Code))
+                .ToDictionaryAsync(g => g.Code, g => g.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
+
+        var result = new List<MapPlaceResolution>();
+        foreach (var e in endpoints)
+        {
+            Guid? target = e.MapVersionId == mapVersionId ? e.Id : endpointsOnMap.TryGetValue(e.Code, out var id) ? id : null;
+            result.Add(new MapPlaceResolution(e.Id, false, e.Code, target));
+        }
+
+        foreach (var g in groups)
+        {
+            Guid? target = g.MapVersionId == mapVersionId ? g.Id : groupsOnMap.TryGetValue(g.Code, out var id) ? id : null;
+            result.Add(new MapPlaceResolution(g.Id, true, g.Code, target));
+        }
+
+        return result;
+    }
+
     public Task<EndpointPoseSnapshot?> GetEndpointPoseAsync(Guid endpointId, CancellationToken cancellationToken = default) =>
         dbContext.Endpoints
             .AsNoTracking()

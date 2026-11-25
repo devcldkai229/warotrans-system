@@ -34,6 +34,8 @@ export interface EndpointMapGroup {
 
 export interface EndpointOption {
   id: string
+  /** The place's code: what a workflow configured on another map version is matched by. */
+  code: string
   label: string
   disabled: boolean
 }
@@ -53,6 +55,7 @@ export function buildEndpointOptions(groups: EndpointMapGroup[]): EndpointOption
         .sort((a, b) => a.code.localeCompare(b.code))
         .map((e) => ({
           id: e.id,
+          code: e.code,
           label: `${e.code} · ${e.name} · ${e.endpointType}${e.isEnabled ? '' : ' (disabled)'}`,
           disabled: !e.isEnabled,
         })),
@@ -76,10 +79,24 @@ export function buildGroupOptions(maps: EndpointGroupMapGroup[]): EndpointOption
         .sort((a, b) => a.code.localeCompare(b.code))
         .map((g) => ({
           id: g.id,
+          code: g.code,
           label: `${g.code} · ${g.name} · ${g.selectionPolicy} · ${g.members.map((x) => x.code).join(', ') || '—'}${g.isActive ? '' : ' (inactive)'}`,
           disabled: !g.isActive,
         })),
     }))
+}
+
+/**
+ * The option a configured value stands for: the same id, else (a workflow configured while another map version was
+ * published) the option with the same code, which is what the runtime uses on the Job's map.
+ */
+export function findOptionByCode(groups: EndpointOptionGroup[], code: string | null | undefined): EndpointOption | null {
+  if (!code) return null
+  for (const group of groups) {
+    const found = group.options.find((o) => o.code.toLowerCase() === code.toLowerCase())
+    if (found) return found
+  }
+  return null
 }
 
 export function findEndpointOption(groups: EndpointOptionGroup[], id: string | null | undefined): EndpointOption | null {

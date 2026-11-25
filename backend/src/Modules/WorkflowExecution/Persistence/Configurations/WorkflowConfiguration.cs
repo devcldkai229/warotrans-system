@@ -25,6 +25,7 @@ public sealed class WorkflowConfiguration : IEntityTypeConfiguration<Workflow>
         builder.Property(x => x.Name).HasMaxLength(255).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(500);
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(x => x.StaffVisible).HasDefaultValue(true).IsRequired();
 
         builder.Property(x => x.VariablesSchema)
             .HasColumnType("jsonb")

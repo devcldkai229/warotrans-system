@@ -66,6 +66,7 @@ public static class NavigationModule
         services.AddScoped<DeleteRouteGraphCacheHandler>();
         services.AddScoped<GetActiveMapVersionHandler>();
         services.AddScoped<PublishMapVersionHandler>();
+        services.AddScoped<Features.PublishMapVersion.MapPublishCheck>();
         services.AddScoped<ArchiveMapVersionHandler>();
         services.AddScoped<CreateEndpointHandler>();
         services.AddScoped<GetEndpointHandler>();
@@ -130,6 +131,7 @@ public static class NavigationModule
         Features.GetMapCostmap.GetMapCostmapEndpoint.Map(group);
         CreateEndpointEndpoint.Map(group);
         GetEndpointEndpoint.Map(group);
+        Features.GetPlace.GetPlaceEndpoint.Map(group);
         UpdateEndpointEndpoint.Map(group);
         DeleteEndpointEndpoint.Map(group);
         CreateEdgeEndpoint.Map(group);

@@ -10,6 +10,17 @@ public interface IFleetModule
 {
     Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default);
 
+    /// <summary>Manual charging: a person confirmed the charger is plugged in (robot CHARGING, given no work).</summary>
+    Task<RobotChargingSnapshot> StartChargingAsync(Guid robotId, Guid? jobId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    /// <summary>A person confirmed the charger is unplugged (robot AVAILABLE); before full only with <paramref name="force"/>.</summary>
+    Task<RobotChargingSnapshot> EndChargingAsync(Guid robotId, bool force, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    Task<RobotChargingSnapshot> GetChargingAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
     /// <summary>
     /// The Jobs the robot was assigned to, most recently assigned first, one entry per Job (a Job handed over to
     /// another robot still counts for this one). Empty for an unknown robot.
@@ -194,3 +205,13 @@ public sealed record PositioningYield(bool IsReady, string? WaitingFor)
 
     public static PositioningYield Waiting(string reason) => new(false, reason);
 }
+
+/// <summary>A robot's manual charge: since when it is plugged in, and when its battery was seen full.</summary>
+public sealed record RobotChargingSnapshot(
+    Guid RobotId,
+    string RobotCode,
+    string Status,
+    decimal? BatteryPercent,
+    DateTimeOffset? ChargingSince,
+    DateTimeOffset? ChargeFullAt,
+    decimal FullPercent);

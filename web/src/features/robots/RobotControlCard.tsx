@@ -4,7 +4,10 @@ import { useAuth } from '@/features/auth/authContext'
 import { ApiError } from '@/shared/api/client'
 import {
   completeMaintenance,
+  confirmChargerPluggedIn,
+  confirmChargerUnplugged,
   getRobot,
+  getRobotCharging,
   getRobotCommandCatalog,
   getStopState,
   resumeRobot,
@@ -63,6 +66,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
     void queryClient.invalidateQueries({ queryKey: ['robot', robotId] })
     void queryClient.invalidateQueries({ queryKey: ['stop-state', robotId] })
     void queryClient.invalidateQueries({ queryKey: ['fleet-robots'] })
+    void queryClient.invalidateQueries({ queryKey: ['robot-charging', robotId] })
   }
   const act = useMutation({
     mutationFn: (action: () => Promise<unknown>) => action(),
@@ -78,6 +82,30 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
 
   const held = robot.data?.motionHeld ?? stop.data?.motionHeld ?? false
   const inMaintenance = robot.data?.status === 'MAINTENANCE'
+  const charging = robot.data?.status === 'CHARGING'
+  const mayCommand = canActOnRobot(capabilities, PERMISSIONS.robotCommand, robotId)
+  const chargeState = useQuery({
+    queryKey: ['robot-charging', robotId],
+    queryFn: () => getRobotCharging(robotId),
+    enabled: mayCommand,
+    refetchInterval: 5_000,
+  })
+  const awaitingPlug = !charging ? chargeState.data?.awaitingPlugJobNo : null
+  const unplug = () =>
+    act.mutate(async () => {
+      try {
+        return await confirmChargerUnplugged(robotId)
+      } catch (failure) {
+        // Below the full level a person may still end the charge (the robot is needed now), after saying so.
+        if (failure instanceof ApiError && failure.code === 'charge_not_full'
+          && window.confirm(t('The battery is not full yet ({battery}). End the charge anyway?', {
+            battery: robot.data?.batteryPercent != null ? `${Math.round(robot.data.batteryPercent)}%` : t('unknown'),
+          }))) {
+          return confirmChargerUnplugged(robotId, true)
+        }
+        throw failure
+      }
+    })
   const mayStop = canActOnRobot(capabilities, PERMISSIONS.robotStop, robotId)
   const mayResume = canActOnRobot(capabilities, PERMISSIONS.robotConfigure, robotId)
   const mayMaintain = canActOnRobot(capabilities, PERMISSIONS.robotMaintenance, robotId)
@@ -120,13 +148,16 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
         {mayResume && held && offered('RESUME') ? (
           <Button size="sm" variant="surface" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => resumeRobot(robotId))}>{t('Resume')}</Button>
         ) : null}
-        {canActOnRobot(capabilities, PERMISSIONS.robotCommand, robotId) && !held && !inMaintenance ? (
+        {mayCommand && !held && !inMaintenance && !charging ? (
           <>
             <Button size="sm" variant="ghost" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => returnRobotToPark(robotId))}>
               {t('Return to park')}
             </Button>
             <Button size="sm" variant="ghost" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => sendRobotToCharger(robotId))}>
               {t('Go to charger')}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={act.isPending} title={t('The charger is connected by hand: confirm it once it is plugged in.')} onClick={() => act.mutate(() => confirmChargerPluggedIn(robotId))}>
+              {t('Charger plugged in')}
             </Button>
           </>
         ) : null}
@@ -142,6 +173,39 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
           >{t('Start maintenance')}</Button>
         ) : null}
       </div>
+
+      {awaitingPlug ? (
+        <div role="status" className="mt-4 rounded-sm bg-amber-soft p-3 text-sm text-amber-ink">
+          <p className="font-medium">{t('Waiting for the charger to be plugged in')}</p>
+          <p className="text-xs">{t('Job {job} brought the robot to the charger. Plug the charger in, then confirm it.', { job: awaitingPlug })}</p>
+          {mayCommand ? (
+            <Button size="sm" variant="primary" className="mt-2" disabled={act.isPending} onClick={() => act.mutate(() => confirmChargerPluggedIn(robotId))}>
+              {t('Charger plugged in')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {charging ? (
+        <div className="mt-4 rounded-sm bg-container p-3 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-medium">{t('Charging')}</p>
+            {robot.data?.chargeFullAt ? <StatusBadge tone="green" withDot>{t('Full: unplug the charger')}</StatusBadge> : null}
+          </div>
+          <p className="text-xs text-muted">
+            {t('Plugged in since {time}. Battery {battery}.', {
+              time: robot.data?.chargingSince ? new Date(robot.data.chargingSince).toLocaleString() : '-',
+              battery: robot.data?.batteryPercent != null ? `${Math.round(robot.data.batteryPercent)}%` : t('unknown'),
+            })}
+          </p>
+          <p className="mt-1 text-xs text-muted">{t('The robot takes no work until someone unplugs the charger and confirms it here.')}</p>
+          {mayCommand ? (
+            <Button size="sm" variant="primary" className="mt-2" disabled={act.isPending} onClick={unplug}>
+              {t('Charger unplugged')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {inMaintenance ? (
         <div className="mt-4 rounded-sm bg-container p-3 text-sm">

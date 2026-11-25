@@ -42,7 +42,9 @@ public sealed record RobotResponse(
     decimal? MaxPayloadKg = null,
     int? MaxContainers = null,
     double? LengthM = null,
-    double? WidthM = null)
+    double? WidthM = null,
+    DateTimeOffset? ChargingSince = null,
+    DateTimeOffset? ChargeFullAt = null)
 {
     public static RobotResponse From(Robot robot) => new(
         robot.Id,
@@ -82,5 +84,7 @@ public sealed record RobotResponse(
         robot.MaxPayloadKg,
         robot.MaxContainers,
         robot.LengthM,
-        robot.WidthM);
+        robot.WidthM,
+        robot.ChargingSince,
+        robot.ChargeFullAt);
 }
