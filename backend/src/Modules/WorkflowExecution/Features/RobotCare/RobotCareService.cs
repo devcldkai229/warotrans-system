@@ -436,6 +436,34 @@ public sealed class RobotCareService(
                 continue; // busy, lost or held: not an idle robot that can simply move
             }
 
+            // Both robots idle (the waiting one only goes to park): the one in the way parks too, at a free parking place
+            // the other is not going to, instead of stepping aside to free floor. In the V024 west room every patch of
+            // free floor lay on the other robot's way home, and the two kept making way for each other (sim 2026-11-25,
+            // after D1). A parked robot is passed in the narrow band.
+            if (!await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == waiterId && a.EndedAt == null, cancellationToken)
+                && await ChooseFreeEndpointAsync(blocker, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow) is { } parkId
+                && await navigation.GetEndpointPoseAsync(parkId, cancellationToken) is { IsEnabled: true } park)
+            {
+                try
+                {
+                    await fleet.StartReturnToParkAsync(blockerId, park.Id, park.X, park.Y, park.Yaw, cancellationToken);
+                    lock (YieldLock)
+                    {
+                        LastYield[blockerId] = now;
+                    }
+
+                    sent++;
+                    logger.LogInformation("Robot {Blocker} (idle) parks at {Park}: {Waiter} is going to park too",
+                        blocker.Code, park.Code, waiter.Code);
+                }
+                catch (AppException refused)
+                {
+                    logger.LogInformation("Robot {Blocker} cannot park: {Code}", blocker.Code, refused.Code);
+                }
+
+                continue;
+            }
+
             // Where the waiting robot is going: the endpoint of its open MOVE, if any.
             var goal = await db.JobSteps.AsNoTracking()
                 .Where(s => s.StepType == StepType.MOVE && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING)
