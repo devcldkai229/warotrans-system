@@ -12,7 +12,10 @@ jid = sys.argv[1]
 reason = sys.argv[2] if len(sys.argv) > 2 else "superseded: re-investigated after a detector fix"
 for c in a.ai("GET", "/cases")["items"]:
     if c.get("journal_id") == jid and c["status"] not in ("DISMISSED", "TICKETED", "CLOSED"):
-        a.ai("POST", f"/cases/{c['id']}/dismiss", {"reason": reason})
+        try:
+            a.ai("POST", f"/cases/{c['id']}/dismiss", {"reason": reason})
+        except Exception:  # noqa: BLE001 - INVESTIGATING (a run left by a restart): the worker recovers it
+            pass
 a.ai("POST", f"/cases/from-journal/{jid}?investigate=true")
 for _ in range(40):
     cs = sorted([c for c in a.ai("GET", "/cases")["items"] if c.get("journal_id") == jid], key=lambda c: c["created_at"])
