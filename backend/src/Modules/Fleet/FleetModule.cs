@@ -116,6 +116,7 @@ public static class FleetModule
         services.AddHostedService<TrafficGrantHostedService>();
         services.AddHostedService<SemanticPolicyBootstrapHostedService>();
         services.AddHostedService<TrafficCoordinatorLeaseHostedService>();
+        services.AddHostedService<Services.FleetPosesBroadcastHostedService>();
         // Fault Injection Lab (test benches only; Lab:Enabled).
         services.Configure<Features.Lab.LabOptions>(configuration.GetSection(Features.Lab.LabOptions.SectionName));
         services.AddSingleton<Features.Lab.LabInjectionService>();

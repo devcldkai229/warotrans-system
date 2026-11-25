@@ -15,8 +15,17 @@ public sealed class ProcessRobotCommandAckHandler(
     FleetDbContext db,
     IIntegrationEventPublisher events,
     ILogger<ProcessRobotCommandAckHandler> logger,
-    Services.InFlightCommandAborter? inFlightAborter = null)
+    Services.InFlightCommandAborter? inFlightAborter = null,
+    Traffic.ISegmentedTrafficCoordinator? traffic = null)
 {
+    /// <summary>
+    /// Grant refusals that waiting cannot cure: the robot's clock is off by more than the grant's lifetime, or it runs
+    /// another map bundle. Before 2026-11-24 the backend ignored them and sent the same EXTEND again for ever while the
+    /// robot stood still (audit B1); now the robot is quarantined with the reason and its Job pauses for an operator.
+    /// </summary>
+    public static readonly IReadOnlySet<string> PersistentAuthorityRefusals =
+        new HashSet<string>(["EXPIRED_ON_ARRIVAL", "FINGERPRINT_MISMATCH"], StringComparer.Ordinal);
+
     /// <summary>CANCEL refused because the robot runs no such command (warotrans_fleet gateway reason code).</summary>
     public const string UnknownTarget = "UNKNOWN_TARGET";
 
@@ -80,6 +89,14 @@ public sealed class ProcessRobotCommandAckHandler(
             {
                 robot?.MarkAvailable(utcNow);
                 assignment?.TryEnd(AssignmentEndReason.ROBOT_REJECTED, utcNow);
+            }
+            else if (command.Type == RobotCommandType.EXTEND_AUTHORITY && robot is not null && traffic is not null
+                     && message.ReasonCode is { } refusal && PersistentAuthorityRefusals.Contains(refusal))
+            {
+                await traffic.MarkBlockedAsync(robot.Id, Traffic.TrafficState.AuthorityRefusedPrefix + refusal, cancellationToken);
+                logger.LogWarning(
+                    "Robot {RobotCode} refused its traffic grant ({Reason}): quarantined until an operator fixes it and reconciles the robot",
+                    robot.Code, refusal);
             }
             else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } target && robot is not null
                      && inFlightAborter is not null && string.Equals(message.ReasonCode, UnknownTarget, StringComparison.Ordinal))

@@ -91,18 +91,18 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
     }
 
     /// <summary>
-    /// Robots waiting for space another robot holds (queued, or stopped at the end of a partial grant). A wait-for cycle
-    /// (DeadlockRisk) is not a healthy wait: it never ends by itself, so it keeps counting.
+    /// Robots waiting for another robot (queued, stopped at the end of what they hold, or refused for a wait-for cycle).
+    /// No coordination wait runs down a command's timeout: a cycle is resolved by the Job engine (one robot gives way)
+    /// and surfaced to operators, never by failing the Job of the robot that happened to ask second. The robot gateway
+    /// pauses its own deadline for the same holds (semantic_traffic_client.waiting_behind_traffic).
     /// </summary>
     public static HashSet<Guid> TrafficWaiters(WaroTrans.Fleet.Traffic.TrafficSnapshot snapshot)
     {
-        var deadlock = WaroTrans.Fleet.Traffic.TrafficWaitingReason.DeadlockRisk;
         var none = WaroTrans.Fleet.Traffic.TrafficWaitingReason.None;
-        var set = snapshot.Waits.Where(w => w.Reason != deadlock).Select(w => w.RobotId).ToHashSet();
+        var set = snapshot.Waits.Select(w => w.RobotId).ToHashSet();
         set.UnionWith(snapshot.Robots
-            .Where(r => r.WaitingReason != none && r.WaitingReason != deadlock)
+            .Where(r => r.WaitingReason != none)
             .Select(r => r.RobotId));
-        set.ExceptWith(snapshot.Robots.Where(r => r.WaitingReason == deadlock).Select(r => r.RobotId));
         return set;
     }
 

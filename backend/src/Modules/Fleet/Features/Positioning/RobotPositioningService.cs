@@ -41,6 +41,9 @@ public sealed class RobotPositioningService(
     /// <summary>A claim whose NAVIGATE never went out (the host stopped in between) is given up after this long.</summary>
     public static readonly TimeSpan UnsentClaimTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>A YIELDING intent whose NAVIGATE has ended is closed after this long if no Job closed it.</summary>
+    public static readonly TimeSpan YieldingSettleAfter = TimeSpan.FromSeconds(30);
+
     public async Task<IReadOnlySet<Guid>> LiveRobotIdsAsync(CancellationToken cancellationToken) =>
         (await db.RobotPositioningIntents.AsNoTracking()
             .Where(i => i.Status == PositioningIntentStatus.NAVIGATING || i.Status == PositioningIntentStatus.YIELDING)
@@ -193,8 +196,10 @@ public sealed class RobotPositioningService(
     /// <summary>Closes intents whose NAVIGATE ended while no Job wanted the robot. Returns how many were closed.</summary>
     public async Task<int> SettleAsync(CancellationToken cancellationToken)
     {
+        // YIELDING too: RobotCare can make a robot give up its way home with no Job calling again to close the intent;
+        // it then stayed YIELDING for ever and counted as "positioning" (audit 2026-11-24, A13).
         var live = await db.RobotPositioningIntents
-            .Where(i => i.Status == PositioningIntentStatus.NAVIGATING)
+            .Where(i => i.Status == PositioningIntentStatus.NAVIGATING || i.Status == PositioningIntentStatus.YIELDING)
             .ToListAsync(cancellationToken);
         if (live.Count == 0)
         {
@@ -222,6 +227,18 @@ public sealed class RobotPositioningService(
 
             if (!commands.TryGetValue(id, out var command) || command.IsInFlight)
             {
+                continue;
+            }
+
+            if (intent.Status == PositioningIntentStatus.YIELDING)
+            {
+                // The Job that asked closes it itself (YieldPositioningAsync); left alone this long, nobody will.
+                if (now - intent.UpdatedAt >= YieldingSettleAfter)
+                {
+                    intent.End(PositioningIntentStatus.YIELDED, $"yield_settled:{command.Outcome ?? command.Status.ToString()}", now);
+                    closed++;
+                }
+
                 continue;
             }
 

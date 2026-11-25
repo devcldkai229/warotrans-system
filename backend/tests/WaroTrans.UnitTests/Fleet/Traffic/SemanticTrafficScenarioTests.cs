@@ -535,7 +535,7 @@ public class SemanticTrafficScenarioTests
     }
 
     [Fact]
-    public void Waiting_behind_a_robot_counts_as_a_traffic_wait_and_a_wait_for_cycle_does_not()
+    public void Waiting_behind_a_robot_counts_as_a_traffic_wait()
     {
         var s = NewState();
         Assert.True(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, Line(2.5, 0, 6.5, 0))).Granted);

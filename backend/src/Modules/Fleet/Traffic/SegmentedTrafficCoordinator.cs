@@ -254,6 +254,12 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
                 await AdvanceRouteAsync(robotId, ct).ConfigureAwait(false);
             }
         }
+        else
+        {
+            // Semantic: try every waiting robot again on this timer. A wait behind another robot's body ends with no
+            // release at all when that robot drives away; without this the waiter waited until its command timed out.
+            await EnqueueAsync(s => s.RetrySemanticWaiters(), ct).ConfigureAwait(false);
+        }
 
         var keys = await EnqueueAsync(s => s.ActiveAuthorityKeys(), ct).ConfigureAwait(false);
         var n = 0;

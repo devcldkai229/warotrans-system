@@ -146,6 +146,16 @@ public sealed class TrafficOptions
     public bool SemanticPrefixGrant { get; set; }
 
     /// <summary>
+    /// "Cells" (default): a plan reserves the cells it sweeps. "ZoneChain": on maps whose bundle has a zone partition
+    /// (<c>traffic_zones.json</c>) the plan also holds every zone it runs through (one robot per corridor, bay and yard),
+    /// the whole plan is granted at once or not at all (no prefix: a robot waits where it stands, which is a stop), a
+    /// robot standing still holds the zone it stands in, and a zone is released once the robot has left it.
+    /// </summary>
+    public string SemanticResourceModel { get; set; } = "Cells";
+
+    public bool ZoneChainRequested => string.Equals(SemanticResourceModel, "ZoneChain", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Grants wait until this host holds the coordinator lease (one coordinator per map) and has announced its epoch
     /// to the robots. Off for in-process tests; on in every deployed host.
     /// </summary>
@@ -159,6 +169,7 @@ public sealed class TrafficOptions
         CellSizeMeters = SemanticCellSizeMeters,
         PathToleranceMeters = SemanticPathToleranceMeters,
         ZoneMarginMeters = SemanticZoneMarginMeters,
+        ZoneChain = ZoneChainRequested,
         FootprintHalfLength = Math.Max(0.01, Footprint.LengthMeters / 2.0 + Footprint.PaddingMeters),
         FootprintHalfWidth = Math.Max(0.01, Footprint.WidthMeters / 2.0 + Footprint.PaddingMeters)
     };

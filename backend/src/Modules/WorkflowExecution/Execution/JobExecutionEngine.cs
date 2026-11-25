@@ -66,7 +66,8 @@ public sealed partial class JobExecutionEngine(
     TimeProvider? clock = null,
     StockHandoverDispatcher? stockHandovers = null,
     WaroTrans.WorkflowExecution.Services.FreeEndpointSelector? freeEndpoints = null,
-    IContainerHolds? containerHolds = null)
+    IContainerHolds? containerHolds = null,
+    WaroTrans.BuildingBlocks.Mqtt.LiveCostmapStore? liveCostmaps = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -2155,7 +2156,9 @@ public sealed partial class JobExecutionEngine(
                 spotRadius = relockCount switch { 0 => YieldSpotMaxMeters, 1 => 2.0, _ => 3.0 };
             }
 
-            var allowSpot = true;
+            // Zone chain: never to a free-floor spot. A spot knows no zones: sim V022 2026-11-24 backed a robot off onto
+            // lane LTR inside the INBOUND/OUTBOUND column, where it then held the column and blocked the other robot.
+            var allowSpot = trafficOptions?.Value.ZoneChainRequested != true;
             var backedOff = await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, loser.Target, winnerId, winnerMove.StepId,
                 winnerMove.Target, cancellationToken, allowSpot, spotRadius);
             if (!backedOff)
@@ -2330,8 +2333,11 @@ public sealed partial class JobExecutionEngine(
         // Best: step aside right here, out of the other robot's way (user, 2026-11-23: a robot at the end of the shelf B
         // lane drove all the way to a queue point to let the other one pass). Endpoints only when no spot close by is free.
         var spot = allowSpot ? await YieldSpotAsync(robot, winner, winnerGoal, others, cancellationToken, spotRadius) : null;
+        // Zone chain: only places a robot may park or queue at (by type), never a borrowed work endpoint.
+        var zoneChainRetreat = trafficOptions?.Value.ZoneChainRequested == true;
         var target = spot is null ? Pick(standAside.Where(e => e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.QUEUE))
-                                    ?? Pick(standAside) ?? Pick(lent) : null;
+                                    ?? Pick(standAside.Where(e => !zoneChainRetreat || e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK))
+                                    ?? (zoneChainRetreat ? null : Pick(lent)) : null;
         EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool)
         {
             var candidates = pool
@@ -2788,7 +2794,45 @@ public sealed partial class JobExecutionEngine(
                         return false;
                     }
 
-                    var area = queueZone is not null || recoveryTo is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
+                    // Zone chain: a goal inside a bay is entered only while the bay is free; otherwise the robot waits
+                    // at the bay's queue point (or where it stands when that is a stop). Replaces the distance-based
+                    // goal queue for bays: the zones say who is in the way, not radii.
+                    var zoneApproach = queueZone is null && recoveryTo is null
+                        ? await ZoneApproachAsync(job, step, robot, pose, policy, now, cancellationToken)
+                        : null;
+                    if (zoneApproach is { DriveTo: null, QueueZone: { } waitZone })
+                    {
+                        var waitingAlready = step.OutputValues.TryGetValue(AreaQueueZoneKey, out var wz) && wz.GetString() == waitZone;
+                        if (!waitingAlready)
+                        {
+                            logger.LogInformation("Job {JobNo} {StepKey}: {Zone} is busy ({Reason}); the robot waits where it stands",
+                                job.JobNo, stepKey, waitZone, zoneApproach.Reason);
+                        }
+
+                        step.OutputValues = AreaWaitOutputs(step.OutputValues, zoneApproach.Since!.Value, waitZone, zoneApproach.Reason, now);
+                        if (zoneApproach.BlockedBy is { } blockedBy)
+                        {
+                            step.OutputValues[GoalBlockerKey] = JsonSerializer.SerializeToElement(blockedBy);
+                        }
+
+                        SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+                        await SaveAndPublishAsync(cancellationToken);
+                        return false;
+                    }
+
+                    if (zoneApproach is { DriveTo: { } driveTo })
+                    {
+                        goal = driveTo;
+                        queueZone = zoneApproach.QueueZone;
+                        queueSince = zoneApproach.Since;
+                        if (queueZone is not null)
+                        {
+                            logger.LogInformation("Job {JobNo} {StepKey}: {Zone} is busy ({Reason}); the robot goes to {Queue} to wait",
+                                job.JobNo, stepKey, queueZone, zoneApproach.Reason, driveTo.Code);
+                        }
+                    }
+
+                    var area = queueZone is not null || recoveryTo is not null || zoneApproach is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
                         z.QueueEndpointCode is not null && SemanticReservation.PointInRing(pose.X, pose.Y, z.Ring));
                     var busy = area is null ? null : await AreaBusyByAsync(job, step, robotId, area, policy, cancellationToken);
                     if (area is not null && busy is not null)
@@ -2818,7 +2862,7 @@ public sealed partial class JobExecutionEngine(
                             "Job {JobNo} {StepKey}: area {Zone} is taken ({Busy}); robot goes to queue point {Queue} first",
                             job.JobNo, stepKey, area.Code, busy, queue!.Code);
                     }
-                    else if (queueZone is null && recoveryTo is null
+                    else if (queueZone is null && recoveryTo is null && zoneApproach is null
                              && await GoalBusyByAsync(job, step, robotId, pose, cancellationToken) is { } goalBusy)
                     {
                         // Goal queue: another robot with work is at (or on its way to) this endpoint. Wait clear of it.
@@ -3405,6 +3449,10 @@ public sealed partial class JobExecutionEngine(
 
             case nameof(CheckConditionCode.INVENTORY_AVAILABLE):
                 (passed, reason) = await EvaluateInventoryAvailableAsync(job, task, inputs, cancellationToken);
+                break;
+
+            case nameof(CheckConditionCode.ROUTE_CLEAR):
+                (passed, reason) = await EvaluateRouteClearAsync(job, inputs, outputs, cancellationToken);
                 break;
 
             // Publish refuses any other operation (CheckOperations.Executable), so this only guards old definitions.
