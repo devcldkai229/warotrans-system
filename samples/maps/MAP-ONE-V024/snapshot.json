@@ -179,6 +179,82 @@
             "policy_schema_version": 1
         },
         {
+            "id": "f3f5166e-d1fc-414e-a791-6567f81ebf45",
+            "code": "ZONE-NO-STOP-LANE-A2-EXIT",
+            "name": "No stop: end of lane SHELF-A-2",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.65,
+                            -0.30
+                        ],
+                        [
+                            1.05,
+                            -0.30
+                        ],
+                        [
+                            1.05,
+                            0.05
+                        ],
+                        [
+                            0.65,
+                            0.05
+                        ],
+                        [
+                            0.65,
+                            -0.30
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "6a50f506-a5f9-43ba-a1fe-5de98fbd1bb7",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "6f58c1f2-c9aa-4f0e-a036-e5566f376bda",
+            "code": "ZONE-NO-STOP-YARD",
+            "name": "No stop: yard between the BOUND lanes",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.45,
+                            -3.95
+                        ],
+                        [
+                            1.80,
+                            -3.95
+                        ],
+                        [
+                            1.80,
+                            -3.25
+                        ],
+                        [
+                            0.45,
+                            -3.25
+                        ],
+                        [
+                            0.45,
+                            -3.95
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "6a50f506-a5f9-43ba-a1fe-5de98fbd1bb7",
+            "policy_schema_version": 1
+        },
+        {
             "id": "496fc8c2-58d8-48cf-ab0d-fec8aae9e989",
             "code": "ZONE-SINGLE-SHELF-B",
             "name": "SINGLE-SHELF-B",
@@ -477,8 +553,8 @@
             "storage_location_code": null
         },
         {
-            "x": 2.531,
-            "y": -2.462,
+            "x": 2.43,
+            "y": -2.42,
             "id": "f0acfa21-f730-4f63-b077-5ab72d67edd4",
             "yaw": 0,
             "code": "EP-SHELF-B",
@@ -507,7 +583,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-25T06:07:09.180148+00:00",
+    "exportedAt": "2026-11-25T09:23:50.299474+00:00",
     "mapVersion": {
         "id": "6a50f506-a5f9-43ba-a1fe-5de98fbd1bb7",
         "code": "MAP-ONE-V024",
