@@ -539,12 +539,25 @@ public sealed class RobotCareService(
                 return !body.Overlaps(waiterWay.Cells);
             }
 
+            // Every place a live Job still goes to, not only its current step (lab 2026-11-25 V024: the idle RBT-002 at
+            // PARKING-B made way for RBT-001 going to INBOUND by driving to EP-SHELF-A-1, the shelf RBT-001 went to next).
+            var laterTargets = (await db.JobSteps.AsNoTracking()
+                    .Where(s => s.StepType == StepType.MOVE && s.TargetEndpointId != null
+                                && s.Status != JobStepStatus.COMPLETED && s.Status != JobStepStatus.SKIPPED
+                                && s.Status != JobStepStatus.FAILED && s.Status != JobStepStatus.CANCELLED
+                                && s.JobTask.Job.Status != JobStatus.COMPLETED && s.JobTask.Job.Status != JobStatus.FAILED
+                                && s.JobTask.Job.Status != JobStatus.CANCELLED)
+                    .Select(s => s.TargetEndpointId!.Value)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet();
+            // A robot stands aside only at a parking place or wait point; free floor next; a bay or any other endpoint
+            // only as the very last resort, and never one a Job still goes to.
             var target = Pick(standAside.Where(OffItsPath))
-                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
-                                                      && !headedTo.Contains(e.Id) && OffItsPath(e)))
-                         ?? Pick(standAside)
-                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER
-                                                      && !headedTo.Contains(e.Id) && OffItsWay(e)));
+                         ?? Pick(standAside.Where(e => !laterTargets.Contains(e.Id) && OffItsWay(e)));
+            var lastResort = Pick(standAside.Where(e => !laterTargets.Contains(e.Id)))
+                             ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
+                                                          && !headedTo.Contains(e.Id) && !laterTargets.Contains(e.Id)
+                                                          && (OffItsPath(e) || OffItsWay(e))));
             // Any free place beats standing in the way of a robot with work (the cooldown stops ping-pong).
             if (target is null || Away(target) <= 0.30)
             {
@@ -574,6 +587,14 @@ public sealed class RobotCareService(
                     continue;
                 }
 
+                if (lastResort is not null && Away(lastResort) > 0.30)
+                {
+                    target = lastResort;
+                }
+            }
+
+            if (target is null || Away(target) <= 0.30)
+            {
                 var why = string.Join("; ", endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER).Select(e =>
                     $"{e.Code}:{(RouteClear(e) ? "" : "route ")}{(OffItsPath(e) ? "" : "onpath ")}{(targets.Contains(e.Id) ? "target " : "")}"
                     + $"{(headedTo.Contains(e.Id) ? "headed " : "")}{(Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5 ? "" : "here ")}"
