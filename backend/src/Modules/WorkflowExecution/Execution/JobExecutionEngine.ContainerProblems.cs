@@ -17,6 +17,43 @@ namespace WaroTrans.WorkflowExecution.Execution;
 public sealed partial class JobExecutionEngine
 {
     private const string InspectionFailuresKey = "inspectionFailures";
+    private const string InspectionPassedKey = "inspectionPassed";
+
+    /// <summary>Containers that passed this inspection one by one (a Passed naming its container).</summary>
+    private static HashSet<Guid> InspectionPassed(JobStep step) =>
+        step.OutputValues.TryGetValue(InspectionPassedKey, out var passed) && passed.ValueKind == JsonValueKind.Array
+            ? passed.EnumerateArray()
+                .Select(e => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("containerId", out var id) ? id.GetGuid() : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .ToHashSet()
+            : [];
+
+    /// <summary>
+    /// Records that one container on board passed. Returns how many containers on board still have no result: while
+    /// any is left the inspection keeps waiting, so a Passed for one box never passes the others (a Passed without a
+    /// container, from an older client, still passes every box at once).
+    /// </summary>
+    private static int RecordInspectionPass(Job job, JobStep step, Guid containerId, Guid? actorId, DateTimeOffset now)
+    {
+        var onBoard = job.JobContainers.Where(jc => jc.Status == JobContainerStatus.ONBOARD).Select(jc => jc.ContainerId).ToList();
+        if (!onBoard.Contains(containerId))
+            throw new DomainValidationException("That container is not on the robot.", "handover_container_mismatch");
+
+        var passed = InspectionPassed(step);
+        if (passed.Add(containerId))
+        {
+            var entries = step.OutputValues.TryGetValue(InspectionPassedKey, out var earlier) && earlier.ValueKind == JsonValueKind.Array
+                ? earlier.EnumerateArray().Select(e => e.Clone()).ToList()
+                : [];
+            entries.Add(JsonSerializer.SerializeToElement(new { containerId, by = actorId, at = now }));
+            step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+            {
+                [InspectionPassedKey] = JsonSerializer.SerializeToElement(entries)
+            };
+        }
+
+        return onBoard.Count(id => !passed.Contains(id));
+    }
 
     /// <summary>The code of a container taken off its Job here; none (an older client) is OTHER.</summary>
     public static string ContainerProblemFor(string? problemCode, bool atInspection)
@@ -80,20 +117,23 @@ public sealed partial class JobExecutionEngine
         return step;
     }
 
-    /// <summary>An inspection with no container left on board has nothing more to look at: it is done, FAILED.</summary>
+    /// <summary>
+    /// An inspection where every container on board has a result is done: PASSED when some passed and go on, FAILED when
+    /// none is left on board.
+    /// </summary>
     private void CloseInspectionWithNothingLeft(
         Job job, JobTask task, JobStep step, WorkflowStep workflowStep, Guid? actorId, string reason, DateTimeOffset now)
     {
+        var passed = InspectionPassed(step);
         if (workflowStep.Config.OperationCode != nameof(HumanActionCode.INSPECTION_CONFIRM)
             || step.Status != JobStepStatus.WAITING
-            || job.JobContainers.Any(jc => jc.Status == JobContainerStatus.ONBOARD))
+            || job.JobContainers.Any(jc => jc.Status == JobContainerStatus.ONBOARD && !passed.Contains(jc.ContainerId)))
             return;
 
-        var failures = step.OutputValues.GetValueOrDefault(InspectionFailuresKey);
+        var anyPassed = job.JobContainers.Any(jc => jc.Status == JobContainerStatus.ONBOARD);
         CompleteHumanStep(job, task, step, workflowStep,
-            new HumanConfirmationSource(ConfirmationSource.STAFF_APP, UserId: actorId, Note: reason), now, inspectionResult: "FAILED");
-        if (failures.ValueKind == JsonValueKind.Array)
-            step.OutputValues[InspectionFailuresKey] = failures;
+            new HumanConfirmationSource(ConfirmationSource.STAFF_APP, UserId: actorId, Note: reason), now,
+            inspectionResult: anyPassed ? "PASSED" : "FAILED");
     }
 
     /// <summary>

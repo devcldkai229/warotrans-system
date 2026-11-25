@@ -25,7 +25,7 @@ test('workflow codes map to the web kinds', () => {
   assert.equal(data.workflowKindOf('POINT_TO_POINT_TRANSPORT'), 'OTHER');
 });
 
-test('inbound offers containers on a confirmed receiving voucher that are not shelved; outbound and relocation take free stored shelf containers without needing an outbound voucher', () => {
+test('inbound offers containers on a confirmed receiving voucher that are not shelved; outbound takes shelved containers of a confirmed shipping voucher; relocation any shelved container', () => {
   const held = new Set(['busy']);
   const fresh = container('a', { voucher: voucher('INBOUND') });
   const shelved = container('b', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: voucher('INBOUND') });
@@ -36,8 +36,9 @@ test('inbound offers containers on a confirmed receiving voucher that are not sh
   assert.equal(data.ineligibleReason(draft, 'INBOUND', held), 'Not on a confirmed receiving voucher');
   assert.equal(data.ineligibleReason(container('busy', { voucher: voucher('INBOUND') }), 'INBOUND', held), 'Already in a transport request');
   const issued = container('d', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: voucher('OUTBOUND') });
-  assert.equal(data.ineligibleReason(shelvedNoVoucher, 'OUTBOUND', held), null);
-  assert.equal(data.ineligibleReason(shelved, 'OUTBOUND', held), null);
+  assert.equal(data.ineligibleReason(shelvedNoVoucher, 'OUTBOUND', held), 'Not on a confirmed shipping voucher');
+  assert.equal(data.ineligibleReason(shelved, 'OUTBOUND', held), 'Not on a confirmed shipping voucher');
+  assert.equal(data.ineligibleReason(container('e', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: voucher('OUTBOUND', 'DRAFT') }), 'OUTBOUND', held), 'Not on a confirmed shipping voucher');
   assert.equal(data.ineligibleReason(issued, 'OUTBOUND', held), null);
   assert.equal(data.ineligibleReason(fresh, 'OUTBOUND', held), 'Not on a shelf');
   assert.equal(data.ineligibleReason(container('busy', { status: 'STORED', currentStorageLocationId: 'L-A1' }), 'OUTBOUND', held), 'Already in a transport request');
@@ -46,15 +47,15 @@ test('inbound offers containers on a confirmed receiving voucher that are not sh
   assert.equal(data.ineligibleReason(fresh, 'INTERNAL', held), 'Not on a shelf');
 });
 
-test('containers group by voucher (newest first) for inbound and by shelf name for outbound and relocation', () => {
+test('containers group by voucher (newest first) for inbound and outbound, and by shelf name for relocation', () => {
   const older = { ...voucher('INBOUND', 'CONFIRMED', 'old'), confirmedAt: '2026-11-17T00:00:00Z' };
   const groups = data.groupContainers([container('a', { voucher: older }), container('b', { voucher: voucher('INBOUND') }), container('c')], 'INBOUND', () => '');
   assert.deepEqual(plain(groups.map(group => group.key)), ['INBOUND-1', 'old', 'other']);
-  const outboundShelves = data.groupContainers([
-    container('x', { status: 'STORED', currentStorageLocationId: 'L-C1' }),
-    container('y', { status: 'STORED', currentStorageLocationId: 'L-A1' }),
+  const shipping = data.groupContainers([
+    container('x', { status: 'STORED', currentStorageLocationId: 'L-C1', voucher: voucher('OUTBOUND') }),
+    container('y', { status: 'STORED', currentStorageLocationId: 'L-A1', voucher: voucher('OUTBOUND') }),
   ], 'OUTBOUND', id => places.find(place => place.storageLocationId === id).name);
-  assert.deepEqual(plain(outboundShelves.map(group => group.title)), ['Shelf A 1', 'Shelf C 1']);
+  assert.deepEqual(plain(shipping.map(group => [group.title, group.subtitle, group.voucher, group.items.length])), [['PX-OUTBOUND-1', 'Shipping voucher', true, 2]]);
   const shelves = data.groupContainers([container('x', { currentStorageLocationId: 'L-C1' }), container('y', { currentStorageLocationId: 'L-A1' })], 'INTERNAL',
     id => places.find(place => place.storageLocationId === id).name);
   assert.deepEqual(plain(shelves.map(group => group.title)), ['Shelf A 1', 'Shelf C 1']);

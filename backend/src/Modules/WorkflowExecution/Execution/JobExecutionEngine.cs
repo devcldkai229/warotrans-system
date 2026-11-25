@@ -639,6 +639,14 @@ public sealed partial class JobExecutionEngine(
             // A failed inspection takes that container off the Job and leaves it at the inspection point.
             return await FailAtInspectionAsync(job, task, step, workflowStep, containerId, source, now, transaction, cancellationToken);
         }
+
+        if (inspectionResult == "PASSED" && containerId is { } passedId
+            && RecordInspectionPass(job, step, passedId, source.UserId, now) > 0)
+        {
+            // Other containers on board still wait for their result: the step stays WAITING.
+            await SaveAndPublishAsync(cancellationToken, transaction);
+            return step;
+        }
         var handoverType = operation switch
         {
             nameof(HumanActionCode.PICKUP_CONFIRM) => HandoverType.PICKUP,
@@ -740,6 +748,9 @@ public sealed partial class JobExecutionEngine(
         Job job, JobTask task, JobStep step, WorkflowStep workflowStep, HumanConfirmationSource source,
         DateTimeOffset now, Guid? issueId = null, string? inspectionResult = null)
     {
+        var kept = step.OutputValues
+            .Where(kv => kv.Key is InspectionFailuresKey or InspectionPassedKey)
+            .ToList();
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
@@ -761,6 +772,8 @@ public sealed partial class JobExecutionEngine(
         // INSPECTION_CONFIRM declares the output inspectionResult (PASSED / FAILED) in the step registry.
         if (inspectionResult is not null)
             step.OutputValues["inspectionResult"] = JsonSerializer.SerializeToElement(inspectionResult);
+        foreach (var (key, value) in kept)
+            step.OutputValues[key] = value;
         SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.COMPLETED, now);
         CompleteTaskIfDone(task);
     }

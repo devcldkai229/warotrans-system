@@ -33,8 +33,8 @@ const onShelf = (container: ContainerListItem) => container.status === 'STORED' 
 
 /**
  * Whether the workflow can move this container, matching the backend's CreateTransportRequest rules:
- * INBOUND takes a container not on a shelf yet that is on a confirmed receiving voucher; OUTBOUND takes any
- * free container currently stored on a shelf (outbound vouchers are created later at the gate); INTERNAL takes a
+ * INBOUND takes a container not on a shelf yet that is on a confirmed receiving voucher; OUTBOUND takes a container
+ * still on its shelf that is on a confirmed shipping voucher (the voucher says which boxes leave); INTERNAL takes a
  * container on a shelf. Null when it can, else the reason.
  */
 export function ineligibleReason(container: ContainerListItem, kind: WorkflowKind, held: Set<string>): string | null {
@@ -46,7 +46,9 @@ export function ineligibleReason(container: ContainerListItem, kind: WorkflowKin
       if (!(voucher?.type === 'INBOUND' && voucher.status === 'CONFIRMED')) return 'Not on a confirmed receiving voucher';
       return null;
     case 'OUTBOUND':
-      return onShelf(container) ? null : 'Not on a shelf';
+      if (!onShelf(container)) return 'Not on a shelf';
+      if (!(voucher?.type === 'OUTBOUND' && voucher.status === 'CONFIRMED')) return 'Not on a confirmed shipping voucher';
+      return null;
     case 'INTERNAL':
       return onShelf(container) ? null : 'Not on a shelf';
     default:
@@ -64,11 +66,11 @@ export interface ContainerGroup {
 }
 
 /**
- * INBOUND: one group per confirmed voucher, newest first, then the rest.
- * OUTBOUND / INTERNAL: one group per shelf (by its name). Other workflows: one group.
+ * INBOUND / OUTBOUND: one group per confirmed voucher of that kind, newest first, then the rest.
+ * INTERNAL: one group per shelf (by its name). Other workflows: one group.
  */
 export function groupContainers(containers: ContainerListItem[], kind: WorkflowKind, locationName: (id: string | null) => string): ContainerGroup[] {
-  if (kind === 'INBOUND') {
+  if (kind === 'INBOUND' || kind === 'OUTBOUND') {
     const byVoucher = new Map<string, { at: string; group: ContainerGroup }>();
     const rest: ContainerListItem[] = [];
     for (const item of containers) {
@@ -76,7 +78,7 @@ export function groupContainers(containers: ContainerListItem[], kind: WorkflowK
       if (voucher && voucher.type === kind && voucher.status === 'CONFIRMED') {
         const entry = byVoucher.get(voucher.id) ?? {
           at: voucher.confirmedAt ?? voucher.createdAt,
-          group: { key: voucher.id, title: voucher.code, subtitle: 'Receiving voucher', voucher: true, items: [] },
+          group: { key: voucher.id, title: voucher.code, subtitle: kind === 'INBOUND' ? 'Receiving voucher' : 'Shipping voucher', voucher: true, items: [] },
         };
         entry.group.items.push(item);
         byVoucher.set(voucher.id, entry);
@@ -87,7 +89,7 @@ export function groupContainers(containers: ContainerListItem[], kind: WorkflowK
     const groups = [...byVoucher.values()].sort((a, b) => b.at.localeCompare(a.at)).map(entry => entry.group);
     return rest.length ? [...groups, { key: 'other', title: 'Other containers', subtitle: null, voucher: false, items: rest }] : groups;
   }
-  if (kind === 'OUTBOUND' || kind === 'INTERNAL') {
+  if (kind === 'INTERNAL') {
     const byShelf = new Map<string, ContainerGroup>();
     for (const item of containers) {
       const key = item.currentStorageLocationId ?? 'none';
