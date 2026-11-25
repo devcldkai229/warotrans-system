@@ -28,5 +28,8 @@ public sealed record RobotCommandLifecycleChanged(
         public const string Result = "RESULT";
         public const string AckTimeout = "ACK_TIMEOUT";
         public const string OfflineAbort = "OFFLINE_ABORT";
+
+        /// <summary>A result that arrived after the command had ended, contradicting it (the late one is ignored).</summary>
+        public const string StaleResult = "STALE_RESULT";
     }
 }

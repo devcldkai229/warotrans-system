@@ -45,6 +45,7 @@ public sealed class CreateWorkflowVersionHandler(
             Id = Guid.NewGuid(),
             VersionNo = nextVersion,
             Status = WorkflowStatus.DRAFT,
+            StaffVisible = source.StaffVisible,
             CreatedBy = currentUser.AccountId ?? Guid.Empty,
             CreatedAt = DateTimeOffset.UtcNow
         };

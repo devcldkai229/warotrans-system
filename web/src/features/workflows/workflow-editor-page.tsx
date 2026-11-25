@@ -9,6 +9,7 @@ import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { InfoTip } from '@/shared/ui/InfoTip'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { StaffVisibilityToggle } from './StaffVisibilityToggle'
 import type { Tone } from '@/shared/ui/statusTones'
 import type {
   OperationMetadata,
@@ -607,6 +608,9 @@ export function WorkflowEditor({
               </StatusBadge>
               {readOnly ? <ReadOnlyInfo published={status === 'PUBLISHED'} canWrite={canWrite} /> : null}
             </span>
+            {!isNew && id && detailQuery.data ? (
+              <StaffVisibilityToggle workflowId={id} staffVisible={detailQuery.data.staffVisible ?? true} canWrite={canWrite} />
+            ) : null}
             {!isNew && detailQuery.data?.createdAt ? (
               <span>{t('Created')}{' '}{formatDateTimeWithYear(detailQuery.data.createdAt)}</span>
             ) : null}
@@ -648,6 +652,9 @@ export function WorkflowEditor({
             <span className="muted">v{detailQuery.data.versionNo}</span>
           ) : null}
           {readOnly ? <ReadOnlyInfo published={status === 'PUBLISHED'} canWrite={canWrite} /> : null}
+          {!isNew && id && detailQuery.data ? (
+            <StaffVisibilityToggle workflowId={id} staffVisible={detailQuery.data.staffVisible ?? true} canWrite={canWrite} />
+          ) : null}
         </p>
       </div>
     </header>

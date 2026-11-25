@@ -13,7 +13,6 @@ import {
   getActiveMapVersion,
   importMapVersion,
   listMapVersionsForWarehouse,
-  publishMapVersion,
   resolveMapAssetUrl,
   updateMapVersion,
   type MapVersionDto,
@@ -34,6 +33,7 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { t } from '@/shared/i18n'
 import { listMappingSessions } from '@/shared/api/mapping'
 import { StartMappingDialog } from './mapping/StartMappingDialog'
+import { PublishMapDialog } from './PublishMapDialog'
 import { openMappingSessionsKey } from './mapping/mappingGrid'
 const WAREHOUSE_KEY = 'warotrans.facilityWarehouseId'
 
@@ -229,16 +229,8 @@ export function FacilityPage() {
     ])
   }
 
-  const publishMutation = useMutation({
-    mutationFn: (id: string) => publishMapVersion(id),
-    onSuccess: async () => {
-      setActionError(null)
-      await invalidateMaps()
-    },
-    onError: (err) => {
-      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Publish failed'))
-    },
-  })
+  // Publishing goes through the publish check (workflows, Jobs, requests, robots) in PublishMapDialog.
+  const [publishing, setPublishing] = useState<{ id: string; code: string } | null>(null)
 
   // Published / archived maps are read-only: edit a copy, then publish the copy.
   const cloneMutation = useMutation({
@@ -487,8 +479,7 @@ export function FacilityPage() {
                 <>
                   <Button
                     variant="surface"
-                    disabled={publishMutation.isPending}
-                    onClick={() => publishMutation.mutate(draft.id)}
+                    onClick={() => setPublishing({ id: draft.id, code: draft.code })}
                   >{t('Publish map')}</Button>
                   <Button variant="outline" onClick={() => openEdit(draft)}>{t('Metadata')}</Button>
                   {hasMapImage(draft) ? (
@@ -575,6 +566,17 @@ export function FacilityPage() {
         </div>
 
         {mappingOpen && warehouseId ? <StartMappingDialog warehouseId={warehouseId} onClose={() => setMappingOpen(false)} /> : null}
+        {publishing ? (
+          <PublishMapDialog
+            mapId={publishing.id}
+            mapCode={publishing.code}
+            onClose={() => setPublishing(null)}
+            onPublished={async () => {
+              setActionError(null)
+              await invalidateMaps()
+            }}
+          />
+        ) : null}
 
         <header className="mt-14 mb-4 flex items-center justify-between">
           <h2 className="text-xl font-book">{t('Map versions')}</h2>
@@ -826,9 +828,9 @@ export function FacilityPage() {
                           <button
                             type="button"
                             className="text-sm text-ink hover:underline"
-                            disabled={publishMutation.isPending || !hasMapImage(version)}
+                            disabled={!hasMapImage(version)}
                             title={!hasMapImage(version) ? t('Import yaml + pgm first') : undefined}
-                            onClick={() => publishMutation.mutate(version.id)}
+                            onClick={() => setPublishing({ id: version.id, code: version.code })}
                           >{t('Publish')}</button>
                         </>
                       ) : null}

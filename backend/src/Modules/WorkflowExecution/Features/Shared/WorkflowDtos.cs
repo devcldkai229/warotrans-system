@@ -13,7 +13,8 @@ public sealed record WorkflowListItemDto(
     string? Description,
     WorkflowStatus Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? PublishedAt);
+    DateTimeOffset? PublishedAt,
+    bool StaffVisible = true);
 
 public sealed record WorkflowDetailDto(
     Guid Id,
@@ -27,7 +28,8 @@ public sealed record WorkflowDetailDto(
     DateTimeOffset? PublishedAt,
     Guid? PublishedBy,
     IReadOnlyList<WorkflowVariableDefinition> Variables,
-    IReadOnlyList<WorkflowTaskDto> Tasks);
+    IReadOnlyList<WorkflowTaskDto> Tasks,
+    bool StaffVisible = true);
 
 public sealed record WorkflowTaskDto(
     Guid Id,
@@ -56,6 +58,10 @@ public class UpsertWorkflowRequest
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+
+    /// <summary>Only when a workflow code is created (a seed marks robot care workflows hidden); null keeps it visible.</summary>
+    public bool? StaffVisible { get; set; }
+
     public List<WorkflowVariableDefinition> Variables { get; set; } = [];
     public List<UpsertWorkflowTaskRequest> Tasks { get; set; } = [];
 }
@@ -234,7 +240,8 @@ public static class WorkflowMapping
                             s.RetryBackoffSeconds,
                             s.OnFailure))
                         .ToList()))
-                .ToList());
+                .ToList(),
+            workflow.StaffVisible);
 
     public static WorkflowListItemDto ToListItem(Workflow workflow) =>
         new(
@@ -245,7 +252,8 @@ public static class WorkflowMapping
             workflow.Description,
             workflow.Status,
             workflow.CreatedAt,
-            workflow.PublishedAt);
+            workflow.PublishedAt,
+            workflow.StaffVisible);
 
     public static void ThrowIfInvalid(WorkflowDefinitionValidationResult result)
     {

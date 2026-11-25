@@ -397,7 +397,7 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   : hold.holdEndpointId
                     ? t('at the point it was set down')
                     : t('on no shelf')}
-                {hold.contentsQuantity !== null ? ` · ${hold.contentsQuantity} ${hold.contentsUnit ?? ''}` : ''}
+                {hold.contentsQuantity !== null ? ` · ${t('Qty {quantity}', { quantity: hold.contentsQuantity })}` : ''}
                 {holdsContainer ? ` · ${t('held by this issue')}` : ''}
               </span>
             </dd>
@@ -425,6 +425,14 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <>
             <dt className="text-muted">{t('Resolution')}</dt>
             <dd>{current.resolution}</dd>
+          </>
+        ) : null}
+        {current.jiraKey ? (
+          <>
+            <dt className="text-muted">{t('Jira ticket')}</dt>
+            <dd>
+              <a className="font-mono underline" href={current.jiraUrl ?? '#'} target="_blank" rel="noreferrer">{current.jiraKey}</a>
+            </dd>
           </>
         ) : null}
       </dl>
@@ -478,8 +486,8 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     className={controlClass('sm')}
                     placeholder={
                       partly && hold!.contentsQuantity != null
-                        ? t('Goods still good ({unit}), less than {count}', { unit: hold!.contentsUnit ?? '', count: hold!.contentsQuantity })
-                        : t('Counted quantity ({unit})', { unit: hold!.contentsUnit ?? '' })
+                        ? t('Goods still good, less than {count}', { count: hold!.contentsQuantity })
+                        : t('Counted quantity')
                     }
                     value={quantity}
                     onChange={(event) => setQuantity(event.target.value)}

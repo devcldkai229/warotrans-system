@@ -20,8 +20,24 @@ public sealed class FleetModuleApi(
     IMqttRobotInteractionPublisher interactionPublisher,
     WaroTrans.Fleet.Features.Dispatch.DispatchService dispatch,
     ILogger<FleetModuleApi> logger,
-    WaroTrans.Fleet.Features.Positioning.RobotPositioningService positioning) : IFleetModule
+    WaroTrans.Fleet.Features.Positioning.RobotPositioningService positioning,
+    WaroTrans.Fleet.Features.Charging.RobotChargingService? charging = null) : IFleetModule
 {
+    public async Task<RobotChargingSnapshot> StartChargingAsync(Guid robotId, Guid? jobId, CancellationToken cancellationToken = default) =>
+        ToSnapshot(await Charging().StartAsync(robotId, jobId, cancellationToken));
+
+    public async Task<RobotChargingSnapshot> EndChargingAsync(Guid robotId, bool force, CancellationToken cancellationToken = default) =>
+        ToSnapshot(await Charging().EndAsync(robotId, force, cancellationToken));
+
+    public async Task<RobotChargingSnapshot> GetChargingAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        ToSnapshot(await Charging().GetAsync(robotId, cancellationToken));
+
+    private WaroTrans.Fleet.Features.Charging.RobotChargingService Charging() =>
+        charging ?? throw new InvalidOperationException("Robot charging is not registered.");
+
+    private static RobotChargingSnapshot ToSnapshot(WaroTrans.Fleet.Features.Charging.RobotChargingResponse r) =>
+        new(r.RobotId, r.RobotCode, r.Status, r.BatteryPercent, r.ChargingSince, r.ChargeFullAt, r.FullPercent);
+
     public Task<IReadOnlySet<Guid>> GetPositioningRobotIdsAsync(CancellationToken cancellationToken = default) =>
         positioning.LiveRobotIdsAsync(cancellationToken);
 

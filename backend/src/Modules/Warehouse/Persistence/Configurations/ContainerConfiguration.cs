@@ -13,8 +13,8 @@ public sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
             table.HasCheckConstraint("ck_containers_stock_receipt", "(inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0 AND warehouse_id IS NOT NULL)");
             // A Container waits at no gate: delivered to an Outbound gate it is ISSUED (or HOLD) at once.
             table.HasCheckConstraint("ck_containers_endpoint_custody", "current_endpoint_id IS NULL");
-            table.HasCheckConstraint("ck_containers_contents", "(contents_quantity IS NULL AND contents_unit IS NULL) OR (contents_quantity IS NOT NULL AND contents_quantity > 0 AND contents_unit IS NOT NULL AND length(btrim(contents_unit)) > 0)");
-            table.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL AND contents_unit IS NOT NULL)");
+            table.HasCheckConstraint("ck_containers_contents", "contents_quantity IS NULL OR contents_quantity > 0");
+            table.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL)");
         });
         builder.HasKey(x => x.Id);
 
@@ -28,7 +28,6 @@ public sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
 
         builder.HasIndex(x => x.Barcode).IsUnique();
         builder.Property(x => x.ContentsQuantity).HasPrecision(18, 3);
-        builder.Property(x => x.ContentsUnit).HasMaxLength(32);
         builder.Property(x => x.CreationRequestHash).HasMaxLength(64);
         builder.Property(x => x.CreationGroupKey).HasMaxLength(64);
         builder.HasIndex(x => new { x.CreationRequestId, x.CreationOrdinal })

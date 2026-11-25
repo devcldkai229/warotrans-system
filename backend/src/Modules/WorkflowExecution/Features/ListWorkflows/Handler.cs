@@ -1,15 +1,17 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.WorkflowExecution.Features.WorkflowVisibility;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Features.Shared;
 using WaroTrans.WorkflowExecution.Persistence;
 
 namespace WaroTrans.WorkflowExecution.Features.ListWorkflows;
 
-public sealed class ListWorkflowsHandler(WorkflowExecutionDbContext db)
+public sealed class ListWorkflowsHandler(WorkflowExecutionDbContext db, ICurrentUser? currentUser = null)
 {
     public async Task<object> HandleAsync(string? code, string? status, CancellationToken cancellationToken)
     {
-        var query = db.Workflows.AsNoTracking().AsQueryable();
+        var query = db.Workflows.AsNoTracking().Visible(currentUser);
 
         if (!string.IsNullOrWhiteSpace(code))
         {
@@ -33,7 +35,8 @@ public sealed class ListWorkflowsHandler(WorkflowExecutionDbContext db)
                 w.Description,
                 w.Status,
                 w.CreatedAt,
-                w.PublishedAt))
+                w.PublishedAt,
+                w.StaffVisible))
             .ToListAsync(cancellationToken);
 
         return new { total = items.Count, items };

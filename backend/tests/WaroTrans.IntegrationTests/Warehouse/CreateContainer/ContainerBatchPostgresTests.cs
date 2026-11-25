@@ -112,7 +112,6 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         Assert.Null((await db.Containers.SingleAsync(c => c.Id == old.Id)).ContentsQuantity);
         var details = await new WaroTrans.Warehouse.Features.GetContainer.GetContainerHandler(db).GetByBarcodeAsync(batch.Items[1].Barcode);
         Assert.Equal(18, details.ContentsQuantity);
-        Assert.Equal("pcs", details.ContentsUnit);
         Assert.Empty(await db.InventoryStocks.ToListAsync());
         Assert.Empty(await db.StockVouchers.ToListAsync());
         var replay = await client.PostAsJsonAsync(Route, request);
@@ -152,7 +151,7 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         foreach (var receipt in receipts) Assert.Equal(receipts[0].Items.Select(i => (i.Id, i.Barcode)), receipt.Items.Select(i => (i.Id, i.Barcode)));
         await using var db = Warehouse();
         Assert.Equal(10, await db.Containers.CountAsync());
-        var different = request with { Groups = [new("a", _productA, 10, 99, "pcs")] };
+        var different = request with { Groups = [new("a", _productA, 10, 99)] };
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(Route, different)).StatusCode);
         Assert.Equal(10, await db.Containers.CountAsync());
     }
@@ -224,7 +223,6 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         Assert.Equal("CTN-LEGACY", old.Barcode);
         Assert.Equal(_productA, old.ProductId);
         Assert.Null(old.ContentsQuantity);
-        Assert.Null(old.ContentsUnit);
         Assert.Null(old.CreationRequestId);
         Assert.Null(old.InboundStockVoucherId);
         Assert.Null(old.WarehouseId);
@@ -255,7 +253,7 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
     }
 
     private CreateContainerRequest Request() => new(WarehouseId: _warehouse, RequestId: Guid.NewGuid(), ContainerCount: 10,
-        Groups: [new("a", _productA, 6, 24, "pcs", [new(2, 18)]), new("b", _productB, 4, 12, "pcs")]);
+        Groups: [new("a", _productA, 6, 24, [new(2, 18)]), new("b", _productB, 4, 12)]);
 
     private WarehouseDbContext Warehouse(params IInterceptor[] interceptors) => new(new DbContextOptionsBuilder<WarehouseDbContext>()
         .UseNpgsql(_connection).AddInterceptors(interceptors).Options);

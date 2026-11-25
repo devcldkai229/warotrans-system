@@ -1595,7 +1595,7 @@ public sealed class JobExecutionEngineTests
         {
             Holds.Add(request);
             return Task.FromResult(new ContainerHoldSnapshot(request.ContainerId, "CTN", "HOLD", request.ReasonCode, request.IssueId,
-                DateTimeOffset.UtcNow, null, null, request.AtEndpointId, null, null));
+                DateTimeOffset.UtcNow, null, null, request.AtEndpointId, null));
         }
 
         public Task<ContainerHoldSnapshot> ReleaseAsync(ContainerReleaseRequest request, CancellationToken cancellationToken = default) =>

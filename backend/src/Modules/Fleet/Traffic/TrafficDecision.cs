@@ -27,6 +27,7 @@ public static class TrafficDecisionClassifier
         ("grant", "plan-granted", "INFO"),
         ("semantic-reject-quarantined", "plan-rejected", "WARNING"),
         ("semantic-reject-keepout", "plan-rejected", "WARNING"),
+        ("semantic-reject-fingerprint", "plan-rejected", "ERROR"),
         ("deadlock-reject-semantic", "plan-rejected", "WARNING"),
         ("deadlock-reject-extend", "plan-rejected", "WARNING"),
         ("deadlock-reject", "plan-rejected", "WARNING"),
@@ -48,6 +49,8 @@ public static class TrafficDecisionClassifier
         ("bind-refused", "coordinator", "ERROR"),
         ("deadlock-retreat", "deadlock-retreat", "WARNING"),
         ("goal-wait", "goal-wait", "INFO"),
+        ("lab-phantom-hold", "lab", "WARNING"),
+        ("lab-phantom-release", "lab", "INFO"),
     ];
 
     public static bool TryClassify(string message, out (string Code, string Kind, string Severity, Guid? RobotId, string Detail) decision)

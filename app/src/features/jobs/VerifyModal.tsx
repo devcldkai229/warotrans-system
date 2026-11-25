@@ -30,6 +30,8 @@ import { ApiError, confirmHandover, failJobContainer, getContainerByBarcode } fr
 import type { JobDetailResponse, JobStatus, JobStepResponse } from '../../shared/types/contracts';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { handoverStatus } from './handoverData';
+import { problemsFor } from '../../shared/containerProblems';
+import { ProblemCodeChips } from '../../shared/components/ProblemCodeChips';
 
 interface OtherContainerInfo {
   code: string;
@@ -86,6 +88,7 @@ export function VerifyModal({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [failReason, setFailReason] = useState<string | null>(null);
+  const [failCode, setFailCode] = useState<string[]>([]);
   const submissionVersion = useRef(0);
   const submissionPending = useRef(false);
   const status = handoverStatus(step, jobStatus);
@@ -318,7 +321,9 @@ export function VerifyModal({
                 failReason === null ? (
                   <Button title="Container cannot go on" variant="outline" onPress={() => setFailReason('')} size="lg" fullWidth />
                 ) : (
-                  <View>
+                  <View style={{ gap: 8 }}>
+                    <Text variant="bodyMedium" fontWeight="700">What is wrong?</Text>
+                    <ProblemCodeChips problems={problemsFor('HANDOVER')} selected={failCode} onChange={setFailCode} disabled={isSubmitting} />
                     <TextInput
                       placeholder={translateText('Why can this container not go on?')}
                       value={failReason}
@@ -328,13 +333,14 @@ export function VerifyModal({
                     <Button
                       title={isSubmitting ? 'Reporting...' : 'Report container failed'}
                       variant="danger"
-                      disabled={!failReason.trim() || isSubmitting}
+                      disabled={!failReason.trim() || !failCode.length || isSubmitting}
                       onPress={() => {
                         setIsSubmitting(true);
-                        failJobContainer(jobStepId, targetContainerId, failReason.trim())
+                        failJobContainer(jobStepId, targetContainerId, failReason.trim(), failCode[0])
                           .then(res => {
                             toast.success('Container reported failed. The job goes on without it.');
                             setFailReason(null);
+                            setFailCode([]);
                             onSuccess(targetContainer ?? '', res && 'status' in res && res.id ? res as unknown as JobDetailResponse : null);
                           })
                           .catch((err: Error) => setVerificationError(err?.message || 'The report failed'))

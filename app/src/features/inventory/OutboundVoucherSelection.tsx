@@ -65,7 +65,7 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
             <Text variant="bodyMedium" numberOfLines={1}>{item.productName}</Text>
             <Text variant="caption" color="textSecondary" numberOfLines={1}>
               {item.productSku}
-              {item.contentsQuantity != null && item.contentsUnit ? ` · ${item.contentsQuantity} ${item.contentsUnit}` : ''}
+              {item.contentsQuantity != null ? ` · ${t('Qty {quantity}', { quantity: item.contentsQuantity })}` : ''}
               {` · ${item.currentStorageLocationCode || item.currentEndpointCode || 'None'}`}
               {item.currentLevelNo != null ? ` ${t('· Level {level}', { level: item.currentLevelNo })}` : ''}
             </Text>

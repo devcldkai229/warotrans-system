@@ -42,8 +42,7 @@ public sealed record ContainerHoldSnapshot(
     Guid? StorageLocationId,
     short? LevelNo,
     Guid? HoldEndpointId,
-    decimal? ContentsQuantity,
-    string? ContentsUnit);
+    decimal? ContentsQuantity);
 
 /// <summary>
 /// Implemented by Warehouse: holds a container while an issue about it is open, and applies the outcome chosen when it

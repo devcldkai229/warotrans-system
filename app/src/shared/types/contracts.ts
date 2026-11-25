@@ -233,6 +233,9 @@ export interface RobotResponse {
   manualLeaseUntil?: UtcDateTime | null;
   maintenanceReason?: string | null;
   maintenanceSince?: UtcDateTime | null;
+  /** Manual charging: plugged in since (status CHARGING), and when the battery was first seen full. */
+  chargingSince?: UtcDateTime | null;
+  chargeFullAt?: UtcDateTime | null;
   createdAt: UtcDateTime;
   updatedAt: UtcDateTime;
 }
@@ -671,6 +674,8 @@ export type HandoverProblemCode =
   | 'MISSING_CONTAINER'
   | 'BARCODE_UNREADABLE'
   | 'CONTAINER_DAMAGED'
+  | 'UNSAFE_LOAD'
+  | 'OTHER'
   | 'QUANTITY_MISMATCH';
 
 export type HazardType =

@@ -40,6 +40,7 @@ export const vi_management: Record<string, string> = {
   'Location': 'Vị trí',
   'Level': 'Tầng',
   'Supplier package': 'Gói của nhà cung cấp',
+  'Quantity': 'Số lượng',
   'Updated': 'Cập nhật',
   'Loading containers…': 'Đang tải container…',
   'Could not load containers. Check that the API is running, then reload.': 'Không tải được container. Hãy kiểm tra API đang chạy rồi tải lại trang.',

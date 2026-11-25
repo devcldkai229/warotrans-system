@@ -31,7 +31,6 @@ public sealed record CreatedContainerBatchItem(
     string GroupKey,
     int ContainerNo,
     decimal ContentsQuantity,
-    string ContentsUnit,
     string? SupplierPackageBarcode,
     string Status,
     Guid? CurrentStorageLocationId,

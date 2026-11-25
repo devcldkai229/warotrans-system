@@ -51,4 +51,14 @@ public static class EvidenceEventTypes
 
     /// <summary>A traffic coordinator decision about one robot (grant, refusal, quarantine, deadlock retreat, goal wait).</summary>
     public const string TrafficDecision = "traffic.decision";
+
+    /// <summary>Fault Injection Lab: a deliberate fault started / ended (grading and replay only; never AI evidence).</summary>
+    public const string LabFaultInjected = "lab.fault-injected";
+    public const string LabFaultCleared = "lab.fault-cleared";
+
+    /// <summary>The backend process started while this trip was unfinished (a restart mid-trip).</summary>
+    public const string HostStarted = "host.started";
+
+    /// <summary>Staff scanned another container's label at a handover; the confirmation was refused.</summary>
+    public const string HandoverScanRejected = "staff.scan-rejected";
 }

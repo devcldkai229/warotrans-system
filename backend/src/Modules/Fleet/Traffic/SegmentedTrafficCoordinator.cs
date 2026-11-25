@@ -290,6 +290,9 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
             return result;
         }, ct);
 
+    public Task<TrafficOpResult> LabPhantomHoldAsync(double x, double y, double radius, bool hold, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.LabPhantomHold(x, y, radius, hold), ct);
+
     public Task<TrafficOpResult> HoldServiceResourceAsync(Guid robotId, string resourceId, CancellationToken ct = default) =>
         EnqueueAsync(s => s.HoldServiceResource(robotId, resourceId), ct);
 

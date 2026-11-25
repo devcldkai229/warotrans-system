@@ -16,7 +16,6 @@ public sealed record ContainerDetailsResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     decimal? ContentsQuantity = null,
-    string? ContentsUnit = null,
     Guid? CreationRequestId = null,
     string? CreationGroupKey = null,
     int? CreationGroupOrdinal = null,

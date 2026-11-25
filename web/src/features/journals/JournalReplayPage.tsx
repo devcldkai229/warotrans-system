@@ -15,6 +15,7 @@ import { Button } from '@/shared/ui/Button'
 import { controlClass } from '@/shared/ui/controlClass'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { InvestigateWithAiButton } from './InvestigateWithAiButton'
 import { EVIDENCE_LABEL, EVIDENCE_TONE, SEVERITY_LABEL, SEVERITY_TONE } from './journalTones'
 import { CameraPlayer } from './replay/CameraPlayer'
 import { EventTicker } from './replay/EventTicker'
@@ -319,8 +320,10 @@ export function JournalReplayPage() {
             </StatusBadge>
             {incidentCount > 0 ? <StatusBadge tone="amber">{t('{count} incidents', { count: incidentCount })}</StatusBadge> : null}
           </div>
+          <span className="ml-auto" />
+          {hasPermission(capabilities, PERMISSIONS.incidentInvestigate) ? <InvestigateWithAiButton journalId={journalId} /> : null}
           {canExport ? (
-            <Button size="sm" variant="outline" className="ml-auto" onClick={() => void evidenceApi.exportPacket(journalId, manifest.requestCode)}>
+            <Button size="sm" variant="outline" onClick={() => void evidenceApi.exportPacket(journalId, manifest.requestCode)}>
               <Icon name="download" size={14} />
               {t('Export evidence')}
             </Button>

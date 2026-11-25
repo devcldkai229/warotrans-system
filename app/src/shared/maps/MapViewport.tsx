@@ -46,6 +46,7 @@ import { BatteryIndicator } from '../ui/RobotBadges';
 import { triggerHaptic } from '../utils/haptics';
 import { worldToMapPercent } from '../utils/mapCoordinates';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
+import { RobotChargingPanel } from './RobotChargingPanel';
 import { useMapCamera } from './hooks/useMapCamera';
 import { useMapEnvironment } from './hooks/useMapEnvironment';
 import { useMapJobTrail } from './hooks/useMapJobTrail';
@@ -1763,6 +1764,16 @@ function MapCanvas({
                     </View>
                   </View>
                 </View>
+
+                <RobotChargingPanel
+                  key={`charge-${robot.id}`}
+                  robotId={robot.id}
+                  robotCode={robot.code}
+                  status={robot.status}
+                  batteryPercent={robot.batteryPercent}
+                  chargingSince={robot.chargingSince}
+                  chargeFullAt={robot.chargeFullAt}
+                />
 
                 {onLocalizeRobot ? (
                   <RobotLocalizePanel

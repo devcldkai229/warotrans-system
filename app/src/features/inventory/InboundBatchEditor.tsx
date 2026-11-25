@@ -62,17 +62,6 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
             editable={editable}
             placeholder="24"
           />
-          <TextField
-            containerStyle={styles.fieldNarrow}
-            label="Unit"
-            accessibilityLabel={t('Unit In Group {group}', { group: index + 1 })}
-            value={group.unit}
-            onChangeText={unit => edit(group.key, previous => ({ ...previous, unit }))}
-            maxLength={32}
-            editable={editable}
-            placeholder="pcs"
-            autoCapitalize="none"
-          />
         </View>
       </View>
     ))}

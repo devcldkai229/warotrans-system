@@ -28,6 +28,8 @@ export interface ContainerListItem {
   currentEndpointId: string | null
   currentLevelNo: number | null
   supplierPackageBarcode: string | null
+  /** How many goods the box holds; null on old rows that never said. */
+  contentsQuantity?: number | null
   updatedAt: string
   /** On an open Transport Request, so it cannot go on a stock voucher right now. */
   inActiveTransport: boolean

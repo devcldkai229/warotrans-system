@@ -2,6 +2,7 @@
   "code": "ROBOT_CHARGING",
   "name": "Robot charging",
   "description": "The robot drives to a charger and a person connects it. There is no auto-dock.",
+  "staffVisible": false,
   "variables": [
     {
       "key": "chargerEndpointId",

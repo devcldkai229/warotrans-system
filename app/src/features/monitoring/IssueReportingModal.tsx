@@ -38,8 +38,8 @@ export type IncidentCategory =
   | 'MISSING_CONTAINER'
   | 'CONTAINER_DAMAGED'
   | 'BARCODE_UNREADABLE'
+  | 'UNSAFE_LOAD'
   | 'SHELF_BLOCKED'
-  | 'QUANTITY_MISMATCH'
   | 'AMR_PATH_BLOCKED';
 
 export interface IssueSubmitInput {
@@ -69,7 +69,7 @@ const CONTAINER_CATEGORIES = new Set<IncidentCategory>([
   'MISSING_CONTAINER',
   'CONTAINER_DAMAGED',
   'BARCODE_UNREADABLE',
-  'QUANTITY_MISMATCH',
+  'UNSAFE_LOAD',
 ]);
 
 const CATEGORIES: {
@@ -109,10 +109,10 @@ const CATEGORIES: {
     icon: 'warehouse',
   },
   {
-    id: 'QUANTITY_MISMATCH',
-    title: 'Quantity mismatch / missing items',
-    desc: 'Piece count inside tote differs from digital WMS packing list',
-    icon: 'box',
+    id: 'UNSAFE_LOAD',
+    title: 'Unsafe to carry',
+    desc: 'Too heavy, too large or stacked unsafely for the robot',
+    icon: 'octagon',
   },
   {
     id: 'AMR_PATH_BLOCKED',

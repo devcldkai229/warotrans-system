@@ -11,6 +11,7 @@ import { formatDateTimeWithYear } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { StaffHiddenBadge } from './StaffVisibilityToggle'
 import type { Tone } from '@/shared/ui/statusTones'
 import { t } from '@/shared/i18n'
 import './workflows.css'
@@ -64,9 +65,12 @@ function WorkflowCard({
               {workflow.name || workflow.code}
             </h3>
           </div>
-          <StatusBadge tone={tone} withDot>
-            {workflow.status}
-          </StatusBadge>
+          <span className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge tone={tone} withDot>
+              {workflow.status}
+            </StatusBadge>
+            {workflow.staffVisible === false ? <StaffHiddenBadge /> : null}
+          </span>
         </div>
 
         {workflow.description ? (

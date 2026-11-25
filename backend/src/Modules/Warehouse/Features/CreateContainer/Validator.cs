@@ -62,8 +62,6 @@ public sealed class CreateContainerValidator : AbstractValidator<CreateContainer
                     context.AddFailure($"{prefix}.ContainerCount", $"ContainerCount must be between 1 and {MaxContainers}.");
                 if (!ValidQuantity(group.QuantityPerContainer))
                     context.AddFailure($"{prefix}.QuantityPerContainer", "Quantity must be positive, at most 999999999999999.999, with at most 3 decimal places.");
-                if (string.IsNullOrWhiteSpace(group.Unit) || group.Unit.Trim().Length > 32)
-                    context.AddFailure($"{prefix}.Unit", "Unit is required and must not exceed 32 characters.");
                 if (group.SupplierPackageBarcode?.Length > 128)
                     context.AddFailure($"{prefix}.SupplierPackageBarcode", "SupplierPackageBarcode must not exceed 128 characters.");
                 if (group.QuantityOverrides is null) continue;

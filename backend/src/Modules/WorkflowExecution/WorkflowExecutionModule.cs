@@ -26,6 +26,7 @@ using WaroTrans.WorkflowExecution.Features.ResumeJob;
 using WaroTrans.WorkflowExecution.Features.StartJob;
 using WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 using WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
+using WaroTrans.WorkflowExecution.Features.WorkflowVisibility;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -46,6 +47,8 @@ public static class WorkflowExecutionModule
 
         services.AddScoped<ListWorkflowsHandler>();
         services.AddScoped<GetWorkflowHandler>();
+        services.AddScoped<SetStaffVisibilityHandler>();
+        services.AddScoped<IJobStaffVisibility, JobStaffVisibility>();
         services.AddScoped<GetWorkflowRequestInputSchemaHandler>();
         services.AddScoped<CreateWorkflowHandler>();
         services.AddScoped<UpdateWorkflowHandler>();
@@ -65,6 +68,10 @@ public static class WorkflowExecutionModule
         services.AddSingleton<StepInputResolver>();
         services.AddScoped<WorkflowVariableContextBuilder>();
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
+        // Publishing a map: workflows naming places it lacks, Jobs running on the old map; not-started Jobs follow it.
+        services.AddScoped<WorkflowMapPublish>();
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishGuard>(sp => sp.GetRequiredService<WorkflowMapPublish>());
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishFollower>(sp => sp.GetRequiredService<WorkflowMapPublish>());
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
         services.AddScoped<IJobPlanLimitsQuery, JobPlanLimitsQuery>();
         services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
@@ -129,6 +136,7 @@ public static class WorkflowExecutionModule
         group.MapUpdateWorkflow();
         group.MapPublishWorkflow();
         group.MapCreateWorkflowVersion();
+        group.MapSetStaffVisibility();
         group.MapDeleteWorkflow();
         group.MapListJobs();
         group.MapGetJob();

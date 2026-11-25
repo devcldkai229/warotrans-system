@@ -170,6 +170,14 @@ export function getRobot(id: string) { return apiFetch<RobotDto>(`/api/fleet/rob
  * Tells the robot it stands at `endpointId` of its map (an operator placed it there). 202 means the command was
  * accepted; the robot reports LOCALIZED in localizationStatus once its pose estimate converged. Refused while it runs a command.
  */
+/** Manual charging: a person plugged the charger in (completes the robot's charging Job when it waits for it). */
+export function confirmChargerPluggedIn(id: string) {
+  return apiFetch<{ robotId: string; status: string }>(`/api/workflow-execution/robots/${id}/charging/plugged-in`, { method: 'POST', body: '{}' });
+}
+/** A person unplugged the charger; below the full level only with `force` (refused with charge_not_full otherwise). */
+export function confirmChargerUnplugged(id: string, force = false) {
+  return apiFetch<{ robotId: string; status: string }>(`/api/workflow-execution/robots/${id}/charging/unplugged`, { method: 'POST', body: JSON.stringify({ force }) });
+}
 export function localizeRobot(id: string, endpointId: string) {
   return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/localize`, { method: 'POST', body: JSON.stringify({ endpointId }) });
 }

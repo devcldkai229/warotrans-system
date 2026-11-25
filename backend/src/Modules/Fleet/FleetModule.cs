@@ -58,6 +58,7 @@ public static class FleetModule
         services.AddScoped<DisableRobotHandler>();
         services.AddScoped<PutRobotInServiceHandler>();
         services.AddScoped<ChangeRobotMapHandler>();
+        services.AddScoped<WaroTrans.Navigation.Contracts.IMapPublishGuard, FleetMapPublishGuard>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<Services.InFlightCommandAborter>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
@@ -109,11 +110,17 @@ public static class FleetModule
         services.AddHostedService<TrafficAuthorityPublisher>();
         services.AddHostedService<TrafficAuthorityRenewHostedService>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
+        services.AddScoped<WaroTrans.Fleet.Features.Charging.RobotChargingService>();
+        services.AddHostedService<WaroTrans.Fleet.Features.Charging.ChargeReminderHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();
         services.AddHostedService<SemanticPolicyBootstrapHostedService>();
         services.AddHostedService<TrafficCoordinatorLeaseHostedService>();
         services.AddHostedService<Services.FleetPosesBroadcastHostedService>();
+        // Fault Injection Lab (test benches only; Lab:Enabled).
+        services.Configure<Features.Lab.LabOptions>(configuration.GetSection(Features.Lab.LabOptions.SectionName));
+        services.AddSingleton<Features.Lab.LabInjectionService>();
+        services.AddHostedService<Features.Lab.LabExpiryHostedService>();
 
         return services;
     }
@@ -144,6 +151,8 @@ public static class FleetModule
         group.MapGetTrafficSnapshot();
         WaroTrans.Fleet.Features.GetSemanticLayers.Endpoint.MapGetSemanticLayers(group);
         group.MapTrafficOperatorEndpoints();
+        var lab = endpoints.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Features.Lab.LabOptions>>();
+        Features.Lab.LabEndpoints.MapLab(endpoints, lab.Value.Enabled);
         return endpoints;
     }
 }

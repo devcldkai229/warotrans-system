@@ -17,6 +17,10 @@ public interface IJobEvidenceQuery
 
     /// <summary>Every trip (Job) of a transport request, with all its robot assignments.</summary>
     Task<IReadOnlyList<JobEvidenceContext>> GetJobsOfRequestAsync(Guid transportRequestId, CancellationToken cancellationToken = default);
+
+    /// <summary>Trips not finished yet (RUNNING, PAUSED, ASSIGNED …) that serve a request. Default: none.</summary>
+    Task<IReadOnlyList<JobEvidenceContext>> GetUnfinishedJobsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<JobEvidenceContext>>([]);
 }
 
 /// <param name="TransportRequestId">Null for a Job that serves no request (robot care).</param>

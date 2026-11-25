@@ -33,7 +33,8 @@ function useCaseMutation<TArgs, TResult>(id: string, fn: (args: TArgs) => Promis
 
 export const useInvestigate = (id: string) => useCaseMutation(id, () => aiApi.investigate(id))
 export const useAsk = (id: string) => useCaseMutation(id, (q: string) => aiApi.ask(id, q))
-export const usePropose = (id: string) => useCaseMutation(id, () => aiApi.propose(id))
+export const usePropose = (id: string) =>
+  useCaseMutation(id, (action: IssueProposal['action'] | undefined) => aiApi.propose(id, action ?? 'CREATE_ISSUE_REPORT'))
 export const useStartResolution = (id: string) => useCaseMutation(id, () => aiApi.startResolution(id))
 export const useVerify = (id: string) =>
   useCaseMutation(id, (b: { method: string; passed: boolean; notes: string; evidence: string[] }) => aiApi.verify(id, b))

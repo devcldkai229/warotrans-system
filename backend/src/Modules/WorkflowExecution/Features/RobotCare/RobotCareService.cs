@@ -157,9 +157,59 @@ public sealed class RobotCareService(
     public async Task<Job> ReturnToParkAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow)
+        // The robot's own home first (Traffic:RobotHomeEndpoints), like an idle robot going back: a robot that ended a Job
+        // away from home may only start again from there, so the nearest other parking place would be refused.
+        var target = endpointId ?? await FreeHomeAsync(robot, cancellationToken)
+            ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow)
             ?? throw new ConflictException("No parking place is free on this map.", "no_free_parking");
         return await RunAsync(robot, ParkWorkflow, ParkInput, target, actor, cancellationToken);
+    }
+
+    private async Task<Guid?> FreeHomeAsync(RobotSnapshot robot, CancellationToken cancellationToken)
+    {
+        var homeCode = trafficOptions?.Value.RobotHomeEndpoints.TryGetValue(robot.Code, out var hc) == true ? hc : null;
+        if (homeCode is null) return null;
+        var home = (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken))
+            .FirstOrDefault(e => e.IsEnabled && e.Code == homeCode);
+        return home is not null && !(await TakenEndpointsAsync(robot, [home], cancellationToken)).Contains(home.Id) ? home.Id : null;
+    }
+
+    /// <summary>
+    /// A person plugged the charger in. When the robot's charging Job waits for exactly that, its step is confirmed
+    /// (the Job completes); a robot plugged in by hand outside a Job is simply marked CHARGING.
+    /// </summary>
+    public async Task<RobotChargingSnapshot> PluggedInAsync(Guid robotId, Guid? actor, CancellationToken cancellationToken)
+    {
+        if (await WaitingForPlugAsync(robotId, cancellationToken) is { } waiting)
+        {
+            await engine.ConfirmHumanStepAsync(
+                waiting.StepId, null, new HumanConfirmationSource(ConfirmationSource.STAFF_APP, actor, Note: "charger plugged in"), cancellationToken);
+            return await fleet.GetChargingAsync(robotId, cancellationToken);
+        }
+
+        return await fleet.StartChargingAsync(robotId, null, cancellationToken);
+    }
+
+    /// <summary>The robot stands at a charger and its charging Job waits for a person to plug it in.</summary>
+    public async Task<(Guid StepId, string JobNo)?> WaitingForPlugAsync(Guid robotId, CancellationToken cancellationToken)
+    {
+        var recent = await fleet.GetRecentJobIdsAsync(robotId, 20, cancellationToken);
+        var waiting = await db.JobSteps.AsNoTracking()
+            .Where(s => recent.Contains(s.JobTask.JobId)
+                        && s.StepType == StepType.HUMAN_INTERACTION
+                        && s.Status == JobStepStatus.WAITING
+                        && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => new { s.Id, s.WorkflowStepId, s.JobTask.Job.JobNo })
+            .ToListAsync(cancellationToken);
+        var definitionIds = waiting.Select(s => s.WorkflowStepId).Distinct().ToList();
+        var plugSteps = (await db.WorkflowSteps.AsNoTracking().Where(w => definitionIds.Contains(w.Id)).ToListAsync(cancellationToken))
+            .Where(w => w.Config.OperationCode == nameof(HumanActionCode.CHARGE_CONNECT_CONFIRM))
+            .Select(w => w.Id)
+            .ToHashSet();
+
+        return waiting.FirstOrDefault(s => plugSteps.Contains(s.WorkflowStepId)) is { } step
+            ? (step.Id, step.JobNo)
+            : null;
     }
 
     public async Task<Job> GoToChargerAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
@@ -981,6 +1031,12 @@ public sealed class RobotCareService(
         if (configured is not { } groupId)
         {
             return null;
+        }
+
+        // Configured on the map published back then: the group with the same code on the robot's map.
+        if (await navigation.ResolvePlaceOnMapAsync(groupId, robot.CurrentMapVersionId, cancellationToken) is { TargetId: { } onMap })
+        {
+            groupId = onMap;
         }
 
         var group = await navigation.GetEndpointGroupAsync(groupId, cancellationToken);

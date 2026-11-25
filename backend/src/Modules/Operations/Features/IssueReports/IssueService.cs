@@ -399,7 +399,7 @@ public sealed partial class IssueService(
                     currentUser.AccountId, request.Resolution),
                 cancellationToken);
             outcomeNote = $"Container {held.Barcode}: {request.ContainerOutcome}"
-                + (request.ContainerOutcome == ContainerHoldOutcomes.AdjustQuantity ? $" ({request.ContentsQuantity} {after.ContentsUnit})" : string.Empty)
+                + (request.ContainerOutcome == ContainerHoldOutcomes.AdjustQuantity ? $" ({request.ContentsQuantity})" : string.Empty)
                 + $", now {after.Status}" + (after.HoldReasonCode is { } still ? $" ({still})" : string.Empty);
         }
 

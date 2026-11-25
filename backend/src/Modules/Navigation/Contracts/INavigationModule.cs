@@ -42,6 +42,37 @@ public interface INavigationModule
     /// </summary>
     Task<EndpointGroupSnapshot?> GetEndpointGroupAsync(Guid groupId, CancellationToken cancellationToken = default) =>
         Task.FromResult<EndpointGroupSnapshot?>(null);
+
+    /// <summary>
+    /// A place a workflow names (an Endpoint or an EndpointGroup id, saved when the workflow was configured on some map
+    /// version) on another map version: itself when it is on that map, else the Endpoint / group with the same code
+    /// there. Codes are the map-independent identity of a place (EP-{NAME}, kept by clone). Null for an unknown id.
+    /// Default (test doubles): the id unchanged, as if it were on the map.
+    /// </summary>
+    Task<MapPlaceResolution?> ResolvePlaceOnMapAsync(Guid id, Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<MapPlaceResolution?>(new MapPlaceResolution(id, false, null, id));
+
+    /// <summary>Many places at once (publish check). Unknown ids are left out.</summary>
+    async Task<IReadOnlyList<MapPlaceResolution>> ResolvePlacesOnMapAsync(
+        IReadOnlyCollection<Guid> ids, Guid mapVersionId, CancellationToken cancellationToken = default)
+    {
+        var list = new List<MapPlaceResolution>();
+        foreach (var id in ids)
+        {
+            if (await ResolvePlaceOnMapAsync(id, mapVersionId, cancellationToken) is { } resolved) list.Add(resolved);
+        }
+
+        return list;
+    }
+}
+
+/// <summary>
+/// <paramref name="SourceId"/> resolved on a map: <paramref name="TargetId"/> is the Endpoint / group to use there, or
+/// null when that map has no place with <paramref name="Code"/>.
+/// </summary>
+public sealed record MapPlaceResolution(Guid SourceId, bool IsGroup, string? Code, Guid? TargetId)
+{
+    public bool Found => TargetId is not null;
 }
 
 public sealed record WorkZoneSnapshot(Guid Id, Guid MapVersionId, string Code);

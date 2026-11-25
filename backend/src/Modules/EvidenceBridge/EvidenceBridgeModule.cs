@@ -53,6 +53,9 @@ public static class EvidenceBridgeModule
         AddCapture<RobotErrorReported>(services);
         AddCapture<RobotBatteryLow>(services);
         AddCapture<RobotGatewayRestarted>(services);
+        AddCapture<WaroTrans.Fleet.IntegrationEvents.LabFaultInjected>(services);
+        AddCapture<WaroTrans.Fleet.IntegrationEvents.LabFaultCleared>(services);
+        AddCapture<WaroTrans.WorkflowExecution.Contracts.HandoverScanRejected>(services);
 
         services.AddHttpClient(EvidenceOutboxRelay.HttpClientName, client =>
         {
@@ -61,6 +64,7 @@ public static class EvidenceBridgeModule
         });
         services.AddHostedService<EvidenceOutboxRelay>();
         services.AddHostedService<TrafficEvidenceTap>();
+        services.AddHostedService<Features.Capture.HostStartEvidence>();
         return services;
     }
 

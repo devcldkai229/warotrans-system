@@ -165,8 +165,36 @@ export function updateMapVersion(
   })
 }
 
-export function publishMapVersion(id: string) {
-  return apiRequest<MapVersionDto>(`/api/navigation/maps/${id}/publish`, { method: 'POST' })
+/** `force` publishes over overridable BLOCKs of the publish check; `reason` is then required. */
+export function publishMapVersion(id: string, options?: { force: boolean; reason: string }) {
+  return apiRequest<MapVersionDto>(`/api/navigation/maps/${id}/publish`, {
+    method: 'POST',
+    body: options ? JSON.stringify(options) : undefined,
+  })
+}
+
+/** BLOCK: publishing breaks it (overridable or not); WARN: worth knowing; INFO: done automatically when publishing. */
+export interface MapPublishIssue {
+  severity: 'BLOCK' | 'WARN' | 'INFO'
+  code: string
+  message: string
+  subject: string | null
+  overridable: boolean
+  /** The values in `message`, to say it in the interface language by `code`. */
+  args: Record<string, string> | null
+}
+
+export interface MapPublishCheck {
+  mapVersionId: string
+  mapCode: string
+  replacedMapCodes: string[]
+  issues: MapPublishIssue[]
+  canPublish: boolean
+  canOverride: boolean
+}
+
+export function getMapPublishCheck(id: string) {
+  return apiFetch<MapPublishCheck>(`/api/navigation/maps/${id}/publish-check`)
 }
 
 /** Download Nav2 route-graph GeoJSON for a map (used after publish to rebuild Gazebo / Nav2). */
@@ -416,6 +444,21 @@ export interface EndpointGroup {
   selectionPolicy: 'FIRST_AVAILABLE' | 'NEAREST'
   isActive: boolean
   members: { endpointId: string; code: string; name: string }[]
+}
+
+/** An Endpoint or EndpointGroup id as a place: its code and the map version it belongs to (any status). */
+export interface PlaceDto {
+  id: string
+  isGroup: boolean
+  code: string
+  name: string
+  mapVersionId: string
+  mapVersionCode: string
+  mapStatus: string
+}
+
+export function getPlace(id: string) {
+  return apiFetch<PlaceDto>(`/api/navigation/places/${id}`)
 }
 
 export function listEndpointGroups(mapVersionId: string) {

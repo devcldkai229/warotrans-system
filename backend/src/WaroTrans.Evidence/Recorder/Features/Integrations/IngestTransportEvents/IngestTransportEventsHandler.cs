@@ -88,6 +88,11 @@ internal sealed class IngestTransportEventsHandler(
             return "assignment_event_incomplete";
         }
 
+        if (TransportEventTypes.IsRequestOrRobotScoped(e.EventType))
+        {
+            return e.TransportRequestId is null && string.IsNullOrEmpty(e.RobotCode) ? "request_or_robot_missing" : null;
+        }
+
         if (!TransportEventTypes.IsRobotScoped(e.EventType) && e.TransportRequestId is null)
         {
             return "transport_request_missing";
@@ -165,6 +170,14 @@ internal sealed class IngestTransportEventsHandler(
                 run.TransportRunStatusSnapshot = e.SourceStatusCode;
                 run.UpdatedAtUtc = now;
             }
+        }
+        else if (run is null && !string.IsNullOrEmpty(e.RobotCode))
+        {
+            // A request event about one robot (a lab fault): that robot's run in this journal at that time.
+            run = await db.Runs
+                .Where(r => r.JournalId == journal.Id && r.RobotId == e.RobotCode && r.StartedAtUtc <= e.OccurredAtUtc)
+                .OrderByDescending(r => r.StartedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         if (journal is not null)

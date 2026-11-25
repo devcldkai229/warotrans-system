@@ -41,7 +41,7 @@ public sealed partial class ContainerMovementRecorder : IContainerHolds
         await dbContext.Containers.AsNoTracking()
             .Where(c => c.Id == containerId)
             .Select(c => new ContainerHoldSnapshot(c.Id, c.Barcode, c.Status.ToString(), c.HoldReasonCode, c.HoldIssueId, c.HeldAt,
-                c.CurrentStorageLocationId, c.CurrentLevelNo, c.HoldEndpointId, c.ContentsQuantity, c.ContentsUnit))
+                c.CurrentStorageLocationId, c.CurrentLevelNo, c.HoldEndpointId, c.ContentsQuantity))
             .SingleOrDefaultAsync(cancellationToken);
 
     private async Task HoldCoreAsync(ContainerHoldRequest request, CancellationToken ct)
@@ -146,8 +146,6 @@ public sealed partial class ContainerMovementRecorder : IContainerHolds
         {
             if (request.Outcome == ContainerHoldOutcomes.AdjustQuantity)
             {
-                if (container.ContentsUnit is null)
-                    throw new DomainValidationException("This container records no contents unit to count in.", "container_contents_unit_missing");
                 container.ContentsQuantity = request.ContentsQuantity;
             }
 

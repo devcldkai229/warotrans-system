@@ -51,6 +51,9 @@ export interface Issue {
   containerOutcomes?: ContainerOutcome[]
   /** What resolving it did with the package, once resolved. */
   containerOutcome?: ContainerOutcome | null
+  /** Jira ticket made from this issue (code faults found by the AI investigation). */
+  jiraKey?: string | null
+  jiraUrl?: string | null
 }
 
 /** A container as Warehouse holds it (GET issue detail). */
@@ -67,7 +70,6 @@ export interface ContainerHold {
   /** Where it stands when it is on no shelf (a gate, the inspection point). */
   holdEndpointId: string | null
   contentsQuantity: number | null
-  contentsUnit: string | null
 }
 
 /** What resolving an issue does with the package it holds (a container is a packed box of goods, not a tote). */
