@@ -1,5 +1,6 @@
 /** Vietnamese for the maps area; keys are the English sentences. Generated from the reviewed word list. */
 export const vi_maps: Record<string, string> = {
+  'Show another map': 'Xem map khác',
   'Waypoint': 'Điểm trung gian',
   'Waypoint / intermediate point': 'Điểm đường / điểm trung gian',
   'Charger': 'Trạm sạc',
@@ -240,7 +241,6 @@ export const vi_maps: Record<string, string> = {
   'Build a map': 'Dựng map',
   'Cancel map building? The map built so far is thrown away.': 'Huỷ dựng map? Phần map đã quét sẽ bị bỏ.',
   'Cancel mapping': 'Huỷ dựng map',
-  'Show another map': 'Xem map khác',
   'Continue': 'Tiếp tục',
   'Download route graph': 'Tải route graph',
   'Drive slowly along every wall and back to where you started (closing the loop sharpens the map). Arrow keys / WASD drive, Space stops. Drive Assist stops the robot before obstacles.': 'Lái chậm dọc theo mọi bức tường rồi quay về chỗ xuất phát (khép vòng giúp map sắc nét hơn). Phím mũi tên / WASD để lái, Space để dừng. Drive Assist tự dừng robot trước vật cản.',
