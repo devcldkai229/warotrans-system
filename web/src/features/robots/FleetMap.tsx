@@ -33,6 +33,9 @@ interface FleetMapProps {
   enableTrafficOverlay?: boolean
   /** Active MapVersion meta for VITE_MAP_ALIGN_DEBUG overlay (origin/resolution). */
   mapVersion?: MapVersionDto | null
+  /** Overview: the warehouse's map versions and the map picker of the top bar. */
+  maps?: MapVersionDto[]
+  onSelectMap?: (mapVersionId: string) => void
 }
 
 interface FleetTrafficAlert {
@@ -63,6 +66,8 @@ export function FleetMap({
   occupancyImageUrl = null,
   enableTrafficOverlay = true,
   mapVersion = null,
+  maps,
+  onSelectMap,
 }: FleetMapProps) {
   const alignDebug = isMapAlignDebugEnabled()
   const { snap, overlay: trafficOverlay } = useTrafficOverlay(robots, enableTrafficOverlay)
@@ -212,6 +217,8 @@ export function FleetMap({
         mapVersion={mapVersion}
         trafficLive={Boolean(snap)}
         trafficEpoch={snap?.epoch ?? null}
+        maps={maps}
+        onSelectMap={onSelectMap}
       />
 
       {enableTrafficOverlay ? (
