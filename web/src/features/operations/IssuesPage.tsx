@@ -427,6 +427,14 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <dd>{current.resolution}</dd>
           </>
         ) : null}
+        {current.jiraKey ? (
+          <>
+            <dt className="text-muted">{t('Jira ticket')}</dt>
+            <dd>
+              <a className="font-mono underline" href={current.jiraUrl ?? '#'} target="_blank" rel="noreferrer">{current.jiraKey}</a>
+            </dd>
+          </>
+        ) : null}
       </dl>
 
       {current.evidence.length > 0 ? (

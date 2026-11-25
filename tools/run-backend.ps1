@@ -35,7 +35,9 @@ param(
   # Skip docker compose (infrastructure already running).
   [switch]$NoInfra,
   # Stop everything this script started, then exit. Docker containers keep running.
-  [switch]$Stop
+  [switch]$Stop,
+  # Test bench only: enable the Fault Injection Lab (/api/lab, Lab:Enabled=true). Never on a real site.
+  [switch]$Lab
 )
 
 $ErrorActionPreference = "Stop"
@@ -160,6 +162,12 @@ $env:Mqtt__Host = "127.0.0.1"
 $env:ConnectionStrings__PostgreSQL = "Host=127.0.0.1;Port=5433;Database=warotrans;Username=warotrans;Password=warotrans"
 $env:ConnectionStrings__MongoDB = "mongodb://warotrans:warotrans@127.0.0.1:27018/?authSource=admin"
 $env:ConnectionStrings__Evidence = "Host=127.0.0.1;Port=5433;Database=warotrans_evidence;Username=warotrans;Password=warotrans"
+if ($Lab) {
+  $env:Lab__Enabled = "true"
+  Write-Host "== Fault Injection Lab ENABLED (test bench only)" -ForegroundColor Yellow
+} else {
+  Remove-Item Env:Lab__Enabled -ErrorAction SilentlyContinue
+}
 if ($Evidence -eq "Local") {
   # Environment variables override the user secrets (the AWS settings) without touching them.
   $env:Evidence__Storage__Provider = "Local"

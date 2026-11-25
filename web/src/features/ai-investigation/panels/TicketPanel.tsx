@@ -14,6 +14,8 @@ export function TicketPanel({ view }: { view: CaseView }) {
   const approve = useApproveAndExecute(id)
   const [draft, setDraft] = useState<IssueProposal | null>(null)
   const canTicket = view.availableActions.includes('CREATE_TICKET')
+  // Only code faults (owner DEVELOPER) go to Jira; the server refuses the others.
+  const canJira = view.availableActions.includes('PUSH_JIRA') && res?.owner === 'DEVELOPER'
   if (!res) return null
   return (
     <section className="rounded-md border border-outline bg-surface p-4">
@@ -54,6 +56,9 @@ export function TicketPanel({ view }: { view: CaseView }) {
         <p>{t('Monitoring')}: {res.verification.monitoring_window}</p>
       </div>
       {view.case.issue_report_id && <p className="mt-3 text-sm text-green-ink">✓ {t('IssueReport created')}: <span className="font-mono">{view.case.issue_report_id}</span></p>}
+      {view.case.jira_key && (
+        <p className="mt-1 text-sm text-green-ink">✓ {t('Jira ticket')}: <a className="font-mono underline" href={view.case.jira_url ?? '#'} target="_blank" rel="noreferrer">{view.case.jira_key}</a></p>
+      )}
       {canTicket && (
         <div className="mt-3 flex justify-end">
           <Button variant="primary" disabled={propose.isPending} onClick={async () => setDraft(await propose.mutateAsync(undefined))}>
@@ -61,11 +66,24 @@ export function TicketPanel({ view }: { view: CaseView }) {
           </Button>
         </div>
       )}
+      {canJira && (
+        <div className="mt-3 flex justify-end">
+          <Button variant="primary" disabled={propose.isPending} onClick={async () => setDraft(await propose.mutateAsync('EXPORT_TO_JIRA'))}>
+            {t('Review & push to Jira…')}
+          </Button>
+        </div>
+      )}
       {draft && (
-        <Modal title={t('Create IssueReport')} subtitle={t('You approve exactly this content. The AI never creates tickets by itself.')} onClose={() => setDraft(null)} width="w-[640px]">
+        <Modal title={draft.action === 'EXPORT_TO_JIRA' ? t('Push to Jira') : t('Create IssueReport')} subtitle={t('You approve exactly this content. The AI never creates tickets by itself.')} onClose={() => setDraft(null)} width="w-[640px]">
           <div className="grid gap-2 text-sm">
-            <p><span className="font-medium">{t('Type')}:</span> {String(draft.payload.issueType)} · <span className="font-medium">{t('Severity')}:</span> {String(draft.payload.severity)}</p>
-            <textarea className="h-56 w-full rounded-sm border border-outline bg-container p-2 font-mono text-xs" readOnly value={String(draft.payload.description)} />
+            {draft.action === 'EXPORT_TO_JIRA' ? (
+              <textarea className="h-56 w-full rounded-sm border border-outline bg-container p-2 font-mono text-xs" readOnly value={JSON.stringify(draft.payload, null, 2)} />
+            ) : (
+              <>
+                <p><span className="font-medium">{t('Type')}:</span> {String(draft.payload.issueType)} · <span className="font-medium">{t('Severity')}:</span> {String(draft.payload.severity)}</p>
+                <textarea className="h-56 w-full rounded-sm border border-outline bg-container p-2 font-mono text-xs" readOnly value={String(draft.payload.description)} />
+              </>
+            )}
             {approve.error && <p className="rounded-sm bg-red-soft px-3 py-2 text-xs text-red-ink">{(approve.error as Error).message}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setDraft(null)}>{t('Cancel')}</Button>

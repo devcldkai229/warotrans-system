@@ -56,6 +56,31 @@ public sealed class ProcessRobotCommandResultHandler(
                 "Ignored duplicate/stale command_result commandId {CommandId} status {Status}",
                 command.Id,
                 command.Status);
+            // A late result that contradicts the one already applied (SUCCEEDED for a command already CANCELED or
+            // FAILED …) is ignored, but it is evidence of a robot/link problem: record it. A plain repeat is not.
+            // A late CANCELED is the robot answering the Host's own CANCEL (sent after a timeout): expected, not news.
+            if (!string.IsNullOrEmpty(message.Outcome)
+                && !string.Equals(message.Outcome, "CANCELED", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(command.Outcome, message.Outcome, StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogWarning(
+                    "Stale command_result {CommandId}: robot {RobotCode} says {Late}, the command already ended {Status}/{Outcome}",
+                    command.Id, message.RobotCode, message.Outcome, command.Status, command.Outcome);
+                await events.PublishAsync(
+                    new RobotCommandLifecycleChanged(
+                        command.Id,
+                        command.RobotId,
+                        message.RobotCode,
+                        command.Type.ToString(),
+                        command.Status.ToString(),
+                        command.JobAssignmentId,
+                        command.JobStepId,
+                        message.Outcome,
+                        message.ErrorCode,
+                        RobotCommandLifecycleChanged.Phases.StaleResult),
+                    cancellationToken);
+            }
+
             return;
         }
 

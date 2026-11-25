@@ -58,6 +58,9 @@ public static class OperationsModule
 
         // Issue reports (OPS-01); WorkflowExecution raises them through IIssueReporter (WFX-05).
         services.AddScoped<IssueService>();
+        services.Configure<Features.IssueReports.JiraOptions>(configuration.GetSection(Features.IssueReports.JiraOptions.SectionName));
+        services.AddHttpClient(Features.IssueReports.JiraExportService.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<Features.IssueReports.JiraExportService>();
         services.AddScoped<IIssueReporter>(sp => sp.GetRequiredService<IssueService>());
         services.AddScoped<IValidator<CreateIssueRequest>, CreateIssueValidator>();
         services.AddScoped<IValidator<CreateHazardRequest>, CreateHazardValidator>();

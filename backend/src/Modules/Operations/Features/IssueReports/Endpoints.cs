@@ -118,6 +118,13 @@ public static class IssueEndpoints
             .RequirePermission(Permissions.IssueCreate)
             .WithName("ResolveOwnHandoverIssue");
 
+        group.MapPost("/issues/{id:guid}/jira", async (
+                Guid id, ExportIssueToJiraRequest request, JiraExportService jira, CancellationToken cancellationToken) =>
+                Results.Ok(await jira.ExportAsync(id, request, cancellationToken)))
+            .RequirePermission(Permissions.IssueManage)
+            .WithName("ExportIssueToJira")
+            .WithDescription("Creates the issue's Jira ticket once (a second call returns it). 503 jira_not_configured when the Host has no Jira settings.");
+
         group.MapPost("/issues/{id:guid}/evidence/photos", async (
                 Guid id, Guid photoId, int expectedVersion, HttpRequest request, IssueService issues, CancellationToken cancellationToken) =>
                 Results.Ok(await issues.UploadPhotoAsync(id, photoId, expectedVersion, request, cancellationToken)))

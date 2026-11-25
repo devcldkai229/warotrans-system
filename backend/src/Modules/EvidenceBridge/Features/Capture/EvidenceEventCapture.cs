@@ -41,7 +41,10 @@ internal sealed class EvidenceEventCapture(
         IIntegrationEventHandler<RobotConnectivityChanged>,
         IIntegrationEventHandler<RobotErrorReported>,
         IIntegrationEventHandler<RobotBatteryLow>,
-        IIntegrationEventHandler<RobotGatewayRestarted>
+        IIntegrationEventHandler<RobotGatewayRestarted>,
+        IIntegrationEventHandler<LabFaultInjected>,
+        IIntegrationEventHandler<LabFaultCleared>,
+        IIntegrationEventHandler<HandoverScanRejected>
 {
     private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(10);
 
@@ -167,6 +170,34 @@ internal sealed class EvidenceEventCapture(
 
     public Task HandleAsync(RobotGatewayRestarted e, CancellationToken ct = default) =>
         Guarded(e, () => Task.FromResult(RobotEnvelope(e, EvidenceEventTypes.RobotGatewayRestarted, e.RobotId, e.RobotCode, null)), ct);
+
+    public Task HandleAsync(LabFaultInjected e, CancellationToken ct = default) =>
+        Guarded(e, async () => await LabEnvelopeAsync(e, EvidenceEventTypes.LabFaultInjected, e.TransportRequestId, e.RobotId,
+            e.RobotCode, e.ScenarioId, ct), ct);
+
+    public Task HandleAsync(LabFaultCleared e, CancellationToken ct = default) =>
+        Guarded(e, async () => await LabEnvelopeAsync(e, EvidenceEventTypes.LabFaultCleared, e.TransportRequestId, e.RobotId,
+            e.RobotCode, e.ScenarioId, ct), ct);
+
+    public Task HandleAsync(HandoverScanRejected e, CancellationToken ct = default) =>
+        Guarded(e, async () =>
+            await JobAsync(e.JobId, ct) is { TransportRequestId: not null } job
+                ? Envelope(e, EvidenceEventTypes.HandoverScanRejected, job, jobStepId: e.JobStepId, robotId: e.RobotId,
+                    robotCode: await RobotCodeAsync(e.RobotId, ct), status: "MISMATCH")
+                : null, ct);
+
+    /// <summary>A lab fault goes to the request's journal when the tester named one, else under the robot's open run.</summary>
+    private async Task<EvidenceEnvelope?> LabEnvelopeAsync(
+        IIntegrationEvent e, string type, Guid? requestId, Guid? robotId, string? robotCode, string scenarioId, CancellationToken ct)
+    {
+        if (requestId is { } id)
+        {
+            return Envelope(e, type, new JobRef(Guid.Empty, string.Empty, id, await RequestCodeAsync(id, ct)),
+                robotId: robotId, robotCode: robotCode, status: scenarioId, noJob: true);
+        }
+
+        return robotCode is null ? null : RobotEnvelope(e, type, robotId ?? Guid.Empty, robotCode, scenarioId);
+    }
 
     private async Task Guarded(IIntegrationEvent e, Func<Task<EvidenceEnvelope?>> build, CancellationToken ct)
     {

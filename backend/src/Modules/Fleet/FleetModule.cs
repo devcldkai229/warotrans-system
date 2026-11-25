@@ -116,6 +116,10 @@ public static class FleetModule
         services.AddHostedService<TrafficGrantHostedService>();
         services.AddHostedService<SemanticPolicyBootstrapHostedService>();
         services.AddHostedService<TrafficCoordinatorLeaseHostedService>();
+        // Fault Injection Lab (test benches only; Lab:Enabled).
+        services.Configure<Features.Lab.LabOptions>(configuration.GetSection(Features.Lab.LabOptions.SectionName));
+        services.AddSingleton<Features.Lab.LabInjectionService>();
+        services.AddHostedService<Features.Lab.LabExpiryHostedService>();
 
         return services;
     }
@@ -146,6 +150,8 @@ public static class FleetModule
         group.MapGetTrafficSnapshot();
         WaroTrans.Fleet.Features.GetSemanticLayers.Endpoint.MapGetSemanticLayers(group);
         group.MapTrafficOperatorEndpoints();
+        var lab = endpoints.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Features.Lab.LabOptions>>();
+        Features.Lab.LabEndpoints.MapLab(endpoints, lab.Value.Enabled);
         return endpoints;
     }
 }

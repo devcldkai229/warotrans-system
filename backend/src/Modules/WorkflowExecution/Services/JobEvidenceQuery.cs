@@ -64,6 +64,13 @@ internal sealed class JobEvidenceQuery(WorkflowExecutionDbContext db) : IJobEvid
         return await LoadAsync(db.Jobs.Where(j => jobIds.Contains(j.Id)), cancellationToken);
     }
 
+    public async Task<IReadOnlyList<JobEvidenceContext>> GetUnfinishedJobsAsync(CancellationToken cancellationToken = default)
+    {
+        var finished = new[] { Enums.JobStatus.COMPLETED, Enums.JobStatus.FAILED, Enums.JobStatus.CANCELLED, Enums.JobStatus.CREATED };
+        var withRequest = db.JobContainers.Where(c => c.TransportRequestId != null).Select(c => c.JobId);
+        return await LoadAsync(db.Jobs.Where(j => !finished.Contains(j.Status) && withRequest.Contains(j.Id)), cancellationToken);
+    }
+
     private async Task<IReadOnlyList<JobEvidenceContext>> LoadAsync(
         IQueryable<Entities.Job> jobs, CancellationToken cancellationToken)
     {

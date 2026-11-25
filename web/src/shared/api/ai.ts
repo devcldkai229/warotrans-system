@@ -10,7 +10,7 @@ export type CaseStatus =
   | 'DETECTED' | 'INVESTIGATING' | 'NEEDS_MORE_EVIDENCE' | 'ANALYSIS_INCOMPLETE' | 'DIAGNOSED' | 'TICKETED'
   | 'IN_RESOLUTION' | 'VERIFYING' | 'CLOSED' | 'REOPENED' | 'DISMISSED'
 export type LoopStage = 'DETECT' | 'INVESTIGATE' | 'DIAGNOSE' | 'TICKET' | 'RESOLVE' | 'VERIFY' | 'CLOSED'
-export type CaseAction = 'INVESTIGATE' | 'ASK' | 'CREATE_TICKET' | 'START_RESOLUTION' | 'VERIFY' | 'DISMISS' | 'REOPEN'
+export type CaseAction = 'INVESTIGATE' | 'ASK' | 'CREATE_TICKET' | 'PUSH_JIRA' | 'START_RESOLUTION' | 'VERIFY' | 'DISMISS' | 'REOPEN'
 
 export interface AuditEntry { at: string; actor: string; action: string; detail: string }
 
@@ -27,6 +27,9 @@ export interface AiCase {
   detector_codes: string[]
   occurrences: number
   issue_report_id: string | null
+  /** Jira ticket made from the IssueReport (code faults only). */
+  jira_key?: string | null
+  jira_url?: string | null
   version: number
   created_at: string
   updated_at: string
@@ -108,7 +111,9 @@ export interface CaseView {
   evidence: { items: EvidenceItem[]; series: Series[]; windowFrom: string; windowTo: string; robots: string[]; missing: string[]; clockQuality: string; manifestSha256: string }
 }
 
-export interface IssueProposal { action: 'CREATE_ISSUE_REPORT'; payload: Record<string, unknown>; caseVersion: number }
+export interface IssueProposal { action: 'CREATE_ISSUE_REPORT' | 'EXPORT_TO_JIRA'; payload: Record<string, unknown>; caseVersion: number }
+
+export interface JournalDetection { journalId: string; requestCode: string | null; detectors: { code: string; title: string; detail: string }[]; items: number; missing: string[]; caseId: string | null; status: string }
 
 const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
 
@@ -119,9 +124,13 @@ export const aiApi = {
   open: (scenarioId: string) => apiFetch<{ caseId: string; status: string }>(`${BASE}/cases`, json({ scenario_id: scenarioId, investigate: true })),
   investigate: (id: string) => apiFetch<{ caseId: string; status: string }>(`${BASE}/cases/${id}/investigate`, json({})),
   ask: (id: string, question: string) => apiFetch<ChatMessage>(`${BASE}/cases/${id}/chat`, json({ question })),
-  propose: (id: string) => apiFetch<IssueProposal>(`${BASE}/cases/${id}/actions/propose`, json({})),
+  propose: (id: string, action: IssueProposal['action'] = 'CREATE_ISSUE_REPORT') =>
+    apiFetch<IssueProposal>(`${BASE}/cases/${id}/actions/propose?action=${action}`, json({})),
+  /** Rules on a real journal (the caller's robot scope); opens a case and starts the AI. force: open one even without a finding. */
+  fromJournal: (journalId: string, force = true) =>
+    apiFetch<JournalDetection>(`${BASE}/cases/from-journal/${journalId}`, json({ investigate: true, force })),
   approve: (id: string, p: IssueProposal) => apiFetch<{ approvalId: string; expiresAt: string }>(`${BASE}/cases/${id}/actions/approve`, json({ action: p.action, payload: p.payload, case_version: p.caseVersion })),
-  execute: (id: string, approvalId: string, payload: Record<string, unknown>) => apiFetch<{ caseId: string; status: string; issueReportId: string }>(`${BASE}/cases/${id}/actions/${approvalId}/execute`, json({ payload })),
+  execute: (id: string, approvalId: string, payload: Record<string, unknown>) => apiFetch<{ caseId: string; status: string; issueReportId: string; jiraKey?: string | null; jiraUrl?: string | null }>(`${BASE}/cases/${id}/actions/${approvalId}/execute`, json({ payload })),
   startResolution: (id: string) => apiFetch<CaseView>(`${BASE}/cases/${id}/resolution`, json({})),
   verify: (id: string, body: { method: string; passed: boolean; notes: string; evidence: string[] }) => apiFetch<CaseView>(`${BASE}/cases/${id}/verify`, json(body)),
   dismiss: (id: string, reason: string) => apiFetch<CaseView>(`${BASE}/cases/${id}/dismiss`, json({ reason })),

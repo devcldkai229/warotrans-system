@@ -75,7 +75,9 @@ public sealed record IssueDto(
     bool RemovedFromJob = false,
     ContainerHoldSnapshot? ContainerHold = null,
     IReadOnlyList<string>? ContainerOutcomes = null,
-    string? ContainerOutcome = null)
+    string? ContainerOutcome = null,
+    string? JiraKey = null,
+    string? JiraUrl = null)
 {
     public static IssueDto From(IssueReport i, IReadOnlyList<string> transitions, ContainerHoldSnapshot? hold = null) => new(
         i.Id,
@@ -112,7 +114,9 @@ public sealed record IssueDto(
         hold,
         // What resolving it may do with the container it holds: chosen by the problem.
         i.IssueType == Enums.IssueType.CONTAINER ? ContainerProblemCodes.OutcomesFor(i.ProblemCode) : [],
-        i.ContainerOutcome);
+        i.ContainerOutcome,
+        i.Metadata.TryGetValue("jiraKey", out var jiraKey) && jiraKey.IsString ? jiraKey.AsString : null,
+        i.Metadata.TryGetValue("jiraUrl", out var jiraUrl) && jiraUrl.IsString ? jiraUrl.AsString : null);
 }
 
 /// <param name="CountsByType">Issues per type under every other filter (status, severity, reported range), for the type tabs.

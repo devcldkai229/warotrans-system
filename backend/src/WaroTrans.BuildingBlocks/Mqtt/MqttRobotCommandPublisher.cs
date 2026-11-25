@@ -16,7 +16,7 @@ namespace WaroTrans.BuildingBlocks.Mqtt;
 /// </summary>
 public sealed class MqttRobotCommandPublisher
     : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher, IMqttTrafficEpochPublisher,
-        IAsyncDisposable
+        IMqttLabPublisher, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -177,6 +177,28 @@ public sealed class MqttRobotCommandPublisher
 
             await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("Published MQTT traffic epoch {Epoch} coordinator={CoordinatorId}", message.Epoch, message.CoordinatorId);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task PublishLabAsync(string robotCode, object body, CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.Lab(_options.Value.TopicPrefix, robotCode);
+        var json = JsonSerializer.Serialize(body, JsonOptions);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogWarning("Lab message to {RobotCode}: {Json}", robotCode, json);
         }
         finally
         {
