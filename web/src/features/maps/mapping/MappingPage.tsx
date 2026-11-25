@@ -25,6 +25,7 @@ import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
 import { MappingCanvas } from './MappingCanvas'
+import { canRescan, rescanMapping } from './rescan'
 import {
   decodeGrid,
   formatElapsed,
@@ -127,6 +128,12 @@ export function MappingPage() {
 
   // Trail of where the robot drove (client side, this page view only).
   const [trail, setTrail] = useState<MappingPose[]>([])
+  // "Scan again" moves this page to a new session: start from an empty view.
+  useEffect(() => {
+    setGrid(null)
+    setGridError(null)
+    setTrail([])
+  }, [sessionId])
   const pose = preview?.pose ?? null
   useEffect(() => {
     if (!pose) return
@@ -206,6 +213,24 @@ export function MappingPage() {
     onMutate: () => driveStop(),
     onSuccess: refresh,
   })
+
+  // Scan again: throw the map away, the robot restarts slam_toolbox where it stands, a new session opens.
+  const rescan = useMutation({
+    mutationFn: () => {
+      if (!session) throw new Error('no session')
+      return rescanMapping(session)
+    },
+    onMutate: () => driveStop(),
+    onSuccess: (next) => {
+      queryClient.invalidateQueries({ queryKey: ['mapping'] })
+      navigate(`/configure/facility/mapping/${next.id}`, { replace: true })
+    },
+  })
+  const askRescan = () => {
+    if (window.confirm(t('Scan again from the start? The map built so far is thrown away; the new map starts where the robot stands now.'))) {
+      rescan.mutate()
+    }
+  }
 
   // Saved while this page watched: open the new draft in the editor.
   const sawSaving = useRef(false)
@@ -327,7 +352,7 @@ export function MappingPage() {
           </div>
         ) : null}
 
-        {canWrite && (actions.canFinish || actions.canCancel) ? (
+        {canWrite && (actions.canFinish || actions.canCancel || rescan.isPending) ? (
           <section className="mt-auto flex flex-col gap-3 border-t border-outline-soft pt-4">
             {actions.canFinish ? (
               <>
@@ -345,6 +370,11 @@ export function MappingPage() {
                 </Button>
               </>
             ) : null}
+            {canRescan(status) ? (
+              <Button variant="outline" disabled={rescan.isPending} onClick={askRescan}>
+                <Icon name="refresh" size={15} /> {rescan.isPending ? t('Restarting the scan…') : t('Scan again')}
+              </Button>
+            ) : null}
             {actions.canCancel ? (
               <Button
                 variant="ghost"
@@ -354,12 +384,18 @@ export function MappingPage() {
                 }}
               >{t('Cancel mapping')}</Button>
             ) : null}
-            {finish.isError || cancel.isError ? (
-              <p className="text-sm text-red">{errorText(finish.error ?? cancel.error)}</p>
+            {finish.isError || cancel.isError || rescan.isError ? (
+              <p className="text-sm text-red">{errorText(finish.error ?? cancel.error ?? rescan.error)}</p>
             ) : null}
           </section>
         ) : null}
 
+        {actions.closed && canWrite && canRescan(status) ? (
+          <Button variant="primary" disabled={rescan.isPending || !session.robotOnline} onClick={askRescan}>
+            <Icon name="refresh" size={15} /> {rescan.isPending ? t('Restarting the scan…') : t('Scan again')}
+          </Button>
+        ) : null}
+        {actions.closed && rescan.isError ? <p className="text-sm text-red">{errorText(rescan.error)}</p> : null}
         {actions.closed ? (
           <Button variant="outline" onClick={() => navigate('/configure/facility')}>{t('Back to Facility')}</Button>
         ) : null}
