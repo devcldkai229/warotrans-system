@@ -469,12 +469,28 @@ public sealed class TrafficState
             return [];
         }
 
-        var needed = new HashSet<string>(StringComparer.Ordinal);
+        // What the other moving robots still need: their plans from where they are now (the part they drove is not
+        // needed any more; lab 2026-11-25: a robot waited for cells the other had long left), with the directions they
+        // drive through each resource.
+        var needed = new Dictionary<string, List<(double Ux, double Uy)>>(StringComparer.Ordinal);
         foreach (var other in _robots.Values)
         {
-            if (other.RobotId != robot.RobotId && other.ActiveCommandId is not null)
+            if (other.RobotId == robot.RobotId || other.ActiveCommandId is null || other.ProposedPath.IsDefaultOrEmpty)
             {
-                needed.UnionWith(SemanticReservation.WholePathResources(policy, other.ProposedPath));
+                continue;
+            }
+
+            var ahead = other.X is double ox && other.Y is double oy
+                ? TrimProposedPathFromPose(other.ProposedPath, ox, oy).Path
+                : other.ProposedPath;
+            foreach (var (rid, dirs) in SemanticReservation.WholePathHeadings(policy, ahead))
+            {
+                if (!needed.TryGetValue(rid, out var list))
+                {
+                    needed[rid] = list = [];
+                }
+
+                list.AddRange(dirs);
             }
         }
 
@@ -488,7 +504,7 @@ public sealed class TrafficState
         {
             var here = samples[i].Resources;
             var ids = here.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
-            if (here.Overlaps(needed)
+            if (MeetsAnotherRobot(here, SemanticReservation.SampleDirection(samples, i), needed)
                 || FindPriorWaiter(robot.RobotId, ids, request.Priority) is not null
                 || !CanAcquire(ids, robot.RobotId, out _, out _))
             {
@@ -504,6 +520,33 @@ public sealed class TrafficState
 
         return best;
     }
+
+    /// <summary>
+    /// Following another robot (both drive the same way through every shared cell: cos &gt; <see
+    /// cref="FollowMinCos"/>) is fine: the follower ends up behind it, and the cells the leader holds stay out of the
+    /// grant anyway (CanAcquire). Head-on, crossing, a zone, or a cell where the direction is unknown is a meeting.
+    /// </summary>
+    private static bool MeetsAnotherRobot(
+        HashSet<string> here, (double Ux, double Uy)? mine, Dictionary<string, List<(double Ux, double Uy)>> needed)
+    {
+        foreach (var rid in here)
+        {
+            if (!needed.TryGetValue(rid, out var theirs))
+            {
+                continue;
+            }
+
+            if (mine is not { } m || theirs.Count == 0 || !rid.StartsWith("cell:", StringComparison.Ordinal)
+                || theirs.Any(t => t.Ux * m.Ux + t.Uy * m.Uy <= FollowMinCos))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private const double FollowMinCos = 0.7;
 
     /// <summary>
     /// A robot holding part of its plan, re-evaluated (something was freed, or it asked again). The rest of the plan or

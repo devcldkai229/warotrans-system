@@ -285,6 +285,51 @@ public class SemanticPrefixGrantTests
     }
 
     [Fact]
+    public void Follower_takes_the_lane_the_leader_has_driven_off()
+    {
+        // Lab 2026-11-25 V024: the second robot waited for cells the first had long left, because the first robot's
+        // whole plan (from where it started) still counted as needed.
+        var s = LaneState();
+        var leader = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(1.19, 0.5, 1.19, 5.0)));
+        Assert.True(leader.Granted);
+        var behind = View(s, _leader).OccupiedResourceIds
+            .Where(rid => SemanticReservation.IsPhysicallyClearOfResources(_policy, 1.19, 3.5, [rid], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_leader, leader.Authority!.Seq + 1, 100, behind, 1.19, 3.5, true).Ok);
+
+        var follower = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(1.19, -1.0, 1.19, 4.5)));
+        Assert.True(follower.Granted);
+        var reach = follower.Authority!.ResourceIds
+            .Select(r => int.Parse(r.Split(':')[2], System.Globalization.CultureInfo.InvariantCulture)).Max() * 0.1;
+        Assert.True(reach > 2.0, $"follower only reaches y={reach}");
+        Assert.Empty(follower.Authority.ResourceIds.Intersect(View(s, _leader).OccupiedResourceIds));
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
+    public void Meeting_the_leader_head_on_after_it_moved_still_stops_before_its_path()
+    {
+        var s = LaneState();
+        var leader = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(1.19, 0.5, 1.19, 3.0)));
+        Assert.True(leader.Granted);
+        var behind = View(s, _leader).OccupiedResourceIds
+            .Where(rid => SemanticReservation.IsPhysicallyClearOfResources(_policy, 1.19, 1.5, [rid], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_leader, leader.Authority!.Seq + 1, 100, behind, 1.19, 1.5, true).Ok);
+
+        // Coming down the lane towards it: nothing of what the leader still drives may be granted.
+        var other = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(1.19, 7.0, 1.19, -1.0)));
+        var stillNeeded = SemanticReservation.WholePathResources(
+            s.SemanticPolicy!, Line(1.19, 1.5, 1.19, 3.0));
+        if (other.Granted)
+        {
+            Assert.Empty(other.Authority!.ResourceIds.Intersect(stillNeeded));
+        }
+
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
     public void A_turn_on_the_spot_reserves_the_full_disc_even_with_lane_rectangles()
     {
         var policy = new TrafficOptions
