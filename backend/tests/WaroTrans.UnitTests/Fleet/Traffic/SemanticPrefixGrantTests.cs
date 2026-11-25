@@ -335,6 +335,53 @@ public class SemanticPrefixGrantTests
     }
 
     [Fact]
+    public void A_follower_never_waits_right_against_a_robot_standing_beside_its_way()
+    {
+        // Sim V024 S5: R2 stood at PARKING-B about to leave south-east; R1 came down the column beside it, going the same
+        // way, and its grant ended with the bodies 0.15 m apart (no cell shared: same direction is not a meeting).
+        var options = new TrafficOptions
+        {
+            Mode = TrafficCoordinatorMode.Semantic,
+            EventLogCapacity = 256,
+            AuthorityTtlSec = 30,
+            LocalizationMarginMeters = 0.05,
+            SemanticPrefixGrant = true,
+            SemanticCellSizeMeters = 0.1,
+            SemanticHorizonMeters = 20.0,
+            SemanticPathToleranceMeters = 0.15
+        };
+        var s = new TrafficState(options, _clock);
+        s.BeginEpoch(100);
+        Assert.True(s.BindSemanticPolicy(options.ApplySemanticOverrides(_policy with { SingleOccupancyZones = [], NoStopZones = [] })).Ok);
+        s.CompleteReconciliation([]);
+
+        Assert.True(s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(-0.24, -1.19, 1.5, -3.0))).Granted);
+        var path = Line(-0.24, -0.17, -0.08, -0.67).AddRange(Line(-0.08, -0.67, 1.8, -3.2).Skip(1));
+        var follower = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, path));
+
+        if (follower.Granted)
+        {
+            // The furthest point of its plan where its whole body is inside the grant: where it can come to stand.
+            var held = follower.Authority!.ResourceIds.ToHashSet(StringComparer.Ordinal);
+            var policy = s.SemanticPolicy!;
+            var closest = double.PositiveInfinity;
+            foreach (var p in path)
+            {
+                var body = new HashSet<string>(StringComparer.Ordinal);
+                SemanticReservation.DiscCells(p.X, p.Y, policy.FootprintRadiusMeters, policy.EffectiveCellSize, body);
+                if (body.All(held.Contains))
+                {
+                    closest = Math.Min(closest, Math.Sqrt(Math.Pow(p.X + 0.24, 2) + Math.Pow(p.Y + 1.19, 2)));
+                }
+            }
+
+            Assert.True(closest >= 0.60 - 0.15, $"may stand {closest:F2} m from the standing robot's centre");
+        }
+
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
     public void Meeting_the_leader_head_on_after_it_moved_still_stops_before_its_path()
     {
         var s = LaneState();

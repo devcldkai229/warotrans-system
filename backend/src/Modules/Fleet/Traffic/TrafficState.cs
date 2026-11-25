@@ -494,6 +494,13 @@ public sealed class TrafficState
             }
         }
 
+        // Where the other robots stand now: the grant must not end with this robot's body right against one of them
+        // (sim V024 S5: a follower stopped 0.15 m behind a robot parked on its way; the cells did not overlap).
+        var others = _robots.Values
+            .Where(o => o.RobotId != robot.RobotId && o.X is not null && o.Y is not null)
+            .Select(o => (X: o.X!.Value, Y: o.Y!.Value))
+            .ToList();
+
         var zonesAtStart = samples[0].Resources
             .Where(rid => rid.StartsWith("zone:", StringComparison.Ordinal))
             .ToHashSet(StringComparer.Ordinal);
@@ -512,7 +519,8 @@ public sealed class TrafficState
             }
 
             held.UnionWith(here);
-            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart))
+            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart)
+                && others.All(o => Math.Sqrt(Math.Pow(samples[i].X - o.X, 2) + Math.Pow(samples[i].Y - o.Y, 2)) >= WaitClearanceMeters))
             {
                 best = held.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
             }
@@ -547,6 +555,9 @@ public sealed class TrafficState
     }
 
     private const double FollowMinCos = 0.7;
+
+    /// <summary>Centre to centre: a step-by-step grant never ends closer to another robot (about 0.25 m body to body).</summary>
+    private const double WaitClearanceMeters = 0.60;
 
     /// <summary>
     /// A robot holding part of its plan, re-evaluated (something was freed, or it asked again). The rest of the plan or
