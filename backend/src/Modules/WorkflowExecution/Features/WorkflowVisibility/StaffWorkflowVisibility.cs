@@ -25,9 +25,10 @@ public static class StaffWorkflowVisibility
     public static IQueryable<Workflow> Visible(this IQueryable<Workflow> workflows, ICurrentUser? user) =>
         IsLimited(user) ? workflows.Where(w => w.StaffVisible) : workflows;
 
-    /// <summary>Jobs the caller may see: for Staff, only Jobs of a workflow shown to Staff.</summary>
+    /// <summary>Jobs the caller may see: for Staff, every Job except those of a workflow hidden from Staff (a Job whose
+    /// workflow row is missing stays visible: only an explicit hide removes it).</summary>
     public static IQueryable<Job> Visible(this IQueryable<Job> jobs, WorkflowExecutionDbContext db, ICurrentUser? user) =>
-        IsLimited(user) ? jobs.Where(j => db.Workflows.Any(w => w.Id == j.WorkflowId && w.StaffVisible)) : jobs;
+        IsLimited(user) ? jobs.Where(j => !db.Workflows.Any(w => w.Id == j.WorkflowId && !w.StaffVisible)) : jobs;
 
     /// <summary>404 for Staff on a hidden workflow, so its existence is not revealed.</summary>
     public static void EnsureVisible(Workflow workflow, ICurrentUser? user)
@@ -40,7 +41,7 @@ public static class StaffWorkflowVisibility
 
     public static async Task EnsureJobVisibleAsync(WorkflowExecutionDbContext db, Guid jobId, Guid workflowId, ICurrentUser? user, CancellationToken cancellationToken)
     {
-        if (IsLimited(user) && !await db.Workflows.AnyAsync(w => w.Id == workflowId && w.StaffVisible, cancellationToken))
+        if (IsLimited(user) && await db.Workflows.AnyAsync(w => w.Id == workflowId && !w.StaffVisible, cancellationToken))
         {
             throw new NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
         }
