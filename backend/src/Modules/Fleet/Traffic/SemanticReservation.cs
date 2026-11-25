@@ -510,7 +510,8 @@ public static class SemanticReservation
     /// A robot held at this sample may stop here: it ends up within the reserve radius of it, which must touch no
     /// NO_STOP zone and no single-occupancy zone it was not already in (waiting inside one would block it for nothing).
     /// </summary>
-    public static bool MayWaitAt(SemanticTrafficPolicy policy, double x, double y, IReadOnlySet<string> zonesAtStart)
+    public static bool MayWaitAt(
+        SemanticTrafficPolicy policy, double x, double y, IReadOnlySet<string> zonesAtStart, double mouthClearance = 0)
     {
         var radius = policy.ReserveRadiusMeters;
         if (!policy.NoStopZones.IsDefaultOrEmpty && policy.NoStopZones.Any(z => DiscHitsZone(x, y, radius, z.Ring)))
@@ -518,7 +519,9 @@ public static class SemanticReservation
             return false;
         }
 
-        var zoneRadius = policy.ZoneReserveRadiusMeters;
+        // A zone it does not hold is kept this much further away: a robot that waits right at the mouth of a locked zone
+        // stands in the way out of the robot inside it, which it waits for (sim V024: both waited for each other).
+        var zoneRadius = policy.ZoneReserveRadiusMeters + Math.Max(0, mouthClearance);
         return policy.SingleOccupancyZones.IsDefaultOrEmpty
                || policy.SingleOccupancyZones.All(z =>
                    zonesAtStart.Contains($"zone:{z.Code}") || !DiscHitsZone(x, y, zoneRadius, z.Ring));

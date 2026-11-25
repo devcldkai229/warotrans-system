@@ -195,6 +195,83 @@ public class SemanticPrefixGrantTests
         AssertNoSharedResource(s);
     }
 
+    private TrafficState FineState()
+    {
+        var options = new TrafficOptions
+        {
+            Mode = TrafficCoordinatorMode.Semantic,
+            EventLogCapacity = 256,
+            AuthorityTtlSec = 30,
+            LocalizationMarginMeters = 0.05,
+            SemanticPrefixGrant = true,
+            SemanticCellSizeMeters = 0.1,
+            SemanticHorizonMeters = 20.0,
+            SemanticPathToleranceMeters = 0.15
+        };
+        var s = new TrafficState(options, _clock);
+        s.BeginEpoch(100);
+        Assert.True(s.BindSemanticPolicy(options.ApplySemanticOverrides(_policy with { NoStopZones = [] })).Ok);
+        s.CompleteReconciliation([]);
+        return s;
+    }
+
+    /// <summary>Drives a robot along a plan and reports it standing at the end (it keeps only its body).</summary>
+    private static void DriveAndStand(TrafficState s, Guid robot, Guid command, ImmutableArray<SemanticPlanPose> plan)
+    {
+        var granted = s.AcquireSemanticPlan(new SemanticPlanProposeRequest(Guid.NewGuid(), robot, robot.ToString("N")[..6],
+            s.SemanticPolicy!.SemanticMapFingerprint, 1, plan, null, null, null, PlanHash: "h1", CommandId: command));
+        Assert.True(granted.Granted);
+        var end = plan[^1];
+        var left = View(s, robot).OccupiedResourceIds
+            .Where(r => r.StartsWith("zone:", StringComparison.Ordinal)
+                ? false
+                : SemanticReservation.IsPhysicallyClearOfResources(s.SemanticPolicy!, end.X, end.Y, [r], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(robot, granted.Authority!.Seq + 1, 100, left, end.X, end.Y, true).Ok);
+    }
+
+    [Theory]
+    [InlineData(5.68)]
+    [InlineData(5.70)]
+    public void A_robot_inside_a_zone_passes_a_robot_that_stands_waiting_for_that_zone(double standX)
+    {
+        // Sim V024 S3: R2 stood at EP-SHELF-C waiting for ZONE-CENTER; R1 held ZONE-CENTER and could not turn into lane
+        // BOUND-1 because its band touched R2's turning circle (bodies ~0.3 m apart). Both waited 3 minutes.
+        var s = FineState();
+        DriveAndStand(s, _leader, _cmd1, Line(6.3, 1.2, 6.3, 0.2));
+        Assert.Contains(Zone, View(s, _leader).OccupiedResourceIds);
+        DriveAndStand(s, _follower, _cmd2, Line(standX, -2.0, standX, -0.6));
+
+        // R2 wants to drive through the zone: it waits for R1 (too close to the zone for a useful step-by-step grant).
+        var r2 = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 2, Line(standX, -0.6, 7.5, -0.6)));
+        Assert.False(r2.Granted);
+
+        // R1 leaves the zone southwards, past R2.
+        var leave = Line(6.3, 0.2, 6.3, -3.0);
+        var r2Holds = View(s, _follower).OccupiedResourceIds;
+        Assert.NotEmpty(SemanticReservation.CollectResources(s.SemanticPolicy!, leave).Intersect(r2Holds)); // the conflict
+        var result = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 2, leave));
+        Assert.True(result.Granted, $"R1 refused: {result.Reason}");
+        Assert.Empty(result.Authority!.ResourceIds.Intersect(View(s, _follower).OccupiedResourceIds));
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
+    public void A_robot_waiting_for_a_zone_leaves_its_mouth_free_for_the_robot_inside()
+    {
+        // Sim V024 sweep: a step-by-step grant ended right at the mouth of the zone the robot waited for, on the way out
+        // of the robot inside it: each waited for the other.
+        var s = FineState();
+        DriveAndStand(s, _leader, _cmd1, Line(6.3, 1.2, 6.3, 0.2));
+        DriveAndStand(s, _follower, _cmd2, Line(4.4, -2.0, 4.4, -0.6));
+        var r2 = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 2, Line(4.4, -0.6, 7.5, -0.6)));
+        Assert.True(r2.Granted); // a step towards the zone
+
+        var result = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 2, Line(6.3, 0.2, 6.3, -3.0)));
+        Assert.True(result.Granted, $"R1 refused: {result.Reason}");
+        AssertNoSharedResource(s);
+    }
+
     [Fact]
     public void A_grant_too_short_to_be_useful_is_not_given()
     {

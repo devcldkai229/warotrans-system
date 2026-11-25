@@ -347,6 +347,16 @@ public sealed class TrafficState
             request.JobStepId,
             request.JobId);
 
+        if (WouldCreateWaitForCycle(robot.RobotId, resources)
+            && NarrowPastStillRobots(robot, request, resources) is { } passBy)
+        {
+            // The cycle only closes through robots that cannot move (no grant): pass them in the narrow band instead of
+            // waiting for each other (sim V024 S3: one robot stood at EP-SHELF-C waiting for ZONE-CENTER, the other held
+            // ZONE-CENTER and could not turn into lane BOUND-1 past the first one's turning circle; 3 minutes).
+            Log($"grant-narrow-past-still:{robot.RobotId}");
+            resources = passBy;
+        }
+
         if (WouldCreateWaitForCycle(robot.RobotId, resources))
         {
             robot.WaitingReason = TrafficWaitingReason.DeadlockRisk;
@@ -523,7 +533,7 @@ public sealed class TrafficState
             }
 
             held.UnionWith(here);
-            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart)
+            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart, ZoneMouthClearanceMeters)
                 && others.All(o => Math.Sqrt(Math.Pow(samples[i].X - o.X, 2) + Math.Pow(samples[i].Y - o.Y, 2)) >= WaitClearanceMeters))
             {
                 best = held.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
@@ -559,6 +569,9 @@ public sealed class TrafficState
     }
 
     private const double FollowMinCos = 0.7;
+
+    /// <summary>Extra room a step-by-step grant leaves before a locked zone it does not hold (the way out of it).</summary>
+    private const double ZoneMouthClearanceMeters = 0.30;
 
     /// <summary>Centre to centre: a step-by-step grant never ends closer to another robot (about 0.25 m body to body).</summary>
     private const double WaitClearanceMeters = 0.60;
@@ -915,6 +928,42 @@ public sealed class TrafficState
     }
 
     /// <summary>A robot that stands still: no grant, no command (idle, parked, or held at a service stop).</summary>
+    /// <summary>
+    /// The plan in the narrow band (no drift room: the robot gate stops a robot that drifts out of it), when that band is
+    /// free now, closes no wait-for cycle, jumps no prior waiter, and every robot holding something of the full band
+    /// cannot move: it has no grant (it stands, or waits for one). Null otherwise.
+    /// </summary>
+    private ImmutableArray<string>? NarrowPastStillRobots(
+        RobotRuntime robot, SemanticPlanProposeRequest request, ImmutableArray<string> full)
+    {
+        if (_semantic is null || _semantic.UsesZoneChain)
+        {
+            return null;
+        }
+
+        var holders = full
+            .SelectMany(rid => _holders.TryGetValue(rid, out var h) ? h : [])
+            .Where(h => h != robot.RobotId)
+            .Distinct()
+            .ToList();
+        if (holders.Count == 0 || !holders.All(CannotMove))
+        {
+            return null;
+        }
+
+        var narrow = SemanticReservation.CollectResources(_semantic, request.Poses, narrow: true);
+        return CanAcquire(narrow, robot.RobotId, out _, out _)
+               && FindPriorWaiter(robot.RobotId, narrow, request.Priority) is null
+               && !WouldCreateWaitForCycle(robot.RobotId, narrow)
+            ? narrow
+            : null;
+    }
+
+    /// <summary>No grant: its gate is shut, it stands (parked, at a stop, or waiting for traffic).</summary>
+    private bool CannotMove(Guid robotId) =>
+        _robots.TryGetValue(robotId, out var r) && r.Authority is null
+        && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Waiting;
+
     private bool StandsStill(Guid robotId) =>
         _robots.TryGetValue(robotId, out var r) && r.Authority is null && r.ActiveCommandId is null
         && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService;
