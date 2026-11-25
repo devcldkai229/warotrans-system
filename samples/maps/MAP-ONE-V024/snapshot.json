@@ -508,10 +508,10 @@
             "storage_location_code": null
         },
         {
-            "x": 0.548,
-            "y": -1.558,
+            "x": -0.3,
+            "y": -1.68,
             "id": "459e3cbc-760a-4137-97dc-2ed275bfeb5e",
-            "yaw": -1.5707963267948966,
+            "yaw": 0,
             "code": "EP-QUEUE",
             "name": "QUEUE",
             "is_enabled": true,
@@ -583,7 +583,7 @@
             "storage_location_code": null
         }
     ],
-    "exportedAt": "2026-11-25T09:23:50.299474+00:00",
+    "exportedAt": "2026-11-25T13:44:37.215256+00:00",
     "mapVersion": {
         "id": "6a50f506-a5f9-43ba-a1fe-5de98fbd1bb7",
         "code": "MAP-ONE-V024",

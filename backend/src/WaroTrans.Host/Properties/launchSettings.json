@@ -46,13 +46,11 @@
         "Traffic__SemanticCellSizeMeters": "0.10",
         "Traffic__SemanticPathToleranceMeters": "0.15",
         "Traffic__RequireCoordinatorLease": "true",
-        "Traffic__RobotHomeEndpoints__RBT-001": "EP-PARKING-A",
-        "Traffic__RobotHomeEndpoints__RBT-002": "EP-PARKING-B",
         "FleetIdle__AutoReturnToPark": "true",
         "FleetIdle__IdleSeconds": "3",
         "FleetIdle__FallbackEndpointCodes": "EP-QUEUE",
-        "FleetIdle__GoalQueueEndpoints": "EP-INBOUND=EP-QUEUE,EP-OUTBOUND=EP-QUEUE",
-        "FleetIdle__GoalCorridors": "EP-INBOUND=1.80,-3.95,2.75,-3.00;EP-OUTBOUND=-0.40,-3.95,0.45,-3.00",
+        "FleetIdle__GoalQueueEndpoints": "EP-INBOUND=EP-QUEUE,EP-OUTBOUND=EP-QUEUE,EP-QUALITY-INSPECTION=EP-QUEUE",
+        "FleetIdle__GoalCorridors": "EP-INBOUND=1.80,-3.95,2.75,-3.00;EP-OUTBOUND=-0.40,-3.95,0.45,-3.00;EP-QUALITY-INSPECTION=0.25,-0.95,0.75,-0.30",
         "Logging__LogLevel__Default": "Information",
         "Logging__LogLevel__Microsoft.EntityFrameworkCore": "Warning"
       }
