@@ -17,6 +17,7 @@ public sealed class WorkflowExecutionDbContext(DbContextOptions<WorkflowExecutio
     internal DbSet<StockHandover> StockHandovers => Set<StockHandover>();
     public DbSet<JobRobotAssignment> JobRobotAssignments => Set<JobRobotAssignment>();
     public DbSet<JobRecoveryCase> JobRecoveryCases => Set<JobRecoveryCase>();
+    public DbSet<CargoTransferRecord> CargoTransferRecords => Set<CargoTransferRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

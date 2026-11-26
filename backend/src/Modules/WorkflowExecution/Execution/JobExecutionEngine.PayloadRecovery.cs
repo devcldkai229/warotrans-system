@@ -303,6 +303,98 @@ public sealed partial class JobExecutionEngine
         return recovery;
     }
 
+    // ------------------------------------------------------------------ custody (who holds each container)
+
+    /// <summary>
+    /// Who holds each container of the case now: the latest custody record, else the failed robot (the cargo has not been
+    /// touched since the robot failed).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, (string Type, Guid? Id)>> RecoveryCustodyAsync(
+        JobRecoveryCase recovery, CancellationToken cancellationToken)
+    {
+        var records = await db.CargoTransferRecords.AsNoTracking()
+            .Where(r => r.RecoveryCaseId == recovery.Id)
+            .OrderBy(r => r.ConfirmedAt)
+            .ToListAsync(cancellationToken);
+        var custody = recovery.ContainerIds.ToDictionary(id => id, _ => (CustodyTypes.Robot, recovery.FromRobotId));
+        foreach (var record in records.Where(r => custody.ContainsKey(r.ContainerId)))
+            custody[record.ContainerId] = (record.ToCustodyType, record.ToCustodyId);
+        return custody;
+    }
+
+    /// <summary>
+    /// "Unload for recovery": staff scanned containers off the failed robot and now hold them (STAFF) or left them at a
+    /// recovery point (RECOVERY_STATION). The robot must stand still. Some containers may stay on it; the second robot
+    /// takes every one later, wherever it is. Warehouse stock does not change: the cargo is still in transit.
+    /// </summary>
+    public async Task<JobRecoveryCase> UnloadRecoveryCargoAsync(
+        Guid jobId, RecoveryCaseAccess access, IReadOnlyList<HandoverStopScan> scans, string holder, Guid? endpointId, string? note,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        EnsureRecoveryOwner(recovery, access);
+        var holderType = (holder ?? string.Empty).Trim().ToUpperInvariant();
+        if (!CustodyTypes.Holders.Contains(holderType))
+            throw new DomainValidationException("Say who holds the cargo now: STAFF or RECOVERY_STATION.", "recovery_holder_invalid");
+        if (holderType == CustodyTypes.RecoveryStation && endpointId is null)
+            throw new DomainValidationException("Say which recovery point the cargo was left at.", "recovery_holder_invalid");
+        if (RecoveryRequiresSourceSecured && recovery.Phase is not null && recovery.SourceSecuredAt is null)
+            throw new ConflictException("A technician has to confirm the failed robot is secured first.", "recovery_source_not_secured");
+
+        var robot = recovery.FromRobotId is { } fromId ? await fleet.GetRobotAsync(fromId, cancellationToken) : null;
+        if (robot is { IsOnline: true, MotionHeld: false })
+            throw new ConflictException($"Robot {robot.Code} is not holding still. Stop it before taking cargo off.", "robot_not_stopped");
+
+        var custody = await RecoveryCustodyAsync(recovery, cancellationToken);
+        var onRobot = custody.Where(c => c.Value.Type == CustodyTypes.Robot && c.Value.Id == recovery.FromRobotId).Select(c => c.Key).ToHashSet();
+        var ids = (scans ?? []).Select(scan => scan.ContainerId).ToHashSet();
+        if (ids.Count == 0 || !ids.IsSubsetOf(onRobot))
+            throw new DomainValidationException("Scan only containers still on the failed robot.", "recovery_containers_mismatch");
+        await VerifyContainerScansAsync(ids, scans, cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var holderId = holderType == CustodyTypes.Staff ? access.Actor : endpointId;
+        foreach (var containerId in ids)
+        {
+            var key = $"{recovery.Id:N}:{containerId:N}:unload";
+            if (await db.CargoTransferRecords.AnyAsync(r => r.IdempotencyKey == key, cancellationToken))
+                continue;
+            db.CargoTransferRecords.Add(new CargoTransferRecord
+            {
+                Id = Guid.NewGuid(), RecoveryCaseId = recovery.Id, JobId = job.Id, ContainerId = containerId,
+                FromCustodyType = CustodyTypes.Robot, FromCustodyId = recovery.FromRobotId,
+                ToCustodyType = holderType, ToCustodyId = holderId, TransferEndpointId = endpointId,
+                ConfirmedBy = access.Actor, ConfirmedAt = now, IdempotencyKey = key,
+                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()[..Math.Min(note.Trim().Length, 500)]
+            });
+        }
+
+        recovery.Version++;
+        await SaveAndPublishAsync(cancellationToken, transaction);
+        logger.LogInformation("Job {JobNo}: {Count} container(s) unloaded from the failed robot to {Holder}", job.JobNo, ids.Count, holderType);
+        return recovery;
+    }
+
+    /// <summary>The transfer to the second robot: one custody record per container, from wherever it was.</summary>
+    private async Task RecordLoadOnRecoveryRobotAsync(
+        JobRecoveryCase recovery, Guid target, Guid? confirmedBy, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var custody = await RecoveryCustodyAsync(recovery, cancellationToken);
+        foreach (var (containerId, from) in custody)
+        {
+            var key = $"{recovery.Id:N}:{containerId:N}:load";
+            if (await db.CargoTransferRecords.AnyAsync(r => r.IdempotencyKey == key, cancellationToken))
+                continue;
+            db.CargoTransferRecords.Add(new CargoTransferRecord
+            {
+                Id = Guid.NewGuid(), RecoveryCaseId = recovery.Id, JobId = recovery.JobId, ContainerId = containerId,
+                FromCustodyType = from.Type, FromCustodyId = from.Id, ToCustodyType = CustodyTypes.Robot, ToCustodyId = target,
+                TransferEndpointId = recovery.RecoveryEndpointId, ConfirmedBy = confirmedBy, ConfirmedAt = now, IdempotencyKey = key
+            });
+        }
+    }
+
     // ------------------------------------------------------------------ recovery points
 
     /// <summary>

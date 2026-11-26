@@ -64,7 +64,11 @@ public sealed record EvacuateRecoverySourceRequest(Guid CaseId, int Version, Gui
 
 public sealed record SecureRecoverySourceRequest(Guid CaseId, int Version, string? Note);
 
-public sealed record RecoveryContainerDto(Guid ContainerId, string? Barcode);
+/// <param name="HolderType">Who holds it now: ROBOT (the failed one, or the second after the transfer), STAFF or RECOVERY_STATION.</param>
+public sealed record RecoveryContainerDto(Guid ContainerId, string? Barcode, string HolderType = "ROBOT", Guid? HolderId = null);
+
+public sealed record UnloadRecoveryCargoRequest(
+    Guid CaseId, int Version, IReadOnlyList<HandoverStopScan> Scans, string Holder, Guid? EndpointId, string? Note);
 
 public sealed record RecoveryVersionRequest(Guid CaseId, int Version);
 
@@ -265,6 +269,23 @@ public static class JobRecoveryEndpoints
             .WithSummary("Recovery points (wait points / QUEUE) for the failed robot (for=SOURCE) or the second robot (for=TARGET)")
             .WithTags("Jobs");
 
+        group.MapPost("/jobs/{id:guid}/recovery/unload-confirm", async (
+                Guid id, UnloadRecoveryCargoRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db,
+                ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IWarehouseModule warehouse, CancellationToken cancellationToken) =>
+            {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
+                if (request.Note?.Length > 500)
+                    throw new DomainValidationException("Keep the note to 500 characters.", "recovery_note_too_long");
+                await engine.UnloadRecoveryCargoAsync(id, new(request.CaseId, request.Version, Actor(currentUser)), request.Scans ?? [],
+                    request.Holder, request.EndpointId, request.Note, cancellationToken);
+                return Results.Ok(new { recovery = await ReadAsync(id, db, warehouse, engine, currentUser, cancellationToken) });
+            })
+            .RequirePermission(Permissions.JobOperate)
+            .Audited("job.recovery_cargo_unloaded", "JOB", "id")
+            .WithName("UnloadJobRecoveryCargo")
+            .WithSummary("Staff scanned containers off the failed robot; a person (STAFF) or a recovery point (RECOVERY_STATION) holds them")
+            .WithTags("Jobs");
+
         group.MapPost("/jobs/{id:guid}/recovery/assessment", async (
                 Guid id, AssessRecoveryRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db, IRobotAccessScope robotScope,
                 ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IWarehouseModule warehouse, CancellationToken cancellationToken) =>
@@ -348,6 +369,7 @@ public static class JobRecoveryEndpoints
         var arrived = recovery.MoveStepId is { } stepId
             && await db.JobSteps.AsNoTracking().AnyAsync(s => s.Id == stepId && s.Status == Enums.JobStepStatus.COMPLETED, cancellationToken);
         var barcodes = (await warehouse.GetContainersAsync(recovery.ContainerIds, cancellationToken)).ToDictionary(item => item.Id, item => item.Barcode);
+        var custody = await engine.RecoveryCustodyAsync(recovery, cancellationToken);
         var active = recovery.ResolvedAt is null
             && await db.Jobs.AsNoTracking().AnyAsync(job => job.Id == jobId && job.Status == Enums.JobStatus.RECOVERY_REQUIRED, cancellationToken);
         var own = recovery.ClaimedBy == user.AccountId;
@@ -371,7 +393,8 @@ public static class JobRecoveryEndpoints
         return new JobRecoveryDto(
             recovery.Id, recovery.JobId, recovery.Status, recovery.Reason, recovery.FromRobotId, recovery.ToRobotId, recovery.RecoveryEndpointId,
             recovery.ContainerIds, arrived, recovery.ConfirmedBy, recovery.ConfirmedAt, recovery.Note, recovery.CreatedAt, recovery.ResolvedAt,
-            recovery.ClaimedBy, recovery.Version, recovery.ContainerIds.Select(id => new RecoveryContainerDto(id, barcodes.GetValueOrDefault(id))).ToList(),
+            recovery.ClaimedBy, recovery.Version, recovery.ContainerIds.Select(id => new RecoveryContainerDto(id, barcodes.GetValueOrDefault(id),
+                custody.TryGetValue(id, out var held) ? held.Type : "ROBOT", custody.TryGetValue(id, out var h) ? h.Id : recovery.FromRobotId)).ToList(),
             [
                 ActionAvailability.Of("CLAIM", !active ? "job_not_in_recovery" : recovery.ClaimedBy is null ? null : "recovery_claimed", canOperate),
                 ActionAvailability.Of("RELEASE", ownership ?? (target ? "recovery_target_assigned" : null), canOperate),
@@ -381,6 +404,8 @@ public static class JobRecoveryEndpoints
                 ActionAvailability.Of("CONFIRM", confirmDenial, canOperate),
                 ActionAvailability.Of("ARM_BUTTON", confirmDenial ?? (canArm ? null : "recovery_button_unavailable"), canOperate),
                 ActionAvailability.Of("RESUME_SAME_ROBOT", ownership ?? requestDenial ?? (target ? "recovery_target_assigned" : sameRobotDenial), canOperate),
+                ActionAvailability.Of("UNLOAD", ownership ?? (assignDenial ?? (custody.Values.Any(c => c.Type == "ROBOT" && c.Id == recovery.FromRobotId)
+                    ? null : "recovery_nothing_on_robot")), canOperate),
                 // The robot side: a technician's, no claim needed.
                 ActionAvailability.Of("ASSESS", !open ? "recovery_not_open" : null, user.Can(Permissions.RecoveryAssess)),
                 ActionAvailability.Of("VERIFY_LOCATION", !active ? "job_not_in_recovery" : null, user.Can(Permissions.RecoveryConfirmLocation)),

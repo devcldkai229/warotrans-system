@@ -2730,6 +2730,51 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(JobRecoveryStatuses.ResumedSameRobot, (await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId)).Status);
     }
 
+    [Fact]
+    public async Task Cargo_taken_off_the_failed_robot_is_held_by_a_person_until_the_second_robot_takes_every_container()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        var first = _fleet.RobotId;
+        await RobotOfflineAsync();
+        var second = _fleet.AddRobot(_mapVersionId);
+        var safe = RecoveryEndpoint();
+        var open = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        await Engine().SetRecoveryClaimAsync(jobId, new RecoveryCaseAccess(open.Id, open.Version, _staff), false, CancellationToken.None);
+        _warehouse.Set(C1, ContainerStatus.IN_TRANSIT);
+        _warehouse.Set(C2, ContainerStatus.IN_TRANSIT);
+        var barcodes = new Dictionary<Guid, string> { [C1] = _warehouse.Containers[C1].Barcode, [C2] = _warehouse.Containers[C2].Barcode };
+
+        // The failed robot still moves (no STOP hold): nobody takes cargo off it.
+        var moving = await Assert.ThrowsAsync<ConflictException>(async () => await Engine().UnloadRecoveryCargoAsync(jobId,
+            await AccessAsync(jobId), [new HandoverStopScan(C1, barcodes[C1])], "STAFF", null, null));
+        Assert.Equal("robot_not_stopped", moving.Code);
+        _fleet.Robots[first] = _fleet.Robots[first] with { MotionHeld = true };
+
+        var wrong = await Assert.ThrowsAsync<DomainValidationException>(async () => await Engine().UnloadRecoveryCargoAsync(jobId,
+            await AccessAsync(jobId), [new HandoverStopScan(C1, "NOT-THIS-ONE")], "STAFF", null, null));
+        Assert.NotNull(wrong.Code);
+
+        await Engine().UnloadRecoveryCargoAsync(jobId, await AccessAsync(jobId), [new HandoverStopScan(C1, barcodes[C1])], "STAFF", null, "on the trolley");
+        var recovery = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        var custody = await Engine().RecoveryCustodyAsync(recovery, CancellationToken.None);
+        Assert.Equal((CustodyTypes.Staff, (Guid?)_staff), custody[C1]);
+        Assert.Equal((CustodyTypes.Robot, (Guid?)first), custody[C2]);
+
+        // The second robot takes both: the one a person holds and the one still on the failed robot.
+        await Engine().AssignRecoveryRobotAsync(jobId, second, safe, access: await AccessAsync(jobId));
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        PlaceRobot(second, 5.0, 5.0);
+        await Engine().ConfirmRecoveryTransferAsync(jobId, [], _staff, null, access: await AccessAsync(jobId), expectedRobotId: second,
+            scans: [new HandoverStopScan(C1, barcodes[C1]), new HandoverStopScan(C2, barcodes[C2])]);
+
+        var history = await _db.CargoTransferRecords.Where(r => r.JobId == jobId).OrderBy(r => r.ConfirmedAt).ToListAsync();
+        Assert.Equal(3, history.Count);
+        Assert.Equal(CustodyTypes.Staff, Assert.Single(history, r => r.ContainerId == C1 && r.ToCustodyType == CustodyTypes.Robot).FromCustodyType);
+        Assert.All(history.Where(r => r.ToCustodyType == CustodyTypes.Robot), r => Assert.Equal(second, r.ToCustodyId));
+        var after = await Engine().RecoveryCustodyAsync(recovery, CancellationToken.None);
+        Assert.All(after.Values, held => Assert.Equal((CustodyTypes.Robot, (Guid?)second), held));
+    }
+
     // ------------------------------------------------------------------ one robot per area (queue point)
 
     /// <summary>An area around pickup A (1, 2) with queue point EP-Q at (1, 5).</summary>

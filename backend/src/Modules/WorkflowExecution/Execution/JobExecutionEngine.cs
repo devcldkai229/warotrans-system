@@ -1277,6 +1277,7 @@ public sealed partial class JobExecutionEngine(
             await VerifyRecoveryTransferAsync(job, recovery, target, expectedRobotId, onBoard, scans, cancellationToken, verifiedScans: button is not null);
 
         var now = DateTimeOffset.UtcNow;
+        await RecordLoadOnRecoveryRobotAsync(recovery, target, confirmedBy ?? button?.RobotId, now, cancellationToken);
         job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
         {
             [AssignedRobotKey] = JsonSerializer.SerializeToElement(target)

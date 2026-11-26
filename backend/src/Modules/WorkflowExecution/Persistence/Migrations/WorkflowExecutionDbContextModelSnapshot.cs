@@ -23,6 +23,84 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.CargoTransferRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<Guid>("ContainerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_id");
+
+                    b.Property<Guid?>("FromCustodyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_custody_id");
+
+                    b.Property<string>("FromCustodyType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("from_custody_type");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RecoveryCaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recovery_case_id");
+
+                    b.Property<Guid?>("ToCustodyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_custody_id");
+
+                    b.Property<string>("ToCustodyType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("to_custody_type");
+
+                    b.Property<Guid?>("TransferEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transfer_endpoint_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_cargo_transfer_records");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_cargo_transfer_records_idempotency_key");
+
+                    b.HasIndex("RecoveryCaseId")
+                        .HasDatabaseName("i_x_cargo_transfer_records_recovery_case_id");
+
+                    b.HasIndex("JobId", "ContainerId", "ConfirmedAt")
+                        .HasDatabaseName("i_x_cargo_transfer_records_job_id_container_id_confirmed_at");
+
+                    b.ToTable("cargo_transfer_records", "execution");
+                });
+
             modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.HandoverConfirmation", b =>
                 {
                     b.Property<Guid>("Id")
