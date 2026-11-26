@@ -87,7 +87,7 @@ export function AppHeader({
             accessibilityLabel="Scan a code"
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <ScanLine size={18} color={colors.textPrimary} strokeWidth={2.1} />
+            <ScanLine size={21} color={colors.textPrimary} strokeWidth={2} />
           </Pressable>
 
           <Pressable
@@ -99,7 +99,7 @@ export function AppHeader({
             accessibilityLabel={`Notifications, ${unreadCount} unread`}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <Bell size={18} color={colors.textPrimary} strokeWidth={2.1} />
+            <Bell size={21} color={colors.textPrimary} strokeWidth={2} />
             {unreadCount > 0 && (
               <View style={styles.notifBadge}>
                 <Text style={styles.notifBadgeText}>{unreadCount}</Text>
@@ -179,28 +179,25 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     rightGroup: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 4,
       marginLeft: 8,
     },
     iconBtn: {
       width: 40,
       height: 40,
       borderRadius: radii.full,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',
     },
     iconBtnPressed: {
-      backgroundColor: colors.surfaceMuted,
-      transform: [{ scale: 0.95 }],
+      opacity: 0.55,
+      transform: [{ scale: 0.94 }],
     },
     notifBadge: {
       position: 'absolute',
-      top: -2,
-      right: -2,
+      top: 4,
+      right: 3,
       minWidth: 16,
       height: 16,
       borderRadius: 8,
@@ -221,6 +218,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       width: 40,
       height: 40,
       borderRadius: 20,
+      marginLeft: 6,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: isDark ? colors.darkAction : '#121317',
