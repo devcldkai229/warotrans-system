@@ -849,7 +849,7 @@ export function WarehouseMap({
                 const load = zoneLoad.get(zone.id) ?? 0
                 const exclusive = zone.zoneType === 'SINGLE_OCCUPANCY'
                 const over = show.occupancy && exclusive && load > 1
-                const full = show.occupancy && exclusive && load === 1
+                const full = false
                 const isSelected = selected.zoneId === zone.id
                 const isHovered = hoveredZoneId === zone.id
                 const isKeepOut = zone.zoneType === 'KEEP_OUT'
@@ -1130,28 +1130,26 @@ export function WarehouseMap({
             </g>
           ) : null}
 
-          {/* Live Nav2 plans: one line per robot in its plan colour, on a dark casing so it stands out from the blue
-              lanes. The part traffic has granted is solid, the part still waiting for traffic dashed; a ring marks the
-              goal. On the OTTO map the widths are in screen pixels, so a small room does not make the line a hairline. */}
+          {/* Live Nav2 plans: thin monochrome line per robot (solid where granted, dashed where waiting) with a small goal dot. */}
           {trafficOverlay?.plannedPaths && trafficOverlay.plannedPaths.length > 0 ? (
             <g pointerEvents="none" fill="none" strokeLinecap="round" strokeLinejoin="round">
               {trafficOverlay.plannedPaths.map((plan) => {
                 if (plan.points.length < 2) return null
                 const focused = !focusRobotCodes || focusRobotCodes.length === 0 || focusRobotCodes.includes(plan.robotCode)
-                const line = isOtto ? 4 * ottoStrokeUnit : 0.16 * mark
-                const casing = isOtto ? line + 4 * ottoStrokeUnit : line * 1.8
-                const dash = `${line * 2.2} ${line * 1.6}`
+                const line = isOtto ? 2 * ottoStrokeUnit : 0.1 * mark
+                const dash = `${line * 2.5} ${line * 2}`
                 const granted = plan.points.slice(0, Math.max(0, plan.grantedCount))
                 const ahead = plan.points.slice(Math.max(0, plan.grantedCount - 1))
                 const goal = plan.points[plan.points.length - 1]
                 return (
                   <g key={`plan-${plan.robotCode}`} opacity={focused ? 1 : 0.35}>
-                    <polyline points={stagePoints(plan.points)} stroke="#0b0d10" strokeOpacity={0.7} strokeWidth={casing} />
                     {ahead.length >= 2 ? (
-                      <polyline points={stagePoints(ahead)} stroke={plan.color} strokeWidth={line} strokeOpacity={0.85} strokeDasharray={dash} />
+                      <polyline points={stagePoints(ahead)} stroke={plan.color} strokeWidth={line} strokeOpacity={0.45} strokeDasharray={dash} />
                     ) : null}
-                    {granted.length >= 2 ? <polyline points={stagePoints(granted)} stroke={plan.color} strokeWidth={line} /> : null}
-                    <circle cx={X(goal.x)} cy={Y(goal.y)} r={casing * 1.4} fill="#0b0d10" fillOpacity={0.7} stroke={plan.color} strokeWidth={line} />
+                    {granted.length >= 2 ? (
+                      <polyline points={stagePoints(granted)} stroke={plan.color} strokeWidth={line} strokeOpacity={0.92} />
+                    ) : null}
+                    <circle cx={X(goal.x)} cy={Y(goal.y)} r={line * 2.2} fill={plan.color} fillOpacity={1} stroke="none" />
                   </g>
                 )
               })}
