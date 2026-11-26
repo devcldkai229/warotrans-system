@@ -36,6 +36,32 @@ export interface RecoveryScanProgress {
   scans: HandoverStopScan[];
 }
 
+/**
+ * True while a technician still has to assess and secure the failed robot: the floor waits (the server refuses to send
+ * a second robot before that). Cases opened before phases existed never wait.
+ */
+export function waitsForTechnician(
+  recovery: Pick<JobRecoveryResponse, 'status' | 'phase' | 'sourceSecuredAt' | 'availableActions'> | null | undefined,
+): boolean {
+  if (!recovery || !recovery.phase || recovery.sourceSecuredAt || recovery.status !== 'OPEN') return false;
+  const assign = recovery.availableActions?.find(action => action.action === 'ASSIGN');
+  return !assign || assign.reason === 'recovery_source_not_secured';
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  ASSESSMENT_REQUIRED: 'Waiting for a technician to assess the robot',
+  ASSESSED: 'Robot assessed, not yet secured',
+  SOURCE_REPOSITIONING: 'The failed robot is driving to a recovery point',
+  SOURCE_SECURED: 'The failed robot is secured',
+  TARGET_EN_ROUTE: 'The rescue robot is on its way',
+  AWAITING_TRANSFER: 'Ready for the cargo transfer',
+  INTERVENTION_REQUIRED: 'A person has to decide what to do next',
+};
+
+export function recoveryPhaseLabel(phase: string | null | undefined): string | null {
+  return phase ? PHASE_LABELS[phase] || phase : null;
+}
+
 export function recoveryPhaseFromCase(
   recovery: Pick<JobRecoveryResponse, 'status' | 'claimedBy' | 'robotArrived' | 'resolvedAt'> | null | undefined,
   accountId: string | null | undefined,
@@ -123,6 +149,22 @@ export function recoveryScanProgress(
   };
 }
 
+/**
+ * The transfer points the server ranked (free first, nearest first) as endpoint options; points that cannot be used now
+ * are left out. Null when the server gave none, so the screen falls back to the map's endpoints.
+ */
+export function rankedRecoveryEndpoints<T extends RecoveryEndpointOption>(
+  candidates: { endpointId: string; unsuitable: string | null }[] | null | undefined,
+  map: { id: string; endpoints: T[] } | null | undefined,
+): T[] | null {
+  if (!candidates || candidates.length === 0 || !map) return null;
+  const byId = new Map(map.endpoints.map(endpoint => [endpoint.id, endpoint]));
+  return candidates
+    .filter(candidate => !candidate.unsuitable)
+    .map(candidate => byId.get(candidate.endpointId))
+    .filter((endpoint): endpoint is T => Boolean(endpoint));
+}
+
 export function eligibleRecoveryEndpoints<T extends RecoveryEndpointOption>(
   map: { id: string; endpoints: T[] } | null | undefined,
 ): T[] {
@@ -161,6 +203,9 @@ const RECOVERY_ACTION_REASONS: Record<string, string> = {
   recovery_no_target: 'Assign a rescue robot and transfer point first.',
   recovery_robot_not_arrived: 'Wait until the rescue robot arrives at the transfer point.',
   recovery_request_inactive: 'The Transport Request is cancelled or cancelling; review cargo before continuing.',
+  recovery_source_not_secured: 'A technician has to assess and secure the failed robot first.',
+  recovery_assessment_required: 'A technician has to judge the robot repaired first.',
+  recovery_point_unsuitable: 'The failed robot stands at that point; choose another one.',
   permission_denied: 'You do not have job.operate permission.',
 };
 

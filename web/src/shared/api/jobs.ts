@@ -238,10 +238,40 @@ export function confirmHandoverBatch(jobId: string, type: 'PICKUP' | 'DROPOFF', 
   )
 }
 
+export type RecoveryPhase =
+  | 'ASSESSMENT_REQUIRED'
+  | 'ASSESSED'
+  | 'SOURCE_REPOSITIONING'
+  | 'SOURCE_SECURED'
+  | 'TARGET_EN_ROUTE'
+  | 'AWAITING_TRANSFER'
+  | 'INTERVENTION_REQUIRED'
+
+export type RecoveryAssessmentResult = 'SELF_EVACUATION_APPROVED' | 'MANUAL_RECOVERY_REQUIRED' | 'SAME_ROBOT_RECOVERABLE'
+
+export type RecoveryAction =
+  | 'CLAIM' | 'RELEASE' | 'ASSIGN' | 'UNASSIGN' | 'CONFIRM' | 'ARM_BUTTON' | 'RESUME_SAME_ROBOT' | 'UNLOAD'
+  | 'ASSESS' | 'VERIFY_LOCATION' | 'SOURCE_EVACUATE' | 'SOURCE_SECURE'
+
+export interface RecoveryChecklistItem {
+  item: string
+  ok: boolean
+  note?: string | null
+}
+
+export interface RecoveryContainer {
+  containerId: string
+  barcode: string | null
+  /** Who holds it now: ROBOT (the failed one, or the second after the transfer), STAFF or RECOVERY_STATION. */
+  holderType: 'ROBOT' | 'STAFF' | 'RECOVERY_STATION' | string
+  holderId: string | null
+}
+
+/** GET /jobs/{id}/recovery: the latest payload recovery case of a Job (WAROTRANS_PAYLOAD_RECOVERY_DESIGN.md). */
 export interface JobRecovery {
   id: string
   jobId: string
-  status: 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT' | 'CANCELLED'
+  status: 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT' | 'CANCELLED' | 'RESOLVED_MANUALLY'
   reason: string
   fromRobotId: string | null
   toRobotId: string | null
@@ -253,28 +283,122 @@ export interface JobRecovery {
   note: string | null
   createdAt: string
   resolvedAt: string | null
+  claimedBy: string | null
+  version: number
+  containers: RecoveryContainer[]
+  availableActions: { action: RecoveryAction | string; allowed: boolean; reason?: string | null }[]
+  buttonArmed: boolean
+  confirmedByRobotId: string | null
+  /** Null on cases opened before phases existed. */
+  phase: RecoveryPhase | null
+  recoveryMode: 'SELF_EVACUATION' | 'MANUAL' | 'SAME_ROBOT' | null
+  fault: {
+    x: number | null
+    y: number | null
+    yaw: number | null
+    seenAt: string | null
+    mapVersionId: string | null
+    errorCode: string | null
+    online: boolean | null
+  } | null
+  assessment: {
+    result: RecoveryAssessmentResult
+    assessedBy: string | null
+    assessedAt: string | null
+    checklist: RecoveryChecklistItem[]
+    note: string | null
+  } | null
+  verifiedLocation: { x: number | null; y: number | null; verifiedBy: string | null; verifiedAt: string | null } | null
+  sourceEndpointId: string | null
+  sourceArrived: boolean
+  sourceSecuredAt: string | null
+  sourceSecuredBy: string | null
+}
+
+export interface RecoveryRobotCandidate {
+  robotId: string
+  robotCode: string
+  maxContainers: number
+  eligible: boolean
+  reasons: string[]
+}
+
+export interface RecoveryEndpointCandidate {
+  endpointId: string
+  code: string
+  name: string
+  endpointType: string
+  distanceMeters: number
+  pathMeters: number | null
+  /** Why it cannot be chosen now (taken, failed_robot_there, robot_standing_there, no_path); null when it can. */
+  unsuitable: string | null
+}
+
+export interface RecoveryScan {
+  containerId: string
+  barcode: string
 }
 
 const recoveryRoot = (jobId: string) => `/api/workflow-execution/jobs/${jobId}/recovery`
+type CaseRef = { caseId: string; version: number }
+const post = <T,>(url: string, body: unknown) => apiRequest<T>(url, { method: 'POST', body: JSON.stringify(body) })
 
 export function getJobRecovery(jobId: string) {
   return apiRequest<{ recovery: JobRecovery | null }>(recoveryRoot(jobId))
 }
 
-export function assignRecoveryRobot(jobId: string, robotId: string, endpointId: string) {
-  return apiRequest<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/assign`, { method: 'POST', body: JSON.stringify({ robotId, endpointId }) })
+export function listRecoveryRobotCandidates(jobId: string) {
+  return apiRequest<{ items: RecoveryRobotCandidate[] }>(`${recoveryRoot(jobId)}/candidates`)
 }
 
-export function unassignRecoveryRobot(jobId: string) {
-  return apiRequest<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/unassign`, { method: 'POST' })
+export function listRecoveryEndpointCandidates(jobId: string, forSource: boolean) {
+  return apiRequest<{ items: RecoveryEndpointCandidate[] }>(`${recoveryRoot(jobId)}/endpoint-candidates?for=${forSource ? 'SOURCE' : 'TARGET'}`)
 }
 
-export function confirmRecoveryTransfer(jobId: string, containerIds: string[], note: string) {
-  return apiRequest<JobDetailDto>(`${recoveryRoot(jobId)}/transfer-confirm`, { method: 'POST', body: JSON.stringify({ containerIds, note }) })
+/** A PAUSED Job with cargo on board needs a payload recovery (idempotent). */
+export function requestRecovery(jobId: string, reason?: string) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/request`, { reason: reason ?? null })
 }
 
-export function resumeRecoveryOnSameRobot(jobId: string, note?: string) {
-  return apiRequest<JobDetailDto>(`${recoveryRoot(jobId)}/resume-same-robot`, { method: 'POST', body: JSON.stringify({ note: note ?? null }) })
+export const claimRecovery = (jobId: string, ref: CaseRef) => post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/claim`, ref)
+export const releaseRecovery = (jobId: string, ref: CaseRef) => post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/release`, ref)
+
+export function assessRecovery(jobId: string, ref: CaseRef, result: RecoveryAssessmentResult, checklist: RecoveryChecklistItem[], note?: string) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/assessment`, { ...ref, result, checklist, note: note ?? null })
+}
+
+export function verifyRecoveryLocation(jobId: string, ref: CaseRef, where: { endpointId?: string; x?: number; y?: number }) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/verify-location`, { ...ref, ...where })
+}
+
+export function evacuateRecoverySource(jobId: string, ref: CaseRef, endpointId?: string) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/source-evacuate`, { ...ref, endpointId: endpointId ?? null })
+}
+
+export function secureRecoverySource(jobId: string, ref: CaseRef, note?: string) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/source-secure`, { ...ref, note: note ?? null })
+}
+
+export function assignRecoveryRobot(jobId: string, ref: CaseRef, robotId: string, endpointId: string) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/assign`, { ...ref, robotId, endpointId })
+}
+
+export function unassignRecoveryRobot(jobId: string, ref: CaseRef) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/unassign`, ref)
+}
+
+export function unloadRecoveryCargo(
+  jobId: string, ref: CaseRef, scans: RecoveryScan[], holder: 'STAFF' | 'RECOVERY_STATION', endpointId?: string, note?: string,
+) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/unload-confirm`, { ...ref, scans, holder, endpointId: endpointId ?? null, note: note ?? null })
+}
+
+export function confirmRecoveryTransfer(jobId: string, ref: CaseRef, robotId: string, scans: RecoveryScan[], note?: string) {
+  return post<JobDetailDto>(`${recoveryRoot(jobId)}/transfer-confirm`, { ...ref, robotId, scans, note: note ?? null })
+}
+
+export function resumeRecoveryOnSameRobot(jobId: string, ref: CaseRef, note?: string) {
+  return post<JobDetailDto>(`${recoveryRoot(jobId)}/resume-same-robot`, { ...ref, note: note ?? null })
 }
 
 /** FL-07: start this Job as soon as a robot is free. */

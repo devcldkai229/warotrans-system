@@ -62,6 +62,7 @@ const TECH_PREFIXES: [string, string][] = [
   ['/monitor/jobs/', '/tech/jobs/'],
   ['/operations/issues', '/tech/issues'],
   ['/operations/tickets', '/tech/tickets'],
+  ['/operations/recovery', '/tech/recovery'],
   ['/operations/robot-history', '/tech/robot-history'],
   ['/operations/notifications', '/tech/notifications'],
   ['/operations/audit', '/tech/audit'],

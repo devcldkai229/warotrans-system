@@ -43,6 +43,7 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { label: t('Issues'), to: '/operations/issues', requires: PERMISSIONS.issueRead },
       { label: t('Technical tickets'), to: '/operations/tickets', requires: PERMISSIONS.robotRead },
+      { label: t('Payload recovery'), to: '/operations/recovery', requires: PERMISSIONS.jobRead },
       { label: t('Notifications'), to: '/operations/notifications', requires: PERMISSIONS.notificationRead },
       { label: t('Robot history'), to: '/operations/robot-history', requires: PERMISSIONS.robotRead },
       { label: t('Audit log'), to: '/operations/audit', requires: PERMISSIONS.auditRead },
@@ -55,6 +56,7 @@ export const ADMIN_NAV: NavGroup[] = [
 /** Technician portal (/tech): robot screens only. Each item still needs its permission, like the admin menu. */
 export const TECH_NAV: NavGroup[] = [
   { label: t('Robots'), to: '/tech/fleet', requires: PERMISSIONS.robotRead },
+  { label: t('Payload recovery'), to: '/tech/recovery', requires: PERMISSIONS.jobRead },
   { label: t('Technical tickets'), to: '/tech/tickets', requires: PERMISSIONS.robotRead },
   { label: t('Issues'), to: '/tech/issues', requires: PERMISSIONS.issueRead },
   { label: t('Robot history'), to: '/tech/robot-history', requires: PERMISSIONS.robotRead },
