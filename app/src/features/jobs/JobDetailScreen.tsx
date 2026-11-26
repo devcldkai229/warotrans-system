@@ -77,6 +77,7 @@ import {
   reportTaskProblem,
   resumeJob,
   startJob,
+  requestPayloadRecovery,
 } from '../../shared/api';
 import { localizeServerMessage, t } from '../../shared/i18n';
 import type { JobDetailResponse } from '../../shared/types/contracts';
@@ -105,6 +106,7 @@ export function JobDetailScreen() {
   const [verificationStepId, setVerificationStepId] = useState<string | null>(null);
   const [isMismatch, setIsMismatch] = useState(isInitialMismatch);
   const [isIssueOpen, setIsIssueOpen] = useState(isInitialIssue);
+  const [isRequestingRecovery, setIsRequestingRecovery] = useState(false);
   const [issueModalCategory, setIssueModalCategory] = useState<IncidentCategory | undefined>(undefined);
   const [issueModalContainerId, setIssueModalContainerId] = useState<string | undefined>(undefined);
   const [showMenu, setShowMenu] = useState(false);
@@ -241,8 +243,12 @@ export function JobDetailScreen() {
   const activeContainerId = typeof activeContainerRaw === 'string' ? activeContainerRaw : undefined;
   // Quality inspection is its own step (Passed / Failed with what is wrong), not a handover: it never opens Verify.
   const inspectionStep = activeStep?.operationCode === 'INSPECTION_CONFIRM' && activeStep.status === 'WAITING' ? activeStep : null;
+  const passedIds = new Set(
+    (Array.isArray(inspectionStep?.outputValues?.inspectionPassed) ? inspectionStep!.outputValues!.inspectionPassed as { containerId?: string }[] : [])
+      .map(entry => entry?.containerId).filter((id): id is string => typeof id === 'string'),
+  );
   const inspectable = inspectionStep
-    ? (job.containers ?? []).filter(container => container.containerId && container.status === 'ONBOARD')
+    ? (job.containers ?? []).filter(container => container.containerId && container.status === 'ONBOARD' && !passedIds.has(container.containerId))
     : [];
   const [inspecting, setInspecting] = useState<{ id: string; barcode: string } | null>(null);
   const activeContainer = job.containers.find(container => container.containerId === activeContainerId);
@@ -317,6 +323,21 @@ export function JobDetailScreen() {
       throw new Error(getUserErrorMessage(error, 'Job could not be paused.'));
     }
   };
+  const canOperateRecovery = sessionCan(session, PERMISSIONS.jobOperate);
+  /** The robot cannot go on with its cargo: open a payload recovery (a technician assesses it first), then go there. */
+  const handleRequestRecovery = async () => {
+    if (!job || isRequestingRecovery) return;
+    setIsRequestingRecovery(true);
+    try {
+      await requestPayloadRecovery(job.id, 'Requested from the mobile app');
+      navigate('payload_recovery', { jobId: job.id });
+    } catch (failure) {
+      setJobRefreshError(getUserErrorMessage(failure, t('The payload recovery could not be requested.')));
+    } finally {
+      setIsRequestingRecovery(false);
+    }
+  };
+
   const handleResumeJob = async () => {
     if (isStartingJob) return;
     setIsStartingJob(true);
@@ -822,16 +843,33 @@ export function JobDetailScreen() {
               onPress={handleStartJob}
             />
           ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
-            <Button
-              title="Resume Job"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={isStartingJob}
-              disabled={!canResume || isStartingJob}
-              onPress={handleResumeJob}
-              icon={RefreshCw}
-            />
+            <View style={{ gap: 8 }}>
+              <Button
+                title="Resume Job"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={isStartingJob}
+                disabled={!canResume || isStartingJob}
+                onPress={handleResumeJob}
+                icon={RefreshCw}
+              />
+              {job.status === 'PAUSED' && canOperateRecovery
+                && (job.containers ?? []).some(container => container.status === 'ONBOARD') ? (
+                <Button
+                  title="Request Payload Recovery"
+                  variant="danger"
+                  size="lg"
+                  fullWidth
+                  icon={AlertTriangle}
+                  iconPosition="right"
+                  loading={isRequestingRecovery}
+                  disabled={isRequestingRecovery}
+                  onPress={handleRequestRecovery}
+                  accessibilityLabel="Request payload recovery: the robot cannot go on with its cargo"
+                />
+              ) : null}
+            </View>
           ) : job.status === 'RECOVERY_REQUIRED' ? (
             <Button
               title="Initiate Cargo Rescue"

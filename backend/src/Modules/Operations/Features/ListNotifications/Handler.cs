@@ -79,7 +79,8 @@ public sealed class ListNotificationsHandler(
                         n.IsRead || mine is not null,
                         mine?.ReadAt ?? n.ReadAt,
                         n.ResolvedAt,
-                        n.Route);
+                        n.Route,
+                        n.Links ?? []);
                 })
                 .ToList(),
             (int)total);

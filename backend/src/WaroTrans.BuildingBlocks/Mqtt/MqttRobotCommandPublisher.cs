@@ -184,6 +184,28 @@ public sealed class MqttRobotCommandPublisher
         }
     }
 
+    public async Task PublishFleetPosesAsync(object message, CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.FleetPoses(_options.Value.TopicPrefix);
+        var json = JsonSerializer.Serialize(message, JsonOptions);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            // At most once and not retained: a pose is only worth something fresh; the next one follows shortly.
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+                .Build();
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task PublishLabAsync(string robotCode, object body, CancellationToken cancellationToken = default)
     {
         var topic = RobotMqttTopics.Lab(_options.Value.TopicPrefix, robotCode);

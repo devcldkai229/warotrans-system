@@ -72,6 +72,7 @@ public sealed class TrafficProgressIngress(
             goal,
             message.JobStepId,
             message.JobId,
+            Priority: PlanPriority(message.JobId),
             PlanHash: message.PlanHash,
             CommandId: message.CommandId);
         var result = await coordinator.AcquireSemanticPlanAsync(req, ct).ConfigureAwait(false);
@@ -95,6 +96,12 @@ public sealed class TrafficProgressIngress(
                 ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// A robot on a Job goes before an idle one (parking, making way) when both wait for the same place; equal priority
+    /// is first come, first served, and a waiter ages (Traffic:AgingRate) so an idle robot is never starved.
+    /// </summary>
+    public static int PlanPriority(Guid? jobId) => jobId is null ? 0 : 1;
 
     public async Task HandleProgressAsync(TrafficProgressMessage message, CancellationToken ct)
     {

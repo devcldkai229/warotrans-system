@@ -12,6 +12,7 @@ public static class CheckOperations
         nameof(CheckConditionCode.ENDPOINT_AVAILABLE),
         nameof(CheckConditionCode.REQUEST_ACTIVE),
         nameof(CheckConditionCode.LOAD_STATE),
-        nameof(CheckConditionCode.INVENTORY_AVAILABLE)
+        nameof(CheckConditionCode.INVENTORY_AVAILABLE),
+        nameof(CheckConditionCode.ROUTE_CLEAR)
     };
 }

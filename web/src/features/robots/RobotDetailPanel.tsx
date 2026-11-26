@@ -11,6 +11,8 @@ import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
+import { ManualQuickCard } from './manual/ManualQuickCard'
+import { RobotTicketsCard } from '@/features/tickets/RobotTicketsCard'
 import { AutoLocalizeSection } from './AutoLocalizeSection'
 import { ChangeMapPanel } from './ChangeMapPanel'
 import { reportsOtherMap, warehouseMapsKey } from './robotMaps'
@@ -498,6 +500,13 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
         {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
 
         <RobotControlCard robotId={robot.id} robotCode={robot.code} />
+        <ManualQuickCard
+          robot={robot}
+          mayCommand={canActOnRobot(capabilities, PERMISSIONS.robotCommand, robot.id)}
+          mayDrive={mayDrive}
+          onFullScreen={onManual}
+        />
+        <RobotTicketsCard robotId={robot.id} robotCode={robot.code} />
         <TrafficClearanceCard robotId={robot.id} robotCode={robot.code} />
         <RobotCapacityCard key={robot.id} robot={robot} />
 

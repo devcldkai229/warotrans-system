@@ -55,7 +55,7 @@ public sealed class HumanTaskQueries(
                         && s.JobTask.Job.Status == JobStatus.RUNNING
                         // Staff do not get the steps of workflows hidden from them (charger plugged in: Admin / Technician).
                         && (currentUser.Role != WaroTrans.BuildingBlocks.Authorization.AppRoles.Staff
-                            || db.Workflows.Any(w => w.Id == s.JobTask.Job.WorkflowId && w.StaffVisible)))
+                            || !db.Workflows.Any(w => w.Id == s.JobTask.Job.WorkflowId && !w.StaffVisible)))
             .Select(s => new
             {
                 Step = s,

@@ -7,7 +7,7 @@ import { requireMobileCapability } from './capabilities';
 import type {
   ActionAvailability, HandoverProblemCode, HandoverStopAction, HandoverStopResponse, HandoverStopScan,
   JobContainerResponse, JobDetailResponse, JobRecoveryAction, JobRecoveryResponse, JobStatus, JobStepResponse,
-  JobTaskResponse, HandoverConfirmationBody, HandoverConfirmationResponse, RecoveryRobotCandidateResponse,
+  JobTaskResponse, HandoverConfirmationBody, HandoverConfirmationResponse, RecoveryRobotCandidateResponse, RecoveryEndpointCandidateResponse,
   ReportTaskProblemBody, StaffWorkZoneResponse,
 } from '../types/contracts';
 
@@ -511,6 +511,75 @@ export async function getJobRecovery(
   if (data.recovery === null || data.recovery === undefined) {
     return null;
   }
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+/** Recovery points for the second robot (TARGET) or the failed robot (SOURCE), free and nearest first. */
+export async function listRecoveryEndpointCandidates(
+  jobId: string,
+  target: 'TARGET' | 'SOURCE' = 'TARGET',
+  signal?: AbortSignal,
+): Promise<RecoveryEndpointCandidateResponse[]> {
+  const data = await apiFetch<{ items?: unknown }>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/endpoint-candidates?for=${target}`,
+    { signal },
+  );
+  if (!data || !Array.isArray(data.items)) {
+    throw new ApiError(502, 'recovery_candidates_invalid', 'Could not read recovery points from the server.');
+  }
+  return data.items as RecoveryEndpointCandidateResponse[];
+}
+
+/** Staff scanned containers off the failed robot and hold them (STAFF) or left them at a recovery point. */
+export async function unloadRecoveryCargo(
+  jobId: string,
+  caseId: string,
+  version: number,
+  scans: HandoverStopScan[],
+  holder: 'STAFF' | 'RECOVERY_STATION' = 'STAFF',
+  note?: string | null,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const data = await apiFetch<unknown>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/unload-confirm`,
+    { method: 'POST', body: JSON.stringify({ caseId: trimmedCaseId, version, scans, holder, note: normalizeRecoveryNote(note) }) },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+/** Cargo taken off the Job by hand: back to storage or quarantined; each container is held under a CONTAINER issue. */
+export async function resolveRecoveryManually(
+  jobId: string,
+  caseId: string,
+  version: number,
+  disposition: 'RETURN_TO_STORAGE' | 'QUARANTINE_CARGO',
+  scans: HandoverStopScan[],
+  problemCode?: string | null,
+  note?: string | null,
+): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const trimmedCaseId = requireRecoveryCaseVersion(caseId, version);
+  const data = await apiFetch<unknown>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/resolve-manually`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ caseId: trimmedCaseId, version, disposition, scans, problemCode: problemCode ?? null, note: normalizeRecoveryNote(note) }),
+    },
+    callerToken(),
+  );
+  return validateRecoveryCaseResponse(jobId, data);
+}
+
+/** A paused Job with cargo on board needs a payload recovery; asking twice answers with the same case. */
+export async function requestPayloadRecovery(jobId: string, reason?: string | null): Promise<JobRecoveryResponse> {
+  requireMobileCapability('payloadRecovery');
+  const data = await apiFetch<unknown>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/recovery/request`,
+    { method: 'POST', body: JSON.stringify({ reason: normalizeRecoveryNote(reason) }) },
+    callerToken(),
+  );
   return validateRecoveryCaseResponse(jobId, data);
 }
 

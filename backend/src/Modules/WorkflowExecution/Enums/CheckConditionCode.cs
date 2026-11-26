@@ -7,5 +7,7 @@ public enum CheckConditionCode
     ENDPOINT_AVAILABLE,
     LOAD_STATE,
     REQUEST_ACTIVE,
-    INVENTORY_AVAILABLE
+    INVENTORY_AVAILABLE,
+    /// <summary>Before driving into an endpoint: what the way costs, whether it is open, and whether a robot or an obstacle shuts it.</summary>
+    ROUTE_CLEAR
 }

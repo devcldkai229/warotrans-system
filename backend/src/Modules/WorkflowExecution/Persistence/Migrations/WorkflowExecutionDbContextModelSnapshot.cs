@@ -23,6 +23,84 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.CargoTransferRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<Guid>("ContainerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_id");
+
+                    b.Property<Guid?>("FromCustodyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_custody_id");
+
+                    b.Property<string>("FromCustodyType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("from_custody_type");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RecoveryCaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recovery_case_id");
+
+                    b.Property<Guid?>("ToCustodyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_custody_id");
+
+                    b.Property<string>("ToCustodyType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("to_custody_type");
+
+                    b.Property<Guid?>("TransferEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transfer_endpoint_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_cargo_transfer_records");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_cargo_transfer_records_idempotency_key");
+
+                    b.HasIndex("RecoveryCaseId")
+                        .HasDatabaseName("i_x_cargo_transfer_records_recovery_case_id");
+
+                    b.HasIndex("JobId", "ContainerId", "ConfirmedAt")
+                        .HasDatabaseName("i_x_cargo_transfer_records_job_id_container_id_confirmed_at");
+
+                    b.ToTable("cargo_transfer_records", "execution");
+                });
+
             modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.HandoverConfirmation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -289,6 +367,28 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("AssessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assessed_at");
+
+                    b.Property<Guid?>("AssessedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assessed_by");
+
+                    b.Property<string>("AssessmentChecklistJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("assessment_checklist_json");
+
+                    b.Property<string>("AssessmentNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("assessment_note");
+
+                    b.Property<string>("AssessmentResult")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("assessment_result");
+
                     b.Property<Guid?>("ButtonArmId")
                         .HasColumnType("uuid")
                         .HasColumnName("button_arm_id");
@@ -322,6 +422,19 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("FaultErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("fault_error_code");
+
+                    b.Property<Guid?>("FaultMapVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("fault_map_version_id");
+
+                    b.Property<bool?>("FaultRobotOnline")
+                        .HasColumnType("boolean")
+                        .HasColumnName("fault_robot_online");
+
                     b.Property<Guid?>("FromRobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("from_robot_id");
@@ -329,6 +442,34 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
+
+                    b.Property<DateTimeOffset?>("LastPoseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_pose_at");
+
+                    b.Property<double?>("LastPoseX")
+                        .HasColumnType("double precision")
+                        .HasColumnName("last_pose_x");
+
+                    b.Property<double?>("LastPoseY")
+                        .HasColumnType("double precision")
+                        .HasColumnName("last_pose_y");
+
+                    b.Property<double?>("LastPoseYaw")
+                        .HasColumnType("double precision")
+                        .HasColumnName("last_pose_yaw");
+
+                    b.Property<bool>("LocationVerified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("location_verified");
+
+                    b.Property<DateTimeOffset?>("LocationVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("location_verified_at");
+
+                    b.Property<Guid?>("LocationVerifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("location_verified_by");
 
                     b.Property<Guid?>("MoveStepId")
                         .HasColumnType("uuid")
@@ -338,6 +479,11 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("note");
+
+                    b.Property<string>("Phase")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("phase");
 
                     b.Property<string>("Reason")
                         .IsRequired()
@@ -349,9 +495,30 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("recovery_endpoint_id");
 
+                    b.Property<string>("RecoveryMode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("recovery_mode");
+
                     b.Property<DateTimeOffset?>("ResolvedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("SourceEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_endpoint_id");
+
+                    b.Property<Guid?>("SourceMoveStepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_move_step_id");
+
+                    b.Property<DateTimeOffset?>("SourceSecuredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("source_secured_at");
+
+                    b.Property<Guid?>("SourceSecuredBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_secured_by");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -362,6 +529,14 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid?>("ToRobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("to_robot_id");
+
+                    b.Property<double?>("VerifiedX")
+                        .HasColumnType("double precision")
+                        .HasColumnName("verified_x");
+
+                    b.Property<double?>("VerifiedY")
+                        .HasColumnType("double precision")
+                        .HasColumnName("verified_y");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()

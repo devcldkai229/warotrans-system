@@ -8,6 +8,9 @@ const {
   candidateReasonLabel,
   eligibleRecoveryEndpoints,
   recoveryActionReasonLabel,
+  rankedRecoveryEndpoints,
+  recoveryPhaseLabel,
+  waitsForTechnician,
   recoveryPhaseFromCase,
   recoveryScanProgress,
   recordRecoveryScan,
@@ -264,4 +267,32 @@ test('payloadRecoveryData tracks manifest scans, phases, enabled map endpoints a
 
   assert.ok(candidateReasonLabel('container_limit_exceeded').includes('bay'));
   assert.ok(recoveryActionReasonLabel('recovery_request_inactive').includes('Transport Request'));
+});
+
+test('payloadRecoveryData waits for the technician and follows the ranked transfer points', () => {
+  const waiting = {
+    status: 'OPEN', phase: 'ASSESSMENT_REQUIRED', sourceSecuredAt: null,
+    availableActions: [{ action: 'ASSIGN', allowed: false, reason: 'recovery_source_not_secured' }],
+  };
+  assert.equal(waitsForTechnician(waiting), true);
+  assert.equal(waitsForTechnician({ ...waiting, phase: 'SOURCE_SECURED', sourceSecuredAt: '2026-11-26T03:00:00Z' }), false);
+  // A case opened before phases existed never waits.
+  assert.equal(waitsForTechnician({ ...waiting, phase: null }), false);
+  assert.ok(recoveryPhaseLabel('ASSESSMENT_REQUIRED').includes('technician'));
+  assert.equal(recoveryPhaseLabel(null), null);
+  assert.ok(recoveryActionReasonLabel('recovery_source_not_secured').includes('technician'));
+
+  const map = {
+    id: 'map-1',
+    endpoints: [
+      { id: 'q', mapVersionId: 'map-1', code: 'EP-QUEUE', isEnabled: true },
+      { id: 'p', mapVersionId: 'map-1', code: 'EP-PARKING-A', isEnabled: true },
+    ],
+  };
+  const ranked = rankedRecoveryEndpoints([
+    { endpointId: 'q', unsuitable: 'failed_robot_there' },
+    { endpointId: 'p', unsuitable: null },
+  ], map);
+  assert.deepEqual(ranked.map(e => e.code), ['EP-PARKING-A']);
+  assert.equal(rankedRecoveryEndpoints([], map), null);
 });

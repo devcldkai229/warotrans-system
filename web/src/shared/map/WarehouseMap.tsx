@@ -56,6 +56,9 @@ export interface MapRobot {
   yaw: number
   /** Ring the Robot (an error or a blocked Zone). */
   alert?: boolean
+  /** The robot's footprint in metres (FL-03), when declared; drawn at this real size. */
+  lengthM?: number | null
+  widthM?: number | null
 }
 
 /**
@@ -176,8 +179,18 @@ export interface WarehouseMapProps {
   cellSets?: MapCellSet[]
   /** Occupancy preview PNG (MapVersion.previewImageUri), stretched to map bounds. */
   occupancyImageUrl?: string | null
-  /** Render the refreshed OTTO floor/architecture/HUD style (`otto` for `/monitor/fleet`). */
+  /**
+   * The one map style of the console (default `otto`: framed endpoint icons, robot bodies at their real size, hatched
+   * keep-out zones), so every page draws a map the same way. `classic` is the older style, kept for reference.
+   */
   appearance?: 'classic' | 'otto'
+  /**
+   * OTTO only: draw the shelf and dock bays outside the walls and the dotted canvas (default false: the floor as it is
+   * scanned, the same on every page).
+   */
+  architecture?: boolean
+  /** Square floor tiles of this size (metres), drawn as a light grid centred inside the floor; none when unset. */
+  floorTileMeters?: number | null
   className?: string
   /** HTML drawn on top of the map: positioned with `toPercent`, inside the same frame as the map. */
   children?: ReactNode
@@ -252,6 +265,8 @@ export function WarehouseMap({
   drawing,
   occupancyImageUrl,
   appearance = 'otto',
+  architecture = false,
+  floorTileMeters = null,
   costmapImages = [],
   cellSets = [],
   className,
@@ -265,8 +280,8 @@ export function WarehouseMap({
   const rawWidth = bounds.maxX - bounds.minX
   const rawHeight = bounds.maxY - bounds.minY
   const ottoArch = useMemo(
-    () => (isOtto ? computeOttoStationArchitecture(endpoints, bounds, yawUnit) : null),
-    [isOtto, endpoints, bounds, yawUnit],
+    () => (isOtto && architecture ? computeOttoStationArchitecture(endpoints, bounds, yawUnit) : null),
+    [isOtto, architecture, endpoints, bounds, yawUnit],
   )
   const effectiveBounds = ottoArch ? ottoArch.expandedBounds : bounds
   const width = effectiveBounds.maxX - effectiveBounds.minX
@@ -464,8 +479,7 @@ export function WarehouseMap({
   const basePxPerMetre = isOtto && stageSize.width > 0 && width > 0 ? stageSize.width / width : 110
   const ottoStrokeUnit = 1 / Math.max(20, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
   const ottoHatchStep = 6.5 / Math.max(8, basePxPerMetre * Math.sqrt(Math.max(1, zoom)))
-  const ottoRobotLenM = Math.max(ROBOT_LENGTH_METERS, 22 / Math.max(20, basePxPerMetre))
-  const ottoRobotWidM = ottoRobotLenM * (ROBOT_WIDTH_METERS / ROBOT_LENGTH_METERS)
+  const ottoRobotLenM = Math.max(ROBOT_LENGTH_METERS, 12 / Math.max(20, basePxPerMetre))
   const ottoEndpointSizeM = Math.max(0.18, Math.min(0.24, 21 / Math.max(20, basePxPerMetre)))
   const ottoTagBaseRadiusPx = ottoRobotLenM * 0.5 * 1.24 * basePxPerMetre
   const ottoTagOffsetPx = (ottoTagBaseRadiusPx + 3) * zoom + ROBOT_TAG_GAP
@@ -539,7 +553,7 @@ export function WarehouseMap({
         }
       }}
     >
-      {isOtto ? (
+      {isOtto && architecture ? (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
@@ -634,6 +648,25 @@ export function WarehouseMap({
                 strokeWidth={ottoStrokeUnit * 1.1}
                 pointerEvents="none"
               />
+              {floorTileMeters && floorTileMeters > 0 ? (() => {
+                const floorW = bounds.maxX - bounds.minX
+                const floorH = bounds.maxY - bounds.minY
+                const cols = Math.floor(floorW / floorTileMeters + 1e-6)
+                const rows = Math.floor(floorH / floorTileMeters + 1e-6)
+                if (cols < 1 || rows < 1 || cols > 200 || rows > 200) return null
+                const x0 = bounds.minX + (floorW - cols * floorTileMeters) / 2
+                const y0 = bounds.minY + (floorH - rows * floorTileMeters) / 2
+                const lines: Array<[number, number, number, number]> = []
+                for (let i = 0; i <= cols; i++) lines.push([x0 + i * floorTileMeters, y0, x0 + i * floorTileMeters, y0 + rows * floorTileMeters])
+                for (let j = 0; j <= rows; j++) lines.push([x0, y0 + j * floorTileMeters, x0 + cols * floorTileMeters, y0 + j * floorTileMeters])
+                return (
+                  <g pointerEvents="none" stroke="var(--otto-floor-stroke)" strokeOpacity={0.9} strokeWidth={ottoStrokeUnit * 1.1}>
+                    {lines.map(([ax, ay, bx, by], index) => (
+                      <line key={index} x1={X(ax)} y1={Y(ay)} x2={X(bx)} y2={Y(by)} />
+                    ))}
+                  </g>
+                )
+              })() : null}
               {ottoArch && ottoArch.shelfBays.length > 0 ? (
                 <g pointerEvents="none">
                   {ottoArch.shelfBays.map((bay) => {
@@ -819,7 +852,7 @@ export function WarehouseMap({
                 const load = zoneLoad.get(zone.id) ?? 0
                 const exclusive = zone.zoneType === 'SINGLE_OCCUPANCY'
                 const over = show.occupancy && exclusive && load > 1
-                const full = show.occupancy && exclusive && load === 1
+                const full = false
                 const isSelected = selected.zoneId === zone.id
                 const isHovered = hoveredZoneId === zone.id
                 const isKeepOut = zone.zoneType === 'KEEP_OUT'
@@ -1100,20 +1133,26 @@ export function WarehouseMap({
             </g>
           ) : null}
 
-          {/* Live Nav2 plans: one thin line per robot in its plan colour. The part traffic has granted is drawn full
-              strength, the part still waiting for traffic fainter. */}
+          {/* Live Nav2 plans: thin monochrome line per robot (solid where granted, dashed where waiting) with a small goal dot. */}
           {trafficOverlay?.plannedPaths && trafficOverlay.plannedPaths.length > 0 ? (
             <g pointerEvents="none" fill="none" strokeLinecap="round" strokeLinejoin="round">
               {trafficOverlay.plannedPaths.map((plan) => {
                 if (plan.points.length < 2) return null
                 const focused = !focusRobotCodes || focusRobotCodes.length === 0 || focusRobotCodes.includes(plan.robotCode)
-                const line = 0.16 * mark
+                const line = isOtto ? 2 * ottoStrokeUnit : 0.1 * mark
+                const dash = `${line * 2.5} ${line * 2}`
                 const granted = plan.points.slice(0, Math.max(0, plan.grantedCount))
                 const ahead = plan.points.slice(Math.max(0, plan.grantedCount - 1))
+                const goal = plan.points[plan.points.length - 1]
                 return (
-                  <g key={`plan-${plan.robotCode}`} opacity={focused ? 1 : 0.3} stroke={plan.color} strokeWidth={line}>
-                    {ahead.length >= 2 ? <polyline points={stagePoints(ahead)} strokeOpacity={0.4} /> : null}
-                    {granted.length >= 2 ? <polyline points={stagePoints(granted)} strokeOpacity={0.95} /> : null}
+                  <g key={`plan-${plan.robotCode}`} opacity={focused ? 1 : 0.35}>
+                    {ahead.length >= 2 ? (
+                      <polyline points={stagePoints(ahead)} stroke={plan.color} strokeWidth={line} strokeOpacity={0.45} strokeDasharray={dash} />
+                    ) : null}
+                    {granted.length >= 2 ? (
+                      <polyline points={stagePoints(granted)} stroke={plan.color} strokeWidth={line} strokeOpacity={0.92} />
+                    ) : null}
+                    <circle cx={X(goal.x)} cy={Y(goal.y)} r={line * 2.2} fill={plan.color} fillOpacity={1} stroke="none" />
                   </g>
                 )
               })}
@@ -1337,10 +1376,16 @@ export function WarehouseMap({
               {isOtto
                 ? robots.map((robot) => {
                     const isSelectedRobot = selected.robotCode === robot.code
-                    const hw = ottoRobotWidM / 2
-                    const hl = ottoRobotLenM / 2
-                    const noseH = ottoRobotLenM * 0.22
-                    const noseW = ottoRobotWidM * 0.22
+                    // The robot's real footprint (its declared size, else the RBT-001 frame); only a far zoom-out keeps a
+                    // minimum on screen so it does not vanish. Compare with the floor tiles (35 cm) to check.
+                    const realLen = robot.lengthM && robot.lengthM > 0 ? robot.lengthM : ROBOT_LENGTH_METERS
+                    const realWid = robot.widthM && robot.widthM > 0 ? robot.widthM : ROBOT_WIDTH_METERS
+                    const robotLenM = Math.max(realLen, 12 / Math.max(20, basePxPerMetre))
+                    const robotWidM = robotLenM * (realWid / realLen)
+                    const hw = robotWidM / 2
+                    const hl = robotLenM / 2
+                    const noseH = robotLenM * 0.22
+                    const noseW = robotWidM * 0.22
                     const rotDeg = 90 - yawDeg(robot.yaw)
                     return (
                       <g
@@ -1359,7 +1404,7 @@ export function WarehouseMap({
                         }
                       >
                         <circle
-                          r={ottoRobotLenM * (isSelectedRobot ? 0.72 : 0.6)}
+                          r={robotLenM * (isSelectedRobot ? 0.72 : 0.6)}
                           fill={robot.alert ? MAP_RED : 'currentColor'}
                           fillOpacity={robot.alert ? 0.22 : 0.14}
                           className={
@@ -1370,7 +1415,7 @@ export function WarehouseMap({
                         />
                         {isSelectedRobot ? (
                           <circle
-                            r={ottoRobotLenM * 0.72}
+                            r={robotLenM * 0.72}
                             fill="none"
                             stroke="currentColor"
                             strokeWidth={ottoStrokeUnit * 1.15}
@@ -1378,7 +1423,7 @@ export function WarehouseMap({
                           />
                         ) : robot.alert ? (
                           <circle
-                            r={ottoRobotLenM * 0.68}
+                            r={robotLenM * 0.68}
                             fill="none"
                             stroke={MAP_RED}
                             strokeWidth={ottoStrokeUnit * 1.15}
@@ -1392,37 +1437,37 @@ export function WarehouseMap({
                           <rect
                             x={-hw}
                             y={-hl}
-                            width={ottoRobotWidM}
-                            height={ottoRobotLenM}
-                            rx={ottoRobotWidM * 0.24}
+                            width={robotWidM}
+                            height={robotLenM}
+                            rx={robotWidM * 0.24}
                             fill="var(--otto-chassis-fill)"
                             stroke="var(--otto-chassis-stroke)"
                             strokeWidth={ottoStrokeUnit * 1.15}
                           />
                           <rect
                             x={-hw * 0.82}
-                            y={-hl + ottoRobotLenM * 0.05}
-                            width={ottoRobotWidM * 0.82}
-                            height={ottoRobotLenM * 0.18}
-                            rx={ottoRobotLenM * 0.06}
+                            y={-hl + robotLenM * 0.05}
+                            width={robotWidM * 0.82}
+                            height={robotLenM * 0.18}
+                            rx={robotLenM * 0.06}
                             fill="currentColor"
                           />
                           <rect
-                            x={-ottoRobotWidM * 0.3}
-                            y={-ottoRobotLenM * 0.16}
-                            width={ottoRobotWidM * 0.6}
-                            height={ottoRobotLenM * 0.46}
-                            rx={ottoRobotWidM * 0.12}
+                            x={-robotWidM * 0.3}
+                            y={-robotLenM * 0.16}
+                            width={robotWidM * 0.6}
+                            height={robotLenM * 0.46}
+                            rx={robotWidM * 0.12}
                             fill="var(--otto-deck-fill)"
                             stroke="var(--otto-deck-stroke)"
                             strokeWidth={ottoStrokeUnit * 0.75}
                           />
                           <rect
-                            x={-ottoRobotWidM * 0.14}
-                            y={ottoRobotLenM * 0.03}
-                            width={ottoRobotWidM * 0.28}
-                            height={ottoRobotLenM * 0.09}
-                            rx={ottoRobotLenM * 0.04}
+                            x={-robotWidM * 0.14}
+                            y={robotLenM * 0.03}
+                            width={robotWidM * 0.28}
+                            height={robotLenM * 0.09}
+                            rx={robotLenM * 0.04}
                             fill="currentColor"
                             fillOpacity={0.5}
                           />

@@ -586,6 +586,8 @@ export interface JobDetailResponse {
 export type JobRecoveryStatus = 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT';
 
 export type JobRecoveryAction =
+  | 'UNLOAD'
+  | 'RESOLVE_MANUALLY'
   | 'CLAIM'
   | 'RELEASE'
   | 'ASSIGN'
@@ -620,6 +622,31 @@ export interface JobRecoveryResponse {
   availableActions: ActionAvailability[];
   buttonArmed?: boolean;
   confirmedByRobotId?: string | null;
+  /** Payload recovery phase (null on cases opened before phases existed). */
+  phase?: RecoveryPhase | null;
+  recoveryMode?: string | null;
+  sourceSecuredAt?: UtcDateTime | null;
+  sourceEndpointId?: string | null;
+}
+
+export type RecoveryPhase =
+  | 'ASSESSMENT_REQUIRED'
+  | 'ASSESSED'
+  | 'SOURCE_REPOSITIONING'
+  | 'SOURCE_SECURED'
+  | 'TARGET_EN_ROUTE'
+  | 'AWAITING_TRANSFER'
+  | 'INTERVENTION_REQUIRED';
+
+/** A place a robot may be sent to in a recovery, ranked: free first, then by the way from the cargo. */
+export interface RecoveryEndpointCandidateResponse {
+  endpointId: string;
+  code: string;
+  name: string;
+  endpointType: string;
+  distanceMeters: number;
+  pathMeters: number | null;
+  unsuitable: string | null;
 }
 
 export interface RecoveryRobotCandidateResponse {

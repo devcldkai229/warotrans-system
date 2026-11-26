@@ -25,8 +25,11 @@ import {
   isRecoveryActionAllowed,
   listJobs,
   listRecoveryCandidates,
+  listRecoveryEndpointCandidates,
   listRobots,
   releaseJobRecovery,
+  resolveRecoveryManually,
+  unloadRecoveryCargo,
   resumeRecoveryOnSameRobot,
   unassignRecoveryRobot,
   type MapVersionDetailDto,
@@ -45,6 +48,7 @@ import type {
   JobDetailResponse,
   JobRecoveryResponse,
   RecoveryRobotCandidateResponse,
+  RecoveryEndpointCandidateResponse,
   RobotResponse,
 } from '../../shared/types/contracts';
 import {
@@ -59,6 +63,9 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import {
   candidateReasonLabel,
   eligibleRecoveryEndpoints,
+  rankedRecoveryEndpoints,
+  recoveryPhaseLabel,
+  waitsForTechnician,
   recoveryActionReasonLabel,
   recoveryPhaseFromCase,
   recoveryScanProgress,
@@ -66,6 +73,8 @@ import {
 } from './payloadRecoveryData';
 
 type BusyAction =
+  | 'unload'
+  | 'resolve'
   | 'load'
   | 'claim'
   | 'release'
@@ -100,6 +109,7 @@ export function PayloadRecoveryScreen() {
   const [job, setJob] = useState<JobDetailResponse | null>(null);
   const [recovery, setRecovery] = useState<JobRecoveryResponse | null>(null);
   const [candidates, setCandidates] = useState<RecoveryRobotCandidateResponse[]>([]);
+  const [rankedPoints, setRankedPoints] = useState<RecoveryEndpointCandidateResponse[]>([]);
   const [robots, setRobots] = useState<RobotResponse[]>([]);
   const [map, setMap] = useState<MapVersionDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,13 +167,16 @@ export function PayloadRecoveryScreen() {
         return;
       }
 
-      const [recoveryResult, robotsResult, mapResult, candidatesResult] = await Promise.allSettled([
+      const [recoveryResult, robotsResult, mapResult, candidatesResult, pointsResult] = await Promise.allSettled([
         getJobRecovery(loadedJob.id),
         listRobots(),
         getMapVersionDetail(loadedJob.mapVersionId),
         canOperate && loadedJob.status === 'RECOVERY_REQUIRED'
           ? listRecoveryCandidates(loadedJob.id)
           : Promise.resolve<RecoveryRobotCandidateResponse[]>([]),
+        loadedJob.status === 'RECOVERY_REQUIRED'
+          ? listRecoveryEndpointCandidates(loadedJob.id, 'TARGET')
+          : Promise.resolve([]),
       ]);
 
       if (loadRequestRef.current !== reqId) return;
@@ -175,6 +188,8 @@ export function PayloadRecoveryScreen() {
       const loadedRobots = robotsResult.status === 'fulfilled' ? robotsResult.value.items : [];
       const loadedMap = mapResult.status === 'fulfilled' ? mapResult.value : null;
       const loadedCandidates = candidatesResult.status === 'fulfilled' ? candidatesResult.value : [];
+      const loadedPoints = pointsResult.status === 'fulfilled' ? pointsResult.value : [];
+      setRankedPoints(loadedPoints);
 
       setRecovery(loadedRecovery);
       setRobots(loadedRobots);
@@ -199,7 +214,7 @@ export function PayloadRecoveryScreen() {
         eligibleRobots.some(c => c.robotId === prev) ? prev : (eligibleRobots[0]?.robotId ?? ''),
       );
 
-      const endpoints = eligibleRecoveryEndpoints(loadedMap);
+      const endpoints = rankedRecoveryEndpoints(loadedPoints, loadedMap) ?? eligibleRecoveryEndpoints(loadedMap);
       setSelectedEndpointId((prev) =>
         endpoints.some(ep => ep.id === prev) ? prev : (endpoints[0]?.id ?? ''),
       );
@@ -249,7 +264,10 @@ export function PayloadRecoveryScreen() {
     return () => clearInterval(timer);
   }, [appActive, resolvedJobId, recovery?.status, recovery?.robotArrived, recovery?.buttonArmed, loadRecoveryData]);
 
-  const endpoints = useMemo(() => eligibleRecoveryEndpoints(map), [map]);
+  // Transfer points as the server ranked them (free, nearest the cargo, never the failed robot's place).
+  const endpoints = useMemo(() => rankedRecoveryEndpoints(rankedPoints, map) ?? eligibleRecoveryEndpoints(map), [rankedPoints, map]);
+  const technicianFirst = waitsForTechnician(recovery);
+  const phaseText = recoveryPhaseLabel(recovery?.phase);
   const robotCodeFor = useCallback(
     (id: string | null | undefined, fallback = '—') => {
       if (!id) return fallback;
@@ -280,6 +298,8 @@ export function PayloadRecoveryScreen() {
   const canConfirm = canOperate && isRecoveryActionAllowed(recovery, 'CONFIRM');
   const canArmButton = canOperate && isRecoveryActionAllowed(recovery, 'ARM_BUTTON');
   const canResumeSameRobot = canOperate && isRecoveryActionAllowed(recovery, 'RESUME_SAME_ROBOT');
+  const canUnloadCargo = canOperate && isRecoveryActionAllowed(recovery, 'UNLOAD');
+  const canResolveManually = canOperate && isRecoveryActionAllowed(recovery, 'RESOLVE_MANUALLY');
 
   const requestInactiveReason = [
     getRecoveryAction(recovery, 'ASSIGN')?.reason,
@@ -746,8 +766,103 @@ export function PayloadRecoveryScreen() {
                   )}
                 </Card>
 
+                {phaseText && !recovery?.resolvedAt ? (
+                  <Card padding="md" gap={6}>
+                    <Text variant="label" color="textSecondary">Recovery stage</Text>
+                    <Text variant="headline">{phaseText}</Text>
+                    {technicianFirst ? (
+                      <Text variant="body" color="textSecondary">
+                        A technician first assesses the failed robot and confirms it stands safely. The rescue robot can be sent after that.
+                      </Text>
+                    ) : null}
+                  </Card>
+                ) : null}
+
+                {/* Take the cargo off the failed robot (unload, or a manual disposition) */}
+                {(phase === 'assign' || technicianFirst) && recovery && (canUnloadCargo || canResolveManually) ? (
+                  <Card padding="md" gap={10}>
+                    <Text variant="headline">Take Cargo Off the Failed Robot</Text>
+                    <Text variant="body" color="textSecondary">
+                      Scan each container you take off. Keep it for the rescue robot, or take it off the Job: back to storage or quarantined.
+                    </Text>
+                    <View style={styles.scanRow}>
+                      <View style={styles.flexText}>
+                        <TextField
+                          value={manualCode}
+                          onChangeText={setManualCode}
+                          placeholder={t('Scan or type container barcode')}
+                          autoCapitalize="characters"
+                          autoCorrect={false}
+                          editable={!busy}
+                          accessibilityLabel={t('Container Barcode')}
+                        />
+                      </View>
+                      <Button
+                        title="Verify"
+                        variant="outline"
+                        size="sm"
+                        disabled={!!busy || !manualCode.trim()}
+                        onPress={() => {
+                          triggerHaptic('tap');
+                          applyRecoveryScan(manualCode);
+                        }}
+                      />
+                    </View>
+                    <Button title="Open Scanner" variant="outline" size="sm" disabled={!!busy} onPress={() => setScannerOpen(true)} />
+                    {scanError ? <Text variant="caption" color="dangerText">{scanError}</Text> : null}
+                    <Text variant="caption" color="textSecondary">
+                      {t('{done} of {total} scanned', { done: scanProgress.done, total: scanProgress.total })}
+                    </Text>
+                    {canUnloadCargo ? (
+                      <Button
+                        title="Taken Off — I Hold It"
+                        variant="primary"
+                        size="md"
+                        fullWidth
+                        disabled={!!busy || scanProgress.scans.length === 0}
+                        onPress={() =>
+                          void runRecoveryMutation('unload', () =>
+                            unloadRecoveryCargo(job.id, recovery.id, recovery.version, scanProgress.scans, 'STAFF', note),
+                          )
+                        }
+                      />
+                    ) : null}
+                    {canResolveManually ? (
+                      <View style={{ gap: 8 }}>
+                        <Button
+                          title="Return to Storage"
+                          variant="outline"
+                          size="md"
+                          fullWidth
+                          disabled={!!busy || scanProgress.scans.length === 0}
+                          onPress={() =>
+                            void runRecoveryMutation('resolve', () =>
+                              resolveRecoveryManually(job.id, recovery.id, recovery.version, 'RETURN_TO_STORAGE', scanProgress.scans, null, note),
+                            )
+                          }
+                        />
+                        <Button
+                          title="Quarantine"
+                          variant="danger"
+                          size="md"
+                          fullWidth
+                          disabled={!!busy || scanProgress.scans.length === 0}
+                          onPress={() =>
+                            void runRecoveryMutation('resolve', () =>
+                              resolveRecoveryManually(job.id, recovery.id, recovery.version, 'QUARANTINE_CARGO', scanProgress.scans, 'OTHER', note),
+                            )
+                          }
+                        />
+                        <Text variant="caption" color="textSecondary">
+                          Containers taken off the Job are held under a container issue; resolving it says which shelf they go back to.
+                        </Text>
+                      </View>
+                    ) : null}
+                  </Card>
+                ) : null}
+
                 {/* Step 2A: Assign Rescue Robot or Resume on Same Robot */}
-                {phase === 'assign' ? (
+                {phase === 'assign' && !technicianFirst ? (
                   <>
                     <Card padding="md" gap={12}>
                       <Text variant="headline">Step 2 · Dispatch Rescue Robot</Text>

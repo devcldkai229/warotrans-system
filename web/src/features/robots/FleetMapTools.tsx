@@ -199,6 +199,7 @@ export function FleetMapTools({ costmap, robots, zones, edges, endpoints }: Flee
               <LayerToggleRow label={t('Zones')} checked={view.zones} onChange={(v) => update({ zones: v })} />
               <LayerToggleRow label={t('Lanes')} checked={view.lanes} onChange={(v) => update({ lanes: v })} />
               <LayerToggleRow label={t('Traffic')} checked={view.traffic} onChange={(v) => update({ traffic: v })} />
+              <LayerToggleRow label={t('Floor tiles (35 cm)')} checked={view.floorGrid} onChange={(v) => update({ floorGrid: v })} />
             </div>
             <p className="mt-1 px-2 text-[11px] text-muted">{t('Endpoints always shown')}</p>
           </section>

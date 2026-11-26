@@ -10,6 +10,7 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { createLocation, listFreeEndpoints, setLocationStatus, type FreeEndpoint, type LocationListing } from './api'
 import { AddButton, SectionHead } from './SectionHead'
+import { LocationDetailDialog } from './LocationDetailDialog'
 import { t } from '@/shared/i18n'
 interface LocationDraft {
 
@@ -39,6 +40,8 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [openedId, setOpenedId] = useState<string | null>(null)
+  const opened = openedId ? locations.find((location) => location.id === openedId) : undefined
 
   function open() {
     if (!warehouse) return
@@ -128,7 +131,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
         </thead>
         <tbody>
           {locations.map((location) => (
-            <Tr key={location.id}>
+            <Tr key={location.id} onClick={() => setOpenedId(location.id)}>
               <Td className="font-mono text-xs">{location.code}</Td>
               <Td tone="strong">{location.name}</Td>
               <Td tone="faint">{location.warehouseName}</Td>
@@ -141,7 +144,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
                 </StatusBadge>
               </Td>
               <Td>
-                <div className="flex justify-end">
+                <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                   <Can permission={PERMISSIONS.warehouseWrite}>
                     <Button
                       size="sm"
@@ -169,6 +172,15 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
           ) : null}
         </tbody>
       </Table>
+
+      {opened ? (
+        <LocationDetailDialog
+          location={opened}
+          locations={locations}
+          onSaved={(saved) => setItems((current) => current.map((item) => (item.id === saved.id ? saved : item)))}
+          onClose={() => setOpenedId(null)}
+        />
+      ) : null}
 
       {draft && warehouse ? (
         <Dialog title={t('Add storage location')} submitLabel={t('Create location')} busy={busy} onClose={() => setDraft(null)} onSubmit={save}>

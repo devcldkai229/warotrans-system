@@ -9,6 +9,9 @@ import { findEndpointByName } from '@/shared/map/scene'
 import { WarehouseMap, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { FleetMapTopBar } from './FleetMapTopBar'
 import { FleetMapTools } from './FleetMapTools'
+
+/** The warehouse floor tiles (12 x 10 tiles of 35 cm on MAP-ONE). */
+const FLOOR_TILE_METERS = 0.35
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
 import { RobotPreviewCard } from './RobotPreviewCard'
 import { shownRobotStatus } from './robotStatus'
@@ -33,6 +36,9 @@ interface FleetMapProps {
   enableTrafficOverlay?: boolean
   /** Active MapVersion meta for VITE_MAP_ALIGN_DEBUG overlay (origin/resolution). */
   mapVersion?: MapVersionDto | null
+  /** Overview: the warehouse's map versions and the map picker of the top bar. */
+  maps?: MapVersionDto[]
+  onSelectMap?: (mapVersionId: string) => void
 }
 
 interface FleetTrafficAlert {
@@ -63,6 +69,8 @@ export function FleetMap({
   occupancyImageUrl = null,
   enableTrafficOverlay = true,
   mapVersion = null,
+  maps,
+  onSelectMap,
 }: FleetMapProps) {
   const alignDebug = isMapAlignDebugEnabled()
   const { snap, overlay: trafficOverlay } = useTrafficOverlay(robots, enableTrafficOverlay)
@@ -78,6 +86,8 @@ export function FleetMap({
         y: robot.poseY,
         yaw: robot.poseYaw,
         alert: robot.status === 'ERROR' || (trafficOverlay?.quarantinedRobotCodes?.includes(robot.code) ?? false),
+        lengthM: robot.lengthM ?? null,
+        widthM: robot.widthM ?? null,
       })),
     [robots, trafficOverlay],
   )
@@ -170,7 +180,7 @@ export function FleetMap({
   return (
     <>
       <WarehouseMap
-        appearance="otto"
+        floorTileMeters={costmap.view.floorGrid ? FLOOR_TILE_METERS : null}
         yawUnit="rad"
         zones={zones}
         edges={edges}
@@ -188,7 +198,13 @@ export function FleetMap({
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
         movements={movements}
-        trafficOverlay={costmap.view.traffic ? trafficOverlay : null}
+        trafficOverlay={
+          costmap.view.traffic
+            ? trafficOverlay
+            : trafficOverlay?.plannedPaths
+              ? { plannedPaths: trafficOverlay.plannedPaths }
+              : null
+        }
         costmapImages={costmap.costmapImages}
         cellSets={costmap.cellSets}
         callouts={[]}
@@ -212,6 +228,8 @@ export function FleetMap({
         mapVersion={mapVersion}
         trafficLive={Boolean(snap)}
         trafficEpoch={snap?.epoch ?? null}
+        maps={maps}
+        onSelectMap={onSelectMap}
       />
 
       {enableTrafficOverlay ? (

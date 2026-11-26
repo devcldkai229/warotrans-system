@@ -222,6 +222,33 @@ public sealed class RobotPositioningTests(WaroTransWebApplicationFactory factory
     }
 
     [Fact]
+    public async Task Settle_closes_a_yielding_intent_nobody_closed_once_its_navigate_has_ended()
+    {
+        var seed = await SeedAsync();
+        var robot = await SeedRobotAsync(seed);
+        var park = await AddParkAsync(seed, 0.5);
+        var intentId = await Positioning(s => s.StartReturnToParkAsync(robot.Id, park, 0.5, 4.0, 0, CancellationToken.None));
+        await ResultAsync(robot.Code, await NavigateIdAsync(intentId), RobotCommandOutcomes.Canceled);
+        await using (var scope = Services.CreateAsyncScope())
+        {
+            // What RobotCare leaves behind: YIELDING (it gave its way home up) with no Job coming back to close it.
+            var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+            var intent = await db.RobotPositioningIntents.SingleAsync(i => i.Id == intentId);
+            intent.Status = PositioningIntentStatus.YIELDING;
+            intent.UpdatedAt = DateTimeOffset.UtcNow - RobotPositioningService.YieldingSettleAfter - TimeSpan.FromSeconds(1);
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(1, await Positioning(s => s.SettleAsync(CancellationToken.None)));
+
+        await using var check = Services.CreateAsyncScope();
+        var closed = await check.ServiceProvider.GetRequiredService<FleetDbContext>().RobotPositioningIntents.SingleAsync(i => i.Id == intentId);
+        Assert.Equal(PositioningIntentStatus.YIELDED, closed.Status);
+        Assert.StartsWith("yield_settled", closed.EndReason);
+        Assert.Empty(await Positioning(s => s.LiveRobotIdsAsync(CancellationToken.None)));
+    }
+
+    [Fact]
     public async Task Auto_return_sends_idle_robots_to_free_parking_places_only_and_skips_offline_ones()
     {
         var seed = await SeedAsync();

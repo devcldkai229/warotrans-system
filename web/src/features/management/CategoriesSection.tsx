@@ -8,6 +8,8 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { createCategory } from './api'
 import { AddButton, SectionHead } from './SectionHead'
+import { CategoryDetailDialog } from './CategoryDetailDialog'
+import { ProductDetailDialog } from './ProductDetailDialog'
 import { t } from '@/shared/i18n'
 interface CategoryDraft {
 
@@ -20,14 +22,19 @@ interface CategoriesSectionProps {
   categories: ProductCategory[]
   setCategories: (update: (current: ProductCategory[]) => ProductCategory[]) => void
   products: Product[]
+  setProducts: (update: (current: Product[]) => Product[]) => void
   loadState: 'loading' | 'ready' | 'error'
 }
 
 /** warehouse.product_categories: the code is unique. */
-export function CategoriesSection({ categories, setCategories, products, loadState }: CategoriesSectionProps) {
+export function CategoriesSection({ categories, setCategories, products, setProducts, loadState }: CategoriesSectionProps) {
   const [draft, setDraft] = useState<CategoryDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [openedId, setOpenedId] = useState<string | null>(null)
+  const [productId, setProductId] = useState<string | null>(null)
+  const opened = openedId ? categories.find((category) => category.id === openedId) : undefined
+  const openedProduct = productId ? products.find((product) => product.id === productId) : undefined
 
   const productCount = (categoryId: string) => products.filter((product) => product.categoryId === categoryId).length
 
@@ -84,7 +91,7 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
         </thead>
         <tbody>
           {categories.map((category) => (
-            <Tr key={category.id}>
+            <Tr key={category.id} onClick={() => setOpenedId(category.id)}>
               <Td className="font-mono text-xs">{category.code}</Td>
               <Td tone="strong">{category.name}</Td>
               <Td tone="faint">{category.description ?? '—'}</Td>
@@ -102,6 +109,30 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
           ) : null}
         </tbody>
       </Table>
+
+      {opened && !openedProduct ? (
+        <CategoryDetailDialog
+          category={opened}
+          products={products}
+          onSaved={(saved) => setCategories((current) => current.map((item) => (item.id === saved.id ? saved : item)))}
+          onDeleted={(deleted) => {
+            setCategories((current) => current.filter((item) => item.id !== deleted.id))
+            setOpenedId(null)
+          }}
+          onOpenProduct={(product) => setProductId(product.id)}
+          onClose={() => setOpenedId(null)}
+        />
+      ) : null}
+
+      {openedProduct ? (
+        <ProductDetailDialog
+          product={openedProduct}
+          products={products}
+          categories={categories}
+          onSaved={(saved) => setProducts((current) => current.map((item) => (item.id === saved.id ? saved : item)))}
+          onClose={() => setProductId(null)}
+        />
+      ) : null}
 
       {draft ? (
         <Dialog title={t('Add category')} submitLabel={t('Create category')} busy={busy} onClose={() => setDraft(null)} onSubmit={save}>

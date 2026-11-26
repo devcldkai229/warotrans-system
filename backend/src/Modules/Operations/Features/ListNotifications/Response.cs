@@ -16,4 +16,5 @@ public sealed record NotificationDto(
     bool IsRead,
     DateTimeOffset? ReadAt,
     DateTimeOffset? ResolvedAt,
-    string? Route = null);
+    string? Route = null,
+    IReadOnlyList<WaroTrans.Operations.Contracts.NotificationLink>? Links = null);

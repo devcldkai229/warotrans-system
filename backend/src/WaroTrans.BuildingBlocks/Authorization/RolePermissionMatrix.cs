@@ -17,6 +17,7 @@ public static class RolePermissionMatrix
             // Warehouse floor: receives goods, raises and follows transport requests, confirms handovers.
             // May stop a robot (safety) and tell it where it stands (localize), never drive or reconfigure one.
             // May cancel a request raised by mistake; rejecting one stays a supervisor decision.
+            // Reads the traffic snapshot (never changes it) so the app shows where each robot is about to drive.
             [AppRoles.Staff] = new[]
             {
                 Permissions.MapRead,
@@ -24,6 +25,7 @@ public static class RolePermissionMatrix
                 Permissions.TransportRead, Permissions.TransportCreate, Permissions.TransportCancel,
                 Permissions.WorkflowRead, Permissions.JobRead, Permissions.JobOperate, Permissions.JobPause,
                 Permissions.RobotRead, Permissions.RobotStop, Permissions.RobotLocalize,
+                Permissions.TrafficRead,
                 Permissions.IssueRead, Permissions.IssueCreate,
                 Permissions.NotificationRead
             }.ToFrozenSet(StringComparer.Ordinal),
@@ -41,6 +43,9 @@ public static class RolePermissionMatrix
                 Permissions.RobotManualDrive, Permissions.RobotMaintenance, Permissions.RobotPower,
                 Permissions.RobotDiagnostics,
                 Permissions.TrafficRead, Permissions.TrafficManage,
+                // Payload recovery: the robot side (assess, approve its motion, locate it, secure it), not the cargo.
+                Permissions.RecoveryAssess, Permissions.RecoveryApproveMotion, Permissions.RecoveryConfirmLocation,
+                Permissions.RecoveryConfirmClearance,
                 Permissions.IssueRead, Permissions.IssueCreate, Permissions.IssueManage,
                 Permissions.AuditRead,
                 Permissions.NotificationRead,

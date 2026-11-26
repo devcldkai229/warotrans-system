@@ -22,7 +22,8 @@ public sealed class AdminNotificationProducer(
     INavigationModule navigation,
     IStaffOperatingWarehouse staffWarehouse,
     ILogger<AdminNotificationProducer> logger,
-    WaroTrans.WorkflowExecution.Contracts.IJobStaffVisibility? jobVisibility = null)
+    WaroTrans.WorkflowExecution.Contracts.IJobStaffVisibility? jobVisibility = null,
+    NotificationContext? context = null)
     : IIntegrationEventHandler<JobStatusChanged>,
         IIntegrationEventHandler<RobotConnectivityChanged>,
         IIntegrationEventHandler<RobotCommandLifecycleChanged>,
@@ -73,7 +74,7 @@ public sealed class AdminNotificationProducer(
 
             if (draft is not null)
             {
-                await notifications.PublishAsync(draft, cancellationToken);
+                await notifications.PublishAsync(await WithJobContextAsync(draft, e, cancellationToken), cancellationToken);
             }
 
             // The job moved on (resumed, reassigned, finished): what was waiting for an admin no longer is.
@@ -98,16 +99,31 @@ public sealed class AdminNotificationProducer(
                 return;
             }
 
+            var b = new NotificationContext.Builder();
+            b.Line("No heartbeat from the robot. A job it was running may need to be reassigned.");
+            if (context is not null && await context.RobotAsync(e.RobotId, cancellationToken) is { } facts)
+            {
+                await context.DescribeRobotAsync(b, facts, cancellationToken);
+                b.Line(facts.Job is null
+                    ? "Check its power and Wi-Fi."
+                    : "Check its power and Wi-Fi. If it does not come back, its Job needs recovery.");
+            }
+            else
+            {
+                b.Robot(e.RobotCode);
+            }
+
             await notifications.PublishAsync(
                 new NotificationDraft(
                     NotificationType.WARNING,
                     "ROBOT_OFFLINE",
                     $"Robot {e.RobotCode} went offline",
-                    "No heartbeat from the robot. A job it was running may need to be reassigned.",
+                    b.Content,
                     Robot,
                     e.RobotId,
                     key,
-                    Audience: NotificationAudience.RobotCare(e.RobotId)),
+                    Audience: NotificationAudience.RobotCare(e.RobotId),
+                    Links: b.Links),
                 cancellationToken);
         });
 
@@ -130,22 +146,49 @@ public sealed class AdminNotificationProducer(
 
             if (draft is not null)
             {
-                await notifications.PublishAsync(draft, cancellationToken);
+                var b = new NotificationContext.Builder();
+                b.Line(draft.Content);
+                if (e.Phase == RobotCommandLifecycleChanged.Phases.AckRejected)
+                    b.Line(NotificationContext.RejectMeaning(e.ErrorCode));
+                if (context is not null) await context.DescribeStepAsync(b, e.JobStepId, cancellationToken);
+                b.Line(e.Phase == RobotCommandLifecycleChanged.Phases.AckTimeout
+                    ? "The robot may be overloaded or its Wi-Fi weak: check its connection and health."
+                    : null);
+                b.Robot(e.RobotCode);
+                await notifications.PublishAsync(draft with { Content = b.Content, Links = b.Links }, cancellationToken);
             }
         });
 
     public Task HandleAsync(RobotBatteryLow e, CancellationToken cancellationToken = default) =>
-        SafelyAsync(() => notifications.PublishAsync(
-            new NotificationDraft(
-                NotificationType.WARNING,
-                "ROBOT_BATTERY_LOW",
-                $"Robot {e.RobotCode} battery is low",
-                $"{e.BatteryPercent:0}% left and the robot is not charging.",
-                Robot,
-                e.RobotId,
-                $"robot:{e.RobotId}:battery",
-                Audience: NotificationAudience.RobotCare(e.RobotId)),
-            cancellationToken));
+        SafelyAsync(async () =>
+        {
+            var b = new NotificationContext.Builder();
+            b.Line($"{e.BatteryPercent:0}% left and the robot is not charging.");
+            if (context is not null && await context.RobotAsync(e.RobotId, cancellationToken) is { } facts)
+            {
+                b.Line(facts.Place);
+                if (facts.Job is { } job)
+                {
+                    b.Line($"It holds Job {job.JobNo} ({job.Status}).");
+                    await context.DescribeJobLinksAsync(b, job, cancellationToken);
+                }
+            }
+
+            b.Line("Send it to the charger when it is free.");
+            b.Robot(e.RobotCode);
+            await notifications.PublishAsync(
+                new NotificationDraft(
+                    NotificationType.WARNING,
+                    "ROBOT_BATTERY_LOW",
+                    $"Robot {e.RobotCode} battery is low",
+                    b.Content,
+                    Robot,
+                    e.RobotId,
+                    $"robot:{e.RobotId}:battery",
+                    Audience: NotificationAudience.RobotCare(e.RobotId),
+                    Links: b.Links),
+                cancellationToken);
+        });
 
     /// <summary>Manual charging: the battery is full and a person has to unplug the charger (then confirm it).</summary>
     public Task HandleAsync(RobotChargeFull e, CancellationToken cancellationToken = default) =>
@@ -184,17 +227,27 @@ public sealed class AdminNotificationProducer(
         await StaffSeesAsync(jobId, cancellationToken) ? NotificationAudience.Floor : NotificationAudience.Admins;
 
     public Task HandleAsync(RobotErrorReported e, CancellationToken cancellationToken = default) =>
-        SafelyAsync(() => notifications.PublishAsync(
-            new NotificationDraft(
-                NotificationType.ALERT,
-                "ROBOT_ERROR",
-                $"Robot {e.RobotCode} reported an error",
-                $"Error code: {e.ErrorCode}.",
-                Robot,
-                e.RobotId,
-                $"robot:{e.RobotId}:error:{e.ErrorCode}",
-                Audience: NotificationAudience.RobotCare(e.RobotId)),
-            cancellationToken));
+        SafelyAsync(async () =>
+        {
+            var b = new NotificationContext.Builder();
+            b.Line($"Error code: {e.ErrorCode}.");
+            if (context is not null && await context.RobotAsync(e.RobotId, cancellationToken) is { } facts)
+                await context.DescribeRobotAsync(b, facts, cancellationToken);
+            b.Line("Open its Technical page for the health of its sensors and Nav2.");
+            b.Robot(e.RobotCode);
+            await notifications.PublishAsync(
+                new NotificationDraft(
+                    NotificationType.ALERT,
+                    "ROBOT_ERROR",
+                    $"Robot {e.RobotCode} reported an error",
+                    b.Content,
+                    Robot,
+                    e.RobotId,
+                    $"robot:{e.RobotId}:error:{e.ErrorCode}",
+                    Audience: NotificationAudience.RobotCare(e.RobotId),
+                    Links: b.Links),
+                cancellationToken);
+        });
 
     public Task HandleAsync(JobStepStatusChanged e, CancellationToken cancellationToken = default) =>
         SafelyAsync(async () =>
@@ -349,6 +402,28 @@ public sealed class AdminNotificationProducer(
                     cancellationToken);
             }
         });
+
+    /// <summary>A Job notification also says which robot and where, and links the robot, the request and its replay.</summary>
+    private async Task<NotificationDraft> WithJobContextAsync(NotificationDraft draft, JobStatusChanged e, CancellationToken cancellationToken)
+    {
+        if (context is null) return draft;
+        var b = new NotificationContext.Builder();
+        b.Line(draft.Content);
+        if (e.RobotId is { } robotId && await context.RobotAsync(robotId, cancellationToken) is { } facts)
+        {
+            b.Line($"Robot {facts.Robot.Code}.");
+            b.Line(facts.Place);
+            if (facts.Robot.BatteryPercent is { } battery)
+                b.Line(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Battery {battery:0}%."));
+            if (!facts.Robot.IsOnline) b.Line("The robot is offline.");
+            else if (facts.Robot.MotionHeld) b.Line("The robot holds motion (stopped).");
+            b.Robot(facts.Robot.Code);
+        }
+
+        if (await context.JobAsync(e.JobId, cancellationToken) is { } job)
+            await context.DescribeJobLinksAsync(b, job, cancellationToken);
+        return draft with { Content = b.Content, Links = b.Links };
+    }
 
     /// <summary>"12 min", "3 h 05 min" or "8 days": how long something has waited, in the unit that reads naturally.</summary>
     internal static string Waited(DateTimeOffset since)

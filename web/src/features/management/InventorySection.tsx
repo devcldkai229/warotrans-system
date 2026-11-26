@@ -1,4 +1,5 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import type { InventoryStockView } from '@/shared/api/contracts'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { cx } from '@/shared/lib/cx'
 import { formatIsoDateTime } from '@/shared/lib/format'
@@ -9,6 +10,7 @@ import { Pagination } from '@/shared/ui/Pagination'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { listManagedInventory } from './api'
 import { SectionHead } from './SectionHead'
+import { InventoryRowDialog } from './InventoryRowDialog'
 import { t } from '@/shared/i18n'
 
 const PAGE_SIZE = 50
@@ -33,6 +35,7 @@ export function InventorySection() {
   const firstShown = (page - 1) * PAGE_SIZE + 1
   useClampedPage(page, pageCount, listing.data !== undefined && !listing.isPlaceholderData, setPage)
 
+  const [opened, setOpened] = useState<InventoryStockView | null>(null)
   const top = useRef<HTMLDivElement>(null)
   const goToPage = (target: number) => {
     setPage(target)
@@ -62,7 +65,7 @@ export function InventorySection() {
           </thead>
           <tbody>
             {rows.map((row) => (
-              <Tr key={row.id}>
+              <Tr key={row.id} onClick={() => setOpened(row)}>
                 <Td className="font-mono text-xs">{row.sku}</Td>
                 <Td tone="strong">{row.productName}</Td>
                 <Td tone="faint">{row.locationCode}</Td>
@@ -91,6 +94,8 @@ export function InventorySection() {
           </tbody>
         </Table>
       </div>
+
+      {opened ? <InventoryRowDialog row={opened} onClose={() => setOpened(null)} /> : null}
 
       {rows.length > 0 ? (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4">

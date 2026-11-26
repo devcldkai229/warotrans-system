@@ -178,6 +178,101 @@ public class SemanticPrefixGrantTests
     }
 
     [Fact]
+    public void A_robot_starting_beside_a_locked_zone_never_waits_inside_it()
+    {
+        // Lab 2026-11-25 U2: the robot's body touched ZONE-CENTER where it stood; its grant ended deep inside the zone
+        // and it held the zone while it waited for the other robot, which needed that zone to get out.
+        var s = NewState();
+        // The leader holds what lies past the zone on the follower's way.
+        Assert.True(s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(7.6, 0, 7.6, -3))).Granted);
+        // The follower stands 0.2 m before the zone edge (x = 6.0): its body touches the zone.
+        var result = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(5.8, 0, 9.0, 0)));
+        if (result.Granted)
+        {
+            Assert.DoesNotContain(Zone, result.Authority!.ResourceIds);
+        }
+
+        AssertNoSharedResource(s);
+    }
+
+    private TrafficState FineState()
+    {
+        var options = new TrafficOptions
+        {
+            Mode = TrafficCoordinatorMode.Semantic,
+            EventLogCapacity = 256,
+            AuthorityTtlSec = 30,
+            LocalizationMarginMeters = 0.05,
+            SemanticPrefixGrant = true,
+            SemanticCellSizeMeters = 0.1,
+            SemanticHorizonMeters = 20.0,
+            SemanticPathToleranceMeters = 0.15
+        };
+        var s = new TrafficState(options, _clock);
+        s.BeginEpoch(100);
+        Assert.True(s.BindSemanticPolicy(options.ApplySemanticOverrides(_policy with { NoStopZones = [] })).Ok);
+        s.CompleteReconciliation([]);
+        return s;
+    }
+
+    /// <summary>Drives a robot along a plan and reports it standing at the end (it keeps only its body).</summary>
+    private static void DriveAndStand(TrafficState s, Guid robot, Guid command, ImmutableArray<SemanticPlanPose> plan)
+    {
+        var granted = s.AcquireSemanticPlan(new SemanticPlanProposeRequest(Guid.NewGuid(), robot, robot.ToString("N")[..6],
+            s.SemanticPolicy!.SemanticMapFingerprint, 1, plan, null, null, null, PlanHash: "h1", CommandId: command));
+        Assert.True(granted.Granted);
+        var end = plan[^1];
+        var left = View(s, robot).OccupiedResourceIds
+            .Where(r => r.StartsWith("zone:", StringComparison.Ordinal)
+                ? false
+                : SemanticReservation.IsPhysicallyClearOfResources(s.SemanticPolicy!, end.X, end.Y, [r], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(robot, granted.Authority!.Seq + 1, 100, left, end.X, end.Y, true).Ok);
+    }
+
+    [Theory]
+    [InlineData(5.68)]
+    [InlineData(5.70)]
+    public void A_robot_inside_a_zone_passes_a_robot_that_stands_waiting_for_that_zone(double standX)
+    {
+        // Sim V024 S3: R2 stood at EP-SHELF-C waiting for ZONE-CENTER; R1 held ZONE-CENTER and could not turn into lane
+        // BOUND-1 because its band touched R2's turning circle (bodies ~0.3 m apart). Both waited 3 minutes.
+        var s = FineState();
+        DriveAndStand(s, _leader, _cmd1, Line(6.3, 1.2, 6.3, 0.2));
+        Assert.Contains(Zone, View(s, _leader).OccupiedResourceIds);
+        DriveAndStand(s, _follower, _cmd2, Line(standX, -2.0, standX, -0.6));
+
+        // R2 wants to drive through the zone: it waits for R1 (too close to the zone for a useful step-by-step grant).
+        var r2 = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 2, Line(standX, -0.6, 7.5, -0.6)));
+        Assert.False(r2.Granted);
+
+        // R1 leaves the zone southwards, past R2.
+        var leave = Line(6.3, 0.2, 6.3, -3.0);
+        var r2Holds = View(s, _follower).OccupiedResourceIds;
+        Assert.NotEmpty(SemanticReservation.CollectResources(s.SemanticPolicy!, leave).Intersect(r2Holds)); // the conflict
+        var result = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 2, leave));
+        Assert.True(result.Granted, $"R1 refused: {result.Reason}");
+        Assert.Empty(result.Authority!.ResourceIds.Intersect(View(s, _follower).OccupiedResourceIds));
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
+    public void A_robot_waiting_for_a_zone_leaves_its_mouth_free_for_the_robot_inside()
+    {
+        // Sim V024 sweep: a step-by-step grant ended right at the mouth of the zone the robot waited for, on the way out
+        // of the robot inside it: each waited for the other.
+        var s = FineState();
+        DriveAndStand(s, _leader, _cmd1, Line(6.3, 1.2, 6.3, 0.2));
+        DriveAndStand(s, _follower, _cmd2, Line(4.4, -2.0, 4.4, -0.6));
+        var r2 = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 2, Line(4.4, -0.6, 7.5, -0.6)));
+        Assert.True(r2.Granted); // a step towards the zone
+
+        var result = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 2, Line(6.3, 0.2, 6.3, -3.0)));
+        Assert.True(result.Granted, $"R1 refused: {result.Reason}");
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
     public void A_grant_too_short_to_be_useful_is_not_given()
     {
         var s = NewState();
@@ -185,6 +280,34 @@ public class SemanticPrefixGrantTests
         var result = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(0.8, 0, 3, 0)));
         Assert.True(result.Queued);
         Assert.Null(View(s, _follower).Authority);
+    }
+
+    [Fact]
+    public void A_robot_on_a_Job_gets_the_zone_before_an_idle_robot_that_asked_first()
+    {
+        var s = LeaderInTheZone(out var leader);
+        var idle = new Guid("00000000-0000-0000-0000-0000000000c3");
+        var idlePlan = Plan(idle, Guid.NewGuid(), 1, Line(3.5, 0, 7.5, 0)) with
+        {
+            Priority = TrafficProgressIngress.PlanPriority(null)
+        };
+        var jobPlan = Plan(_follower, _cmd2, 1, Line(9.5, 0, 6.6, 0)) with
+        {
+            JobId = Guid.NewGuid(),
+            Priority = TrafficProgressIngress.PlanPriority(Guid.NewGuid())
+        };
+        Assert.False(s.AcquireSemanticPlan(idlePlan).Authority?.ResourceIds.Contains(Zone) ?? false);
+        Assert.False(s.AcquireSemanticPlan(jobPlan).Authority?.ResourceIds.Contains(Zone) ?? false);
+        s.DrainEvents();
+
+        var left = View(s, _leader).OccupiedResourceIds
+            .Where(rid => SemanticReservation.IsPhysicallyClearOfResources(_policy, 6.5, -3, [rid], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_leader, leader.Authority!.Seq + 1, 100, left, 6.5, -3, true).Ok);
+
+        Assert.Contains(Zone, View(s, _follower).OccupiedResourceIds);
+        Assert.DoesNotContain(Zone, View(s, idle).OccupiedResourceIds);
+        AssertNoSharedResource(s);
     }
 
     [Fact]
@@ -281,6 +404,98 @@ public class SemanticPrefixGrantTests
         // It keeps a body length from the leader's rear.
         var ys = follower.Authority.ResourceIds.Select(r => int.Parse(r.Split(':')[2], System.Globalization.CultureInfo.InvariantCulture)).Max();
         Assert.True(ys * 0.1 < 2.0 - 0.18, $"reaches y={ys * 0.1}");
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
+    public void Follower_takes_the_lane_the_leader_has_driven_off()
+    {
+        // Lab 2026-11-25 V024: the second robot waited for cells the first had long left, because the first robot's
+        // whole plan (from where it started) still counted as needed.
+        var s = LaneState();
+        var leader = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(1.19, 0.5, 1.19, 5.0)));
+        Assert.True(leader.Granted);
+        var behind = View(s, _leader).OccupiedResourceIds
+            .Where(rid => SemanticReservation.IsPhysicallyClearOfResources(_policy, 1.19, 3.5, [rid], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_leader, leader.Authority!.Seq + 1, 100, behind, 1.19, 3.5, true).Ok);
+
+        var follower = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(1.19, -1.0, 1.19, 4.5)));
+        Assert.True(follower.Granted);
+        var reach = follower.Authority!.ResourceIds
+            .Select(r => int.Parse(r.Split(':')[2], System.Globalization.CultureInfo.InvariantCulture)).Max() * 0.1;
+        Assert.True(reach > 2.0, $"follower only reaches y={reach}");
+        Assert.Empty(follower.Authority.ResourceIds.Intersect(View(s, _leader).OccupiedResourceIds));
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
+    public void A_follower_never_waits_right_against_a_robot_standing_beside_its_way()
+    {
+        // Sim V024 S5: R2 stood at PARKING-B about to leave south-east; R1 came down the column beside it, going the same
+        // way, and its grant ended with the bodies 0.15 m apart (no cell shared: same direction is not a meeting).
+        var options = new TrafficOptions
+        {
+            Mode = TrafficCoordinatorMode.Semantic,
+            EventLogCapacity = 256,
+            AuthorityTtlSec = 30,
+            LocalizationMarginMeters = 0.05,
+            SemanticPrefixGrant = true,
+            SemanticCellSizeMeters = 0.1,
+            SemanticHorizonMeters = 20.0,
+            SemanticPathToleranceMeters = 0.15
+        };
+        var s = new TrafficState(options, _clock);
+        s.BeginEpoch(100);
+        Assert.True(s.BindSemanticPolicy(options.ApplySemanticOverrides(_policy with { SingleOccupancyZones = [], NoStopZones = [] })).Ok);
+        s.CompleteReconciliation([]);
+
+        Assert.True(s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(-0.24, -1.19, 1.5, -3.0))).Granted);
+        var path = Line(-0.24, -0.17, -0.08, -0.67).AddRange(Line(-0.08, -0.67, 1.8, -3.2).Skip(1));
+        var follower = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, path));
+
+        if (follower.Granted)
+        {
+            // The furthest point of its plan where its whole body is inside the grant: where it can come to stand.
+            var held = follower.Authority!.ResourceIds.ToHashSet(StringComparer.Ordinal);
+            var policy = s.SemanticPolicy!;
+            var closest = double.PositiveInfinity;
+            foreach (var p in path)
+            {
+                var body = new HashSet<string>(StringComparer.Ordinal);
+                SemanticReservation.DiscCells(p.X, p.Y, policy.FootprintRadiusMeters, policy.EffectiveCellSize, body);
+                if (body.All(held.Contains))
+                {
+                    closest = Math.Min(closest, Math.Sqrt(Math.Pow(p.X + 0.24, 2) + Math.Pow(p.Y + 1.19, 2)));
+                }
+            }
+
+            Assert.True(closest >= 0.60 - 0.15, $"may stand {closest:F2} m from the standing robot's centre");
+        }
+
+        AssertNoSharedResource(s);
+    }
+
+    [Fact]
+    public void Meeting_the_leader_head_on_after_it_moved_still_stops_before_its_path()
+    {
+        var s = LaneState();
+        var leader = s.AcquireSemanticPlan(Plan(_leader, _cmd1, 1, Line(1.19, 0.5, 1.19, 3.0)));
+        Assert.True(leader.Granted);
+        var behind = View(s, _leader).OccupiedResourceIds
+            .Where(rid => SemanticReservation.IsPhysicallyClearOfResources(_policy, 1.19, 1.5, [rid], 0.05))
+            .ToImmutableArray();
+        Assert.True(s.ReportVerifiedExit(_leader, leader.Authority!.Seq + 1, 100, behind, 1.19, 1.5, true).Ok);
+
+        // Coming down the lane towards it: nothing of what the leader still drives may be granted.
+        var other = s.AcquireSemanticPlan(Plan(_follower, _cmd2, 1, Line(1.19, 7.0, 1.19, -1.0)));
+        var stillNeeded = SemanticReservation.WholePathResources(
+            s.SemanticPolicy!, Line(1.19, 1.5, 1.19, 3.0));
+        if (other.Granted)
+        {
+            Assert.Empty(other.Authority!.ResourceIds.Intersect(stillNeeded));
+        }
+
         AssertNoSharedResource(s);
     }
 

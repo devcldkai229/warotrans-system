@@ -156,7 +156,13 @@ public sealed class TrafficState
         }
 
         var robot = GetOrCreate(request.RobotId);
-        request = AnchoredAtSeenPose(robot, request);
+        // Zone chain: the plan holds the zone the robot stands in anyway, so no stale heartbeat pose is put in front of
+        // it (that re-requested cells behind a moving robot and got its grant revoked).
+        var zoneChain = _semantic.UsesZoneChain;
+        if (!zoneChain)
+        {
+            request = AnchoredAtSeenPose(robot, request);
+        }
 
         // OFFLINE / LOCALIZATION_LOSS must NOT clear from traffic_plan alone — only verified
         // progress / health evidence may recover those faults (Stage-3 safety).
@@ -223,7 +229,11 @@ public sealed class TrafficState
         // Replan: the old grant reserved another path. It is withdrawn here; if the new path is granted the robot
         // gets the new EXTEND, otherwise an explicit revoke (below) so it never keeps driving on the old one.
         var previous = robot.Authority;
-        if (previous is not null)
+        // Zone chain keeps the current grant across a replan of the SAME command only. A new command: the robot dropped
+        // its grant itself (NEW_COMMAND); restoring it left the backend sure the robot may drive while the robot had
+        // no grant and stood still holding the yard (sim V022 2026-11-24, two robots going home).
+        var keepPrevious = zoneChain && previous is not null && previous.CommandId == request.CommandId;
+        if (previous is not null && !keepPrevious)
         {
             RevokeAuthorityKeepOccupancy(robot, "REPLAN");
         }
@@ -238,6 +248,7 @@ public sealed class TrafficState
             Log($"semantic-reject-keepout:{robot.RobotId}:rev={request.PlanRevision}");
             if (previous is not null)
             {
+                RevokeAuthorityKeepOccupancy(robot, "KEEPOUT");
                 _pendingEvents.Add(new TrafficEvent(
                     TrafficEventKind.AuthorityRevoked, robot.RobotId, string.Empty, previous, previous.CommandId, null,
                     robot.JobStepId, null, null, null, null, IsFirstSegment: false));
@@ -265,11 +276,41 @@ public sealed class TrafficState
         // to a corridor) and a robot in the corridor each hold a strip the other needs — a wait-for cycle no one
         // could break, though the two were 0.9 m apart with a wall between them.
         var standingStill = previous is null && robot.Phase is TrafficRobotPhase.Waiting or TrafficRobotPhase.Idle;
-        ReleaseSemanticOccupancyOutside(robot, standingStill ? ResourcesUnder(request.Poses[0].X, request.Poses[0].Y, StandingYaw(robot, request.Poses[0].X, request.Poses[0].Y)) : resources);
+        var standing = standingStill
+            ? ResourcesUnder(request.Poses[0].X, request.Poses[0].Y, StandingYaw(robot, request.Poses[0].X, request.Poses[0].Y))
+            : resources;
+        // Zone chain: a robot that is driving keeps what its current grant gave it until the new plan is granted.
+        ReleaseSemanticOccupancyOutside(
+            robot,
+            keepPrevious ? standing.Union(previous!.ResourceIds, StringComparer.Ordinal).ToImmutableArray() : standing);
 
         EnsureSemanticCapacities(resources);
 
+        if (keepPrevious)
+        {
+            // Decided afresh below; restored when the new plan cannot be granted.
+            robot.Authority = null;
+        }
+
         var result = TryGrantSemantic(robot, request, resources);
+        if (keepPrevious)
+        {
+            if (result.Granted)
+            {
+                ReleaseSemanticOccupancyOutside(robot, resources);
+                return result;
+            }
+
+            // Not granted (a zone or a body ahead is taken): it keeps driving on what it already holds, the robot gate
+            // stops it where the new path leaves that, and it stays queued for the rest. Revoking here stopped a robot
+            // on the spot in a corridor and made it the next robot's blocker.
+            robot.Authority = previous;
+            robot.PartialAuthorityId = previous!.AuthorityId;
+            robot.Phase = TrafficRobotPhase.Authorized;
+            Log($"zone-chain-keep:{robot.RobotId}:{previous.AuthorityId}:{result.Reason}");
+            return result;
+        }
+
         if (!result.Granted && previous is not null)
         {
             _pendingEvents.Add(new TrafficEvent(
@@ -306,6 +347,16 @@ public sealed class TrafficState
             request.JobStepId,
             request.JobId);
 
+        if (WouldCreateWaitForCycle(robot.RobotId, resources)
+            && NarrowPastStillRobots(robot, request, resources) is { } passBy)
+        {
+            // The cycle only closes through robots that cannot move (no grant): pass them in the narrow band instead of
+            // waiting for each other (sim V024 S3: one robot stood at EP-SHELF-C waiting for ZONE-CENTER, the other held
+            // ZONE-CENTER and could not turn into lane BOUND-1 past the first one's turning circle; 3 minutes).
+            Log($"grant-narrow-past-still:{robot.RobotId}");
+            resources = passBy;
+        }
+
         if (WouldCreateWaitForCycle(robot.RobotId, resources))
         {
             robot.WaitingReason = TrafficWaitingReason.DeadlockRisk;
@@ -327,7 +378,7 @@ public sealed class TrafficState
         {
             blocker = null;
         }
-        else if (blocker is { } standing && StandsStill(standing)
+        else if (blocker is { } standing && !_semantic.UsesZoneChain && StandsStill(standing)
                  && SemanticReservation.CollectResources(_semantic, request.Poses, narrow: true) is var narrow
                  && FindPriorWaiter(robot.RobotId, narrow, request.Priority) is null
                  && !WouldCreateWaitForCycle(robot.RobotId, narrow)
@@ -349,7 +400,8 @@ public sealed class TrafficState
         if (blocker is not null)
         {
             var b = blocker == Guid.Empty ? (Guid?)null : blocker;
-            var prefix = _options.SemanticPrefixGrant ? GrantablePrefix(robot, request) : [];
+            // Zone chain: all or nothing. The robot waits where it stands (a stop: it only stops at the end of a plan).
+            var prefix = _options.SemanticPrefixGrant && !_semantic.UsesZoneChain ? GrantablePrefix(robot, request) : [];
             if (prefix.Length > 0)
             {
                 var partial = IssueSemanticAuthority(robot, request, candidate, prefix);
@@ -415,6 +467,11 @@ public sealed class TrafficState
     private ImmutableArray<string> GrantablePrefix(RobotRuntime robot, SemanticPlanProposeRequest request)
     {
         var policy = _semantic!;
+        if (policy.UsesZoneChain)
+        {
+            return [];
+        }
+
         var samples = SemanticReservation.SweptSamples(
             policy, request.Poses, Math.Max(policy.EffectiveCellSize, policy.HorizonMeters));
         if (samples.Count == 0)
@@ -422,17 +479,44 @@ public sealed class TrafficState
             return [];
         }
 
-        var needed = new HashSet<string>(StringComparer.Ordinal);
+        // What the other moving robots still need: their plans from where they are now (the part they drove is not
+        // needed any more; lab 2026-11-25: a robot waited for cells the other had long left), with the directions they
+        // drive through each resource.
+        var needed = new Dictionary<string, List<(double Ux, double Uy)>>(StringComparer.Ordinal);
         foreach (var other in _robots.Values)
         {
-            if (other.RobotId != robot.RobotId && other.ActiveCommandId is not null)
+            if (other.RobotId == robot.RobotId || other.ActiveCommandId is null || other.ProposedPath.IsDefaultOrEmpty)
             {
-                needed.UnionWith(SemanticReservation.WholePathResources(policy, other.ProposedPath));
+                continue;
+            }
+
+            var ahead = other.X is double ox && other.Y is double oy
+                ? TrimProposedPathFromPose(other.ProposedPath, ox, oy).Path
+                : other.ProposedPath;
+            foreach (var (rid, dirs) in SemanticReservation.WholePathHeadings(policy, ahead))
+            {
+                if (!needed.TryGetValue(rid, out var list))
+                {
+                    needed[rid] = list = [];
+                }
+
+                list.AddRange(dirs);
             }
         }
 
-        var zonesAtStart = samples[0].Resources
-            .Where(rid => rid.StartsWith("zone:", StringComparison.Ordinal))
+        // Where the other robots stand now: the grant must not end with this robot's body right against one of them
+        // (sim V024 S5: a follower stopped 0.15 m behind a robot parked on its way; the cells did not overlap).
+        var others = _robots.Values
+            .Where(o => o.RobotId != robot.RobotId && o.X is not null && o.Y is not null)
+            .Select(o => (X: o.X!.Value, Y: o.Y!.Value))
+            .ToList();
+
+        // A locked zone the robot may wait in: only one its centre already stands in. A body that merely touched the
+        // edge of one at the start (lab 2026-11-25 U2: RBT-002 at EP-SHELF-C, beside ZONE-CENTER) drove deep into it
+        // and held it while it waited, and the robot it waited for needed that zone: DEADLOCK_RISK for 2.5 minutes.
+        var zonesAtStart = policy.SingleOccupancyZones
+            .Where(z => SemanticReservation.PointInRing(samples[0].X, samples[0].Y, z.Ring))
+            .Select(z => $"zone:{z.Code}")
             .ToHashSet(StringComparer.Ordinal);
         var held = new HashSet<string>(StringComparer.Ordinal);
         ImmutableArray<string> best = [];
@@ -441,7 +525,7 @@ public sealed class TrafficState
         {
             var here = samples[i].Resources;
             var ids = here.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
-            if (here.Overlaps(needed)
+            if (MeetsAnotherRobot(here, SemanticReservation.SampleDirection(samples, i), needed)
                 || FindPriorWaiter(robot.RobotId, ids, request.Priority) is not null
                 || !CanAcquire(ids, robot.RobotId, out _, out _))
             {
@@ -449,7 +533,8 @@ public sealed class TrafficState
             }
 
             held.UnionWith(here);
-            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart))
+            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart, ZoneMouthClearanceMeters)
+                && others.All(o => Math.Sqrt(Math.Pow(samples[i].X - o.X, 2) + Math.Pow(samples[i].Y - o.Y, 2)) >= WaitClearanceMeters))
             {
                 best = held.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
             }
@@ -457,6 +542,39 @@ public sealed class TrafficState
 
         return best;
     }
+
+    /// <summary>
+    /// Following another robot (both drive the same way through every shared cell: cos &gt; <see
+    /// cref="FollowMinCos"/>) is fine: the follower ends up behind it, and the cells the leader holds stay out of the
+    /// grant anyway (CanAcquire). Head-on, crossing, a zone, or a cell where the direction is unknown is a meeting.
+    /// </summary>
+    private static bool MeetsAnotherRobot(
+        HashSet<string> here, (double Ux, double Uy)? mine, Dictionary<string, List<(double Ux, double Uy)>> needed)
+    {
+        foreach (var rid in here)
+        {
+            if (!needed.TryGetValue(rid, out var theirs))
+            {
+                continue;
+            }
+
+            if (mine is not { } m || theirs.Count == 0 || !rid.StartsWith("cell:", StringComparison.Ordinal)
+                || theirs.Any(t => t.Ux * m.Ux + t.Uy * m.Uy <= FollowMinCos))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private const double FollowMinCos = 0.7;
+
+    /// <summary>Extra room a step-by-step grant leaves before a locked zone it does not hold (the way out of it).</summary>
+    private const double ZoneMouthClearanceMeters = 0.30;
+
+    /// <summary>Centre to centre: a step-by-step grant never ends closer to another robot (about 0.25 m body to body).</summary>
+    private const double WaitClearanceMeters = 0.60;
 
     /// <summary>
     /// A robot holding part of its plan, re-evaluated (something was freed, or it asked again). The rest of the plan or
@@ -810,6 +928,42 @@ public sealed class TrafficState
     }
 
     /// <summary>A robot that stands still: no grant, no command (idle, parked, or held at a service stop).</summary>
+    /// <summary>
+    /// The plan in the narrow band (no drift room: the robot gate stops a robot that drifts out of it), when that band is
+    /// free now, closes no wait-for cycle, jumps no prior waiter, and every robot holding something of the full band
+    /// cannot move: it has no grant (it stands, or waits for one). Null otherwise.
+    /// </summary>
+    private ImmutableArray<string>? NarrowPastStillRobots(
+        RobotRuntime robot, SemanticPlanProposeRequest request, ImmutableArray<string> full)
+    {
+        if (_semantic is null || _semantic.UsesZoneChain)
+        {
+            return null;
+        }
+
+        var holders = full
+            .SelectMany(rid => _holders.TryGetValue(rid, out var h) ? h : [])
+            .Where(h => h != robot.RobotId)
+            .Distinct()
+            .ToList();
+        if (holders.Count == 0 || !holders.All(CannotMove))
+        {
+            return null;
+        }
+
+        var narrow = SemanticReservation.CollectResources(_semantic, request.Poses, narrow: true);
+        return CanAcquire(narrow, robot.RobotId, out _, out _)
+               && FindPriorWaiter(robot.RobotId, narrow, request.Priority) is null
+               && !WouldCreateWaitForCycle(robot.RobotId, narrow)
+            ? narrow
+            : null;
+    }
+
+    /// <summary>No grant: its gate is shut, it stands (parked, at a stop, or waiting for traffic).</summary>
+    private bool CannotMove(Guid robotId) =>
+        _robots.TryGetValue(robotId, out var r) && r.Authority is null
+        && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Waiting;
+
     private bool StandsStill(Guid robotId) =>
         _robots.TryGetValue(robotId, out var r) && r.Authority is null && r.ActiveCommandId is null
         && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService;
@@ -850,6 +1004,13 @@ public sealed class TrafficState
         foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, zoneRadius, z.Ring)))
         {
             set.Add($"zone:{z.Code}");
+        }
+
+        // Zone chain: a robot standing still holds the zone it stands in (its slot, its bay, or the corridor it was
+        // stopped in, which nobody may then drive through).
+        if (SemanticReservation.StandingZoneResource(_semantic, x, y) is { } standingZone)
+        {
+            set.Add(standingZone);
         }
 
         var under = set.OrderBy(r => r, StringComparer.Ordinal).ToImmutableArray();
@@ -1492,6 +1653,26 @@ public sealed class TrafficState
             .Where(rid => stillAhead is null || !stillAhead.Contains(rid))
             .Where(rid => IsPhysicallyClear(robot, rid, poseX, poseY))
             .ToImmutableArray();
+
+        // Zone chain: the robot only reports cells (it does not know the zones). A zone it has left, and that is not
+        // ahead of it on its plan, is released with this report: the next robot may drive in behind it.
+        if (_semantic is { UsesZoneChain: true } && stillAhead is not null)
+        {
+            var leftZones = robot.OccupiedResourceIds
+                .Where(rid => rid.StartsWith("zone:", StringComparison.Ordinal)
+                              && TrafficZones.Find(_semantic.TrafficZones, rid) is not null
+                              && !robot.ServiceHoldIds.Contains(rid)
+                              && !stillAhead.Contains(rid)
+                              && !exits.Contains(rid)
+                              && IsPhysicallyClear(robot, rid, poseX, poseY))
+                .ToList();
+            if (leftZones.Count > 0)
+            {
+                Log($"zone-chain-left:{robotId}:{string.Join(",", leftZones)}");
+                exits = exits.AddRange(leftZones);
+            }
+        }
+
         if (exits.IsEmpty)
         {
             return TrafficOpResult.Fail("NOT_CLEARED");
@@ -1735,6 +1916,9 @@ public sealed class TrafficState
         return TrafficOpResult.Success();
     }
 
+    /// <summary>MarkBlocked reason of a robot that refused its grant: <c>AUTHORITY_REFUSED:EXPIRED_ON_ARRIVAL</c>.</summary>
+    public const string AuthorityRefusedPrefix = "AUTHORITY_REFUSED:";
+
     public TrafficOpResult MarkBlocked(Guid robotId, string reason)
     {
         var robot = GetOrCreate(robotId);
@@ -1775,8 +1959,11 @@ public sealed class TrafficState
 
         var reason = robot.QuarantineReason ?? "";
         // Pose/localization faults need telemetry evidence, not HB alone.
+        // AUTHORITY_REFUSED: the robot refused its grant (clock off, wrong map bundle); a heartbeat does not fix that, an
+        // operator does (then reconciles the robot). Lifting it on the next heartbeat re-granted and re-refused for ever.
         if (reason is "LOCALIZATION_LOSS" or "RECONCILE_LOCALIZATION" or "POSE_UNCERTAIN"
-            or "RECONCILE_UNCERTAIN" or "EXIT_UNCERTAIN" or "RECONNECT_UNVERIFIED" or "RECONCILE_IN_MOTION")
+            or "RECONCILE_UNCERTAIN" or "EXIT_UNCERTAIN" or "RECONNECT_UNVERIFIED" or "RECONCILE_IN_MOTION"
+            || reason.StartsWith("BLOCKED:" + AuthorityRefusedPrefix, StringComparison.Ordinal))
         {
             Log($"mark-online-keep:{robot.RobotId}:{reason}");
             return TrafficOpResult.Success();
@@ -2335,7 +2522,55 @@ public sealed class TrafficState
         return kept.ToImmutable();
     }
 
+    private bool _promoting;
+    private readonly HashSet<string> _deferredFreed = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Semantic: every robot still waiting is tried again, on a timer and not only when something is released. A robot
+    /// blocked by another robot's BODY (cells that robot did not hold) never saw a release when that robot drove away,
+    /// and the robot side does not ask again while it holds part of its plan: it waited until its command timed out.
+    /// </summary>
+    public int RetrySemanticWaiters()
+    {
+        if (_semantic is null || !_ready || !_open || _queues.Count == 0)
+        {
+            return 0;
+        }
+
+        var before = StateVersion;
+        PromoteWaiters(_queues.Keys.ToList());
+        return StateVersion != before ? 1 : 0;
+    }
+
     private void PromoteWaiters(IEnumerable<string> freedResources)
+    {
+        if (_promoting)
+        {
+            // Reached from inside a promotion (the grant released what the robot no longer needs): handled after this
+            // pass, so no robot is granted twice inside one pass.
+            _deferredFreed.UnionWith(freedResources);
+            return;
+        }
+
+        _promoting = true;
+        try
+        {
+            var pending = freedResources.ToList();
+            for (var pass = 0; pass < 8 && pending.Count > 0; pass++)
+            {
+                PromoteWaitersOnce(pending);
+                pending = _deferredFreed.ToList();
+                _deferredFreed.Clear();
+            }
+        }
+        finally
+        {
+            _promoting = false;
+            _deferredFreed.Clear();
+        }
+    }
+
+    private void PromoteWaitersOnce(IEnumerable<string> freedResources)
     {
         var candidates = new HashSet<Guid>();
         foreach (var rid in freedResources)
@@ -2559,13 +2794,29 @@ public sealed class TrafficState
         HashSet<string>? own = null;
         foreach (var other in _robots.Values)
         {
-            if (other.RobotId == robotId || !other.LocalizationOk || other.X is not double ox || other.Y is not double oy)
+            // A robot that lost its localization is still somewhere: its last pose, at any heading and with the
+            // localization margin, stays in the way. Skipping it made it invisible to every grant.
+            if (other.RobotId == robotId || other.X is not double ox || other.Y is not double oy)
             {
                 continue;
             }
 
             var body = new HashSet<string>(StringComparer.Ordinal);
-            SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.EffectiveStandingMargin, body);
+            if (other.LocalizationOk)
+            {
+                SemanticReservation.StandingCells(_semantic, ox, oy, StandingYaw(other, ox, oy), _options.EffectiveStandingMargin, body);
+            }
+            else
+            {
+                SemanticReservation.DiscCells(ox, oy, radius, _semantic.EffectiveCellSize, body);
+            }
+
+            // Zone chain: the zone it stands in is taken while it is there, held or not (quarantined, never seeded).
+            if (SemanticReservation.StandingZoneResource(_semantic, ox, oy) is { } standingZone)
+            {
+                body.Add(standingZone);
+            }
+
             body.ExceptWith(other.OccupiedResourceIds); // what it holds is already counted by capacity
             if (body.Count == 0)
             {
@@ -2687,6 +2938,16 @@ public sealed class TrafficState
 
     private bool IsPhysicallyClear(RobotRuntime robot, string resourceId, double x, double y)
     {
+        // Zone chain: a robot is in the zone its centre is in (a slot inside a corridor wins over the corridor), the
+        // same rule it holds zones by. The body circle against the ring kept a robot standing at EP-QUEUE-B, a slot
+        // inside the right column, holding the whole column for ever (sim V022 2026-11-24). Its body cells still hold
+        // what it covers there.
+        if (_semantic is { UsesZoneChain: true } && resourceId.StartsWith("zone:", StringComparison.Ordinal)
+            && TrafficZones.Find(_semantic.TrafficZones, resourceId) is not null)
+        {
+            return SemanticReservation.StandingZoneResource(_semantic, x, y) != resourceId;
+        }
+
         if (_semantic is not null && resourceId.StartsWith("zone:", StringComparison.Ordinal)
             && _semantic.SingleOccupancyZones.FirstOrDefault(z => $"zone:{z.Code}" == resourceId) is { } zone)
         {
@@ -2778,7 +3039,11 @@ public sealed class TrafficState
         {
             // A robot with no route (idle, holding a service stop, quarantined) waits for nobody: an idle robot's leftover BlockingOwner made a fake
             // cycle (R2 idle, R1 waiting for its cells) and R1 backed off on the spot for ever (sim 2026-11-23, V017).
-            if (r.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined) && r.BlockingOwner is Guid b)
+            // The asking robot's own old edge is replaced by what it asks for now (below): keeping it made a cycle out
+            // of a wait it had already given up (false DEADLOCK_RISK).
+            if (r.RobotId != robotId
+                && r.Phase is not (TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Quarantined)
+                && r.BlockingOwner is Guid b)
             {
                 AddEdge(r.RobotId, b);
             }

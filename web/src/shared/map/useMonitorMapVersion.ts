@@ -8,6 +8,7 @@ import {
 } from '@/shared/api/navigation'
 import { listWarehouses } from '@/shared/api/warehouses'
 import { EMPTY_MAP_GEOMETRY, mapDetailToGeometry, type MapVersionGeometry } from './mapVersionGeometry'
+import { resolveMonitorMapId } from './resolveMonitorMap'
 
 const WAREHOUSE_KEY = 'warotrans.monitor.warehouseId'
 const MAP_KEY = 'warotrans.monitor.mapVersionId'
@@ -116,22 +117,13 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
   const mapItems = mapsQuery.data
   const activeMapId = activeMapQuery.data?.id ?? null
 
-  const mapVersionId = useMemo(() => {
-    if (!mapItems?.length) return ''
-    if (manualMapVersionId && mapItems.some((m) => m.id === manualMapVersionId)) {
-      return manualMapVersionId
-    }
-    if (preferredMapVersionId && mapItems.some((m) => m.id === preferredMapVersionId)) {
-      return preferredMapVersionId
-    }
-    if (storedMapVersionId && mapItems.some((m) => m.id === storedMapVersionId)) {
-      return storedMapVersionId
-    }
-    if (activeMapId && mapItems.some((m) => m.id === activeMapId)) return activeMapId
-    const published = mapItems.find((m) => m.status === 'PUBLISHED')
-    if (published) return published.id
-    return mapItems[0].id
-  }, [mapItems, storedMapVersionId, activeMapId, preferredMapVersionId, manualMapVersionId])
+  const mapVersionId = useMemo(() => resolveMonitorMapId({
+    maps: mapItems,
+    manualId: manualMapVersionId,
+    preferredId: preferredMapVersionId,
+    storedId: storedMapVersionId,
+    activeId: activeMapId,
+  }), [mapItems, storedMapVersionId, activeMapId, preferredMapVersionId, manualMapVersionId])
 
   const detailQuery = useQuery({
     queryKey: ['navigation', 'map-detail', mapVersionId],

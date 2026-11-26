@@ -2,11 +2,15 @@ import type { MapVersionDto } from '@/shared/api/navigation'
 import { t } from '@/shared/i18n'
 import { cx } from '@/shared/lib/cx'
 import { humanize } from '@/shared/lib/format'
+import { pickableMaps } from '@/shared/map/resolveMonitorMap'
 
 export interface FleetMapTopBarProps {
   mapVersion: MapVersionDto | null
   trafficLive: boolean
   trafficEpoch?: number | null
+  /** Map versions of the warehouse: the PUBLISHED ones become a picker (the shown map otherwise stays as it was). */
+  maps?: MapVersionDto[]
+  onSelectMap?: (mapVersionId: string) => void
 }
 
 function displayMapCode(mapVersion: MapVersionDto): string {
@@ -16,7 +20,8 @@ function displayMapCode(mapVersion: MapVersionDto): string {
 }
 
 /** Single-row frosted status pill showing live connection, active map version, and traffic epoch. */
-export function FleetMapTopBar({ mapVersion, trafficLive, trafficEpoch }: FleetMapTopBarProps) {
+export function FleetMapTopBar({ mapVersion, trafficLive, trafficEpoch, maps, onSelectMap }: FleetMapTopBarProps) {
+  const choices = onSelectMap && maps ? pickableMaps(maps, mapVersion?.id ?? null) : []
   return (
     <div
       data-map-ui
@@ -46,6 +51,21 @@ export function FleetMapTopBar({ mapVersion, trafficLive, trafficEpoch }: FleetM
             <span className="shrink-0 text-[11px] text-amber-ink">
               {humanize(String(mapVersion.status))}
             </span>
+          ) : null}
+          {choices.length > 1 || (choices.length === 1 && choices[0].id !== mapVersion.id) ? (
+            <select
+              aria-label={t('Show another map')}
+              title={t('Show another map')}
+              className="shrink-0 cursor-pointer rounded-full border border-outline-soft bg-container-high/80 px-1.5 py-0.5 text-[11px] text-ink-2 hover:text-ink"
+              value={mapVersion.id}
+              onChange={(e) => onSelectMap?.(e.target.value)}
+            >
+              {choices.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.code}{m.status !== 'PUBLISHED' ? ` (${humanize(String(m.status))})` : ''}
+                </option>
+              ))}
+            </select>
           ) : null}
         </span>
       ) : (

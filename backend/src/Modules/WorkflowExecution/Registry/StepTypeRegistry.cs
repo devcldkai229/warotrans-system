@@ -110,6 +110,22 @@ public static class StepTypeRegistry
                         Out("checkedAt", WorkflowDataType.DATETIME, "Check timestamp.")
                     ]),
                 new OperationDefinition(
+                    nameof(CheckConditionCode.ROUTE_CLEAR),
+                    "Before driving into an endpoint: what the way costs and what is in it.",
+                    [
+                        In("endpointId", WorkflowDataType.UUID, true, "Endpoint the next MOVE drives to."),
+                        In("robotId", WorkflowDataType.UUID, false, "Robot (default: the Job's robot).")
+                    ],
+                    [
+                        Out("passed", WorkflowDataType.BOOLEAN, "Whether the robot may drive now (false: an obstacle shuts the way)."),
+                        Out("decision", WorkflowDataType.STRING, "PASS, REROUTE, WAIT_AT_QUEUE, WAIT_FOR_ROBOT, BLOCKED_OBSTACLE or NO_ROUTE."),
+                        Out("pathLengthMeters", WorkflowDataType.DECIMAL, "Length of the way the robot can take."),
+                        Out("estimatedSeconds", WorkflowDataType.DECIMAL, "Driving time estimate."),
+                        Out("narrowCells", WorkflowDataType.INTEGER, "Cells of the way that pass close to something."),
+                        Out("reason", WorkflowDataType.STRING, "Failure or pass reason."),
+                        Out("checkedAt", WorkflowDataType.DATETIME, "Check timestamp.")
+                    ]),
+                new OperationDefinition(
                     nameof(CheckConditionCode.LOAD_STATE),
                     "Check robot load state.",
                     [

@@ -66,7 +66,8 @@ public sealed partial class JobExecutionEngine(
     TimeProvider? clock = null,
     StockHandoverDispatcher? stockHandovers = null,
     WaroTrans.WorkflowExecution.Services.FreeEndpointSelector? freeEndpoints = null,
-    IContainerHolds? containerHolds = null)
+    IContainerHolds? containerHolds = null,
+    WaroTrans.BuildingBlocks.Mqtt.LiveCostmapStore? liveCostmaps = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -528,6 +529,12 @@ public sealed partial class JobExecutionEngine(
 
     private async Task AdvanceCoreAsync(Job job, CancellationToken cancellationToken, IDbContextTransaction? transaction = null)
     {
+        if (job.Status == JobStatus.RECOVERY_REQUIRED)
+        {
+            await SyncRecoveryAsync(job, cancellationToken, transaction);
+            return;
+        }
+
         if (job.Status != JobStatus.RUNNING)
         {
             return;
@@ -639,6 +646,14 @@ public sealed partial class JobExecutionEngine(
             // A failed inspection takes that container off the Job and leaves it at the inspection point.
             return await FailAtInspectionAsync(job, task, step, workflowStep, containerId, source, now, transaction, cancellationToken);
         }
+
+        if (inspectionResult == "PASSED" && containerId is { } passedId
+            && RecordInspectionPass(job, step, passedId, source.UserId, now) > 0)
+        {
+            // Other containers on board still wait for their result: the step stays WAITING.
+            await SaveAndPublishAsync(cancellationToken, transaction);
+            return step;
+        }
         var handoverType = operation switch
         {
             nameof(HumanActionCode.PICKUP_CONFIRM) => HandoverType.PICKUP,
@@ -740,6 +755,9 @@ public sealed partial class JobExecutionEngine(
         Job job, JobTask task, JobStep step, WorkflowStep workflowStep, HumanConfirmationSource source,
         DateTimeOffset now, Guid? issueId = null, string? inspectionResult = null)
     {
+        var kept = step.OutputValues
+            .Where(kv => kv.Key is InspectionFailuresKey or InspectionPassedKey)
+            .ToList();
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
@@ -761,6 +779,8 @@ public sealed partial class JobExecutionEngine(
         // INSPECTION_CONFIRM declares the output inspectionResult (PASSED / FAILED) in the step registry.
         if (inspectionResult is not null)
             step.OutputValues["inspectionResult"] = JsonSerializer.SerializeToElement(inspectionResult);
+        foreach (var (key, value) in kept)
+            step.OutputValues[key] = value;
         SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.COMPLETED, now);
         CompleteTaskIfDone(task);
     }
@@ -788,7 +808,7 @@ public sealed partial class JobExecutionEngine(
         job.MarkRecoveryRequired(code, message);
         var robotId = AssignedRobot(job);
         var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToList();
-        db.JobRecoveryCases.Add(new JobRecoveryCase
+        var opened = new JobRecoveryCase
         {
             Id = Guid.NewGuid(),
             JobId = job.Id,
@@ -796,8 +816,11 @@ public sealed partial class JobExecutionEngine(
             Status = JobRecoveryStatuses.Open,
             Reason = code,
             ContainerIds = onBoard,
-            CreatedAt = now
-        });
+            CreatedAt = now,
+            FaultErrorCode = code.Length <= 100 ? code : code[..100]
+        };
+        await RecordFaultSnapshotAsync(opened, robotId, cancellationToken);
+        db.JobRecoveryCases.Add(opened);
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code, job.MapVersionId));
         await SaveAndPublishAsync(cancellationToken, transaction);
         logger.LogWarning("Job {JobNo}: robot failed with {Count} container(s) on board; recovery required", job.JobNo, onBoard.Count);
@@ -806,7 +829,8 @@ public sealed partial class JobExecutionEngine(
         {
             await issueReporter.ReportAsync(
                 new SystemIssueDraft(
-                    $"payload-recovery:{job.Id}",
+                    // One issue per case: a Job that fails twice gets two.
+                    $"payload-recovery:{job.Id}:{opened.Id}",
                     job.Id,
                     job.JobNo,
                     null,
@@ -1038,6 +1062,18 @@ public sealed partial class JobExecutionEngine(
             throw new DomainValidationException("That is the robot that failed. Use resume on the same robot instead.", "recovery_same_robot");
         }
 
+        // The second robot comes only once a technician secured the failed one (cases opened before phases: as before).
+        if (RecoveryRequiresSourceSecured && recovery.Phase is not null && recovery.SourceSecuredAt is null)
+        {
+            throw new ConflictException("A technician has to assess the failed robot and confirm it is secured first.",
+                "recovery_source_not_secured");
+        }
+
+        if (endpointId == recovery.SourceEndpointId)
+        {
+            throw new DomainValidationException("The failed robot stands there: choose another place.", "recovery_point_unsuitable");
+        }
+
         var robot = await fleet.GetRobotAsync(robotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
         var busy = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
@@ -1093,6 +1129,7 @@ public sealed partial class JobExecutionEngine(
         recovery.ToRobotId = robotId;
         recovery.RecoveryEndpointId = endpointId;
         recovery.MoveStepId = step.Id;
+        if (recovery.Phase is not null) recovery.Phase = RecoveryPhases.TargetEnRoute;
         recovery.Version++;
         await SaveAndPublishAsync(cancellationToken, transaction);
 
@@ -1108,6 +1145,7 @@ public sealed partial class JobExecutionEngine(
             recovery.ToRobotId = null;
             recovery.RecoveryEndpointId = null;
             recovery.MoveStepId = null;
+            if (recovery.Phase is not null) recovery.Phase = RecoveryPhases.SourceSecured;
             recovery.Version++;
             await SaveAndPublishAsync(cancellationToken);
             throw new ConflictException($"Robot {robot.Code} could not be sent: {problem}", "recovery_move_failed");
@@ -1151,6 +1189,8 @@ public sealed partial class JobExecutionEngine(
         recovery.ToRobotId = null;
         recovery.RecoveryEndpointId = null;
         recovery.MoveStepId = null;
+        if (recovery.Phase is not null)
+            recovery.Phase = recovery.SourceSecuredAt is not null ? RecoveryPhases.SourceSecured : RecoveryPhases.Assessed;
         recovery.Version++;
         await SaveAndPublishAsync(cancellationToken, transaction);
         return recovery;
@@ -1237,6 +1277,7 @@ public sealed partial class JobExecutionEngine(
             await VerifyRecoveryTransferAsync(job, recovery, target, expectedRobotId, onBoard, scans, cancellationToken, verifiedScans: button is not null);
 
         var now = DateTimeOffset.UtcNow;
+        await RecordLoadOnRecoveryRobotAsync(recovery, target, confirmedBy ?? button?.RobotId, now, cancellationToken);
         job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
         {
             [AssignedRobotKey] = JsonSerializer.SerializeToElement(target)
@@ -1268,6 +1309,13 @@ public sealed partial class JobExecutionEngine(
         if (recovery.Status != JobRecoveryStatuses.Open)
         {
             throw new ConflictException("Another robot is on its way; call it back first.", "recovery_target_assigned");
+        }
+
+        // The robot that failed goes on only after a technician judged it repaired (cases opened before phases: as before).
+        if (RecoveryRequiresSourceSecured && recovery.Phase is not null
+            && recovery.AssessmentResult != RecoveryAssessmentResults.SameRobotRecoverable)
+        {
+            throw new ConflictException("A technician has to judge the robot repaired before it goes on.", "recovery_assessment_required");
         }
 
         var robotId = recovery.FromRobotId
@@ -1955,7 +2003,7 @@ public sealed partial class JobExecutionEngine(
     {
         var now = DateTimeOffset.UtcNow;
         var jobIds = await db.Jobs.AsNoTracking()
-            .Where(j => j.Status == JobStatus.RUNNING
+            .Where(j => (j.Status == JobStatus.RUNNING || j.Status == JobStatus.RECOVERY_REQUIRED)
                         && j.JobTasks.Any(t => t.JobSteps.Any(s => (s.StepType == StepType.WAIT || s.StepType == StepType.CHECK || s.StepType == StepType.MOVE) && s.Status == JobStepStatus.WAITING)))
             .Select(j => j.Id)
             .ToListAsync(cancellationToken);
@@ -1964,12 +2012,15 @@ public sealed partial class JobExecutionEngine(
         foreach (var jobId in jobIds)
         {
             var job = await LoadJobAsync(jobId, cancellationToken);
-            if (job.Status != JobStatus.RUNNING)
+            if (job.Status != JobStatus.RUNNING && job.Status != JobStatus.RECOVERY_REQUIRED)
             {
                 continue;
             }
 
+            // In a recovery only its own MOVEs (executionScope RECOVERY) wait and are woken.
+            var recoveryOnly = job.Status == JobStatus.RECOVERY_REQUIRED;
             var due = OrderedSteps(job)
+                .Where(x => !recoveryOnly || IsRecoveryTask(x.Task))
                 .Where(x => x.Step.Status == JobStepStatus.WAITING
                             && (x.Step.StepType is StepType.WAIT or StepType.CHECK
                                 || (x.Step.StepType == StepType.MOVE
@@ -2155,7 +2206,9 @@ public sealed partial class JobExecutionEngine(
                 spotRadius = relockCount switch { 0 => YieldSpotMaxMeters, 1 => 2.0, _ => 3.0 };
             }
 
-            var allowSpot = true;
+            // Zone chain: never to a free-floor spot. A spot knows no zones: sim V022 2026-11-24 backed a robot off onto
+            // lane LTR inside the INBOUND/OUTBOUND column, where it then held the column and blocked the other robot.
+            var allowSpot = trafficOptions?.Value.ZoneChainRequested != true;
             var backedOff = await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, loser.Target, winnerId, winnerMove.StepId,
                 winnerMove.Target, cancellationToken, allowSpot, spotRadius);
             if (!backedOff)
@@ -2330,8 +2383,11 @@ public sealed partial class JobExecutionEngine(
         // Best: step aside right here, out of the other robot's way (user, 2026-11-23: a robot at the end of the shelf B
         // lane drove all the way to a queue point to let the other one pass). Endpoints only when no spot close by is free.
         var spot = allowSpot ? await YieldSpotAsync(robot, winner, winnerGoal, others, cancellationToken, spotRadius) : null;
+        // Zone chain: only places a robot may park or queue at (by type), never a borrowed work endpoint.
+        var zoneChainRetreat = trafficOptions?.Value.ZoneChainRequested == true;
         var target = spot is null ? Pick(standAside.Where(e => e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.QUEUE))
-                                    ?? Pick(standAside) ?? Pick(lent) : null;
+                                    ?? Pick(standAside.Where(e => !zoneChainRetreat || e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK))
+                                    ?? (zoneChainRetreat ? null : Pick(lent)) : null;
         EndpointPoseWithType? Pick(IEnumerable<EndpointPoseWithType> pool)
         {
             var candidates = pool
@@ -2788,7 +2844,45 @@ public sealed partial class JobExecutionEngine(
                         return false;
                     }
 
-                    var area = queueZone is not null || recoveryTo is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
+                    // Zone chain: a goal inside a bay is entered only while the bay is free; otherwise the robot waits
+                    // at the bay's queue point (or where it stands when that is a stop). Replaces the distance-based
+                    // goal queue for bays: the zones say who is in the way, not radii.
+                    var zoneApproach = queueZone is null && recoveryTo is null
+                        ? await ZoneApproachAsync(job, step, robot, pose, policy, now, cancellationToken)
+                        : null;
+                    if (zoneApproach is { DriveTo: null, QueueZone: { } waitZone })
+                    {
+                        var waitingAlready = step.OutputValues.TryGetValue(AreaQueueZoneKey, out var wz) && wz.GetString() == waitZone;
+                        if (!waitingAlready)
+                        {
+                            logger.LogInformation("Job {JobNo} {StepKey}: {Zone} is busy ({Reason}); the robot waits where it stands",
+                                job.JobNo, stepKey, waitZone, zoneApproach.Reason);
+                        }
+
+                        step.OutputValues = AreaWaitOutputs(step.OutputValues, zoneApproach.Since!.Value, waitZone, zoneApproach.Reason, now);
+                        if (zoneApproach.BlockedBy is { } blockedBy)
+                        {
+                            step.OutputValues[GoalBlockerKey] = JsonSerializer.SerializeToElement(blockedBy);
+                        }
+
+                        SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+                        await SaveAndPublishAsync(cancellationToken);
+                        return false;
+                    }
+
+                    if (zoneApproach is { DriveTo: { } driveTo })
+                    {
+                        goal = driveTo;
+                        queueZone = zoneApproach.QueueZone;
+                        queueSince = zoneApproach.Since;
+                        if (queueZone is not null)
+                        {
+                            logger.LogInformation("Job {JobNo} {StepKey}: {Zone} is busy ({Reason}); the robot goes to {Queue} to wait",
+                                job.JobNo, stepKey, queueZone, zoneApproach.Reason, driveTo.Code);
+                        }
+                    }
+
+                    var area = queueZone is not null || recoveryTo is not null || zoneApproach is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
                         z.QueueEndpointCode is not null && SemanticReservation.PointInRing(pose.X, pose.Y, z.Ring));
                     var busy = area is null ? null : await AreaBusyByAsync(job, step, robotId, area, policy, cancellationToken);
                     if (area is not null && busy is not null)
@@ -2818,7 +2912,7 @@ public sealed partial class JobExecutionEngine(
                             "Job {JobNo} {StepKey}: area {Zone} is taken ({Busy}); robot goes to queue point {Queue} first",
                             job.JobNo, stepKey, area.Code, busy, queue!.Code);
                     }
-                    else if (queueZone is null && recoveryTo is null
+                    else if (queueZone is null && recoveryTo is null && zoneApproach is null
                              && await GoalBusyByAsync(job, step, robotId, pose, cancellationToken) is { } goalBusy)
                     {
                         // Goal queue: another robot with work is at (or on its way to) this endpoint. Wait clear of it.
@@ -3407,6 +3501,10 @@ public sealed partial class JobExecutionEngine(
                 (passed, reason) = await EvaluateInventoryAvailableAsync(job, task, inputs, cancellationToken);
                 break;
 
+            case nameof(CheckConditionCode.ROUTE_CLEAR):
+                (passed, reason) = await EvaluateRouteClearAsync(job, inputs, outputs, cancellationToken);
+                break;
+
             // Publish refuses any other operation (CheckOperations.Executable), so this only guards old definitions.
             default:
                 passed = false;
@@ -3776,7 +3874,7 @@ public sealed partial class JobExecutionEngine(
             if (!ActiveJobStatuses.Contains(job.Status))
             {
                 var openCase = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == job.Id && c.ResolvedAt == null, cancellationToken);
-                if (openCase is not null)
+                if (openCase is not null && openCase.ResolvedAt is null) // one just closed in this unit of work keeps its status
                 {
                     openCase.Status = JobRecoveryStatuses.Cancelled;
                     openCase.ResolvedAt = now;
@@ -4072,6 +4170,9 @@ public sealed partial class JobExecutionEngine(
     /// <summary>FailureCode of a Job an operator paused (WFX-03); Resume also releases the robot's motion hold.</summary>
     public const string OperatorPausedCode = "operator_paused";
 
+    /// <summary>Pause reason written by an emergency stop from the console (EmergencyStopService).</summary>
+    public const string EmergencyStopReasonPrefix = "Emergency stop:";
+
     /// <summary>
     /// WFX-03: an operator pauses a RUNNING Job. The robot gets STOP mode PAUSE (cancel the goal, hold motion); the
     /// MOVE in progress is reopened and its command marked superseded, so the robot's CANCELED result is ignored and
@@ -4156,6 +4257,12 @@ public sealed partial class JobExecutionEngine(
                 "cargo_onboard_reason_required");
         }
 
+        // A Job an operator paused holds its robot (STOP mode PAUSE). Once the Job is cancelled and nothing is on the
+        // robot, that hold has no owner left: release it, or the robot stands held and no Job can ever take it
+        // (e2e P3, 2026-11-26). An emergency stop keeps its hold: the person who pressed it resumes the robot.
+        var releaseHold = job.Status == JobStatus.PAUSED && job.FailureCode == OperatorPausedCode && onboard == 0
+            && !(job.FailureMessage?.StartsWith(EmergencyStopReasonPrefix, StringComparison.Ordinal) ?? false);
+
         var openRecovery = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == job.Id && c.ResolvedAt == null, cancellationToken);
         if (openRecovery is not null)
         {
@@ -4226,6 +4333,13 @@ public sealed partial class JobExecutionEngine(
         job.FailureMessage = reason ?? "Cancelled by operator.";
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
         await SaveAndPublishAsync(cancellationToken, transaction);
+        if (releaseHold && robotId is { } heldRobot
+            && await fleet.GetRobotAsync(heldRobot, CancellationToken.None) is { IsOnline: true, MotionHeld: true })
+        {
+            await fleet.ResumeRobotAsync(heldRobot, CancellationToken.None);
+            logger.LogInformation("Job {JobNo} cancelled while paused: robot hold released", job.JobNo);
+        }
+
         return job;
     }
 

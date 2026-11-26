@@ -32,7 +32,7 @@ export function ProblemCodeChips({ problems, selected, onChange, multiple = fals
         accessibilityRole={multiple ? 'checkbox' : 'radio'} accessibilityState={{ checked: on, disabled }}
         accessibilityLabel={t(problem.label)}>
         <Text variant="bodyMedium" fontWeight="700" color={on ? 'primaryText' : 'textPrimary'}>
-          {t(problem.label)}{problem.blocksHandover ? ` · ${t('Blocks Confirm')}` : ''}
+          {t(problem.label)}{problem.blocksHandover && !multiple ? ` · ${t('Blocks Confirm')}` : ''}
         </Text>
         <Text variant="caption" color="textSecondary">{t(problem.hint)}</Text>
       </Pressable>;

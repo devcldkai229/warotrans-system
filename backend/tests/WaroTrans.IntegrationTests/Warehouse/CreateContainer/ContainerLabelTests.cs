@@ -36,7 +36,7 @@ public sealed class ContainerLabelTests(WaroTransWebApplicationFactory factory) 
     private static object Claim(Guid warehouseId, Guid productId, string? label, Guid? requestId = null) => new
     {
         warehouseId, requestId = requestId ?? Guid.NewGuid(), containerCount = 1, labelBarcode = label,
-        groups = new[] { new { groupKey = "g1", productId, containerCount = 1, quantityPerContainer = 1, unit = "container" } },
+        groups = new[] { new { groupKey = "g1", productId, containerCount = 1, quantityPerContainer = 1 } },
     };
 
     private static async Task<string?> CodeOf(HttpResponseMessage response) =>

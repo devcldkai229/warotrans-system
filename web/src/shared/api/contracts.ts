@@ -683,6 +683,15 @@ export interface AdminNotification {
   resolvedAt: string | null
   /** Client route that opens the entity (SY-04), e.g. /monitor/jobs/{id}. */
   route?: string | null
+  /** More places it leads to: the robot, its Technical page and history, the Job, the request and its replay. */
+  links?: NotificationLink[] | null
+}
+
+/** Admin console route; the Technician portal rewrites it, or hides it when it has no such screen. */
+export interface NotificationLink {
+  kind: 'ROBOT' | 'TECHNICAL' | 'HISTORY' | 'JOB' | 'REQUEST' | 'JOURNAL' | 'ISSUE' | 'TICKET' | string
+  text: string
+  route: string
 }
 
 export interface NotificationInbox {

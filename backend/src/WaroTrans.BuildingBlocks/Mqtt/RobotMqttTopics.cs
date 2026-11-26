@@ -25,6 +25,12 @@ public static class RobotMqttTopics
     /// <summary>Map building: the finished map (PGM, zlib + base64) in chunks, after STOP_MAPPING with save.</summary>
     public const string MappingUploadSuffix = "mapping_upload";
 
+    /// <summary>
+    /// Backend → every robot: where all robots are and how big they are (about 2.5 Hz). Each robot draws the OTHER
+    /// robots into its costmaps and collision monitor: a 2D lidar at ~18 cm barely sees a 10 cm high robot.
+    /// </summary>
+    public static string FleetPoses(string topicPrefix) => $"{NormalizePrefix(topicPrefix)}/fleet/poses";
+
     public static string MappingFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/mapping";
 

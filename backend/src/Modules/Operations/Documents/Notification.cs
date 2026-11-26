@@ -41,6 +41,9 @@ public sealed class Notification
 
     public BsonDocument Metadata { get; set; } = new();
 
+    /// <summary>More places it leads to (the robot, its Job, the request …). Empty on older documents.</summary>
+    public List<WaroTrans.Operations.Contracts.NotificationLink> Links { get; set; } = [];
+
     /// <summary>Identifies the situation so repeats are dropped and a recovery can resolve it.</summary>
     public string? DedupeKey { get; set; }
 

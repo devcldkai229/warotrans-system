@@ -12,6 +12,7 @@ import { Icon } from '@/shared/ui/Icon'
 import { ToneDot } from '@/shared/ui/StatusBadge'
 import { notificationTarget, TYPE_TONE } from './notificationTarget'
 import { localizedNotificationText } from './notificationText'
+import { NotificationLinks } from './NotificationLinks'
 import { t } from '@/shared/i18n'
 /** The bell in the top bar: the signed-in person's unread count and inbox (failed jobs, offline robots, issues …). */
 
@@ -116,7 +117,9 @@ export function NotificationBell() {
                           >
                             {localizedNotificationText(notification).title}
                           </span>
-                          <span className="mt-0.5 line-clamp-2 block text-xs text-ink-2">{localizedNotificationText(notification).content}</span>
+                          <span className={cx('mt-0.5 block text-xs whitespace-pre-line text-ink-2', paths.portal === 'tech' ? 'line-clamp-5' : 'line-clamp-2')}>
+                            {localizedNotificationText(notification).content}
+                          </span>
                           <span className="mt-1 flex items-center gap-2 text-[11px] text-muted">
                             {formatRelativeTime(notification.createdAt)}
                             {notification.resolvedAt ? (
@@ -128,6 +131,15 @@ export function NotificationBell() {
                           <span aria-label={t('Unread')} className="mt-2 size-2 flex-none rounded-full bg-blue" />
                         ) : null}
                       </button>
+                      <NotificationLinks
+                        links={notification.links}
+                        paths={paths}
+                        onOpen={() => {
+                          if (!notification.isRead) markRead.mutate(notification.id)
+                          setOpen(false)
+                        }}
+                        className="px-4 pb-3 pl-10"
+                      />
                     </li>
                   ))}
                 </ul>

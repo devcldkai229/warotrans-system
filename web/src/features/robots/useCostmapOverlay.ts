@@ -17,10 +17,12 @@ export interface MapViewState {
   lanes: boolean
   /** Plans, granted edges, traffic cells, quarantine alerts. */
   traffic: boolean
+  /** The 35 cm floor tiles, to see where a robot stands and check it is drawn at its real size. */
+  floorGrid: boolean
 }
 
 const STORAGE_KEY = 'warotrans.fleetMap.view'
-const DEFAULT_VIEW: MapViewState = { costmapRobot: null, keepout: false, local: false, zones: true, lanes: true, traffic: true }
+const DEFAULT_VIEW: MapViewState = { costmapRobot: null, keepout: false, local: false, zones: true, lanes: true, traffic: true, floorGrid: false }
 
 function readSaved(): MapViewState {
   try {

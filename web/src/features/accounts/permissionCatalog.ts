@@ -88,6 +88,16 @@ const GROUPS: GroupDefinition[] = [
     ],
   },
   {
+    id: 'recovery',
+    title: msg('Payload recovery (technical)'),
+    items: [
+      { code: 'recovery.technical.assess', label: msg('Assess a robot that failed with cargo') },
+      { code: 'recovery.technical.approve_motion', label: msg('Let a failed robot drive itself to a recovery point') },
+      { code: 'recovery.technical.confirm_location', label: msg('Confirm where a failed robot stands') },
+      { code: 'recovery.technical.confirm_clearance', label: msg('Confirm a failed robot is secured') },
+    ],
+  },
+  {
     id: 'operations',
     title: msg('Operations'),
     items: [

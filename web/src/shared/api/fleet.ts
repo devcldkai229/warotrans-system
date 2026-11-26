@@ -242,7 +242,7 @@ export function confirmChargerUnplugged(robotId: string, force = false) {
 }
 
 /** FLT-02: what this robot can be asked now. An unsupported item must not be offered. */
-export type RobotHistoryKind = 'STATE' | 'COMMAND'
+export type RobotHistoryKind = 'STATE' | 'COMMAND' | 'TICKET'
 
 /** One line of a robot's history: a change of state or a command, whichever happened (BOTH-02). */
 export interface RobotHistoryItem {
@@ -264,6 +264,22 @@ export interface RobotHistoryItem {
   jobStepId: string | null
   /** STATE only: what was true of the robot then. Null on lines written before this was kept, and on commands. */
   details: RobotHistoryDetails | null
+  /** The Job number of `jobId`, when known. */
+  jobNo?: string | null
+  /** COMMAND: where a MOVE went (endpoint code or "x …, y …"), the STOP mode, the system action. */
+  target?: string | null
+  /** COMMAND: the robot's refusal / error code. */
+  errorCode?: string | null
+  /** COMMAND: the operator's reason (STOP). */
+  note?: string | null
+  completedAt?: string | null
+  /** TICKET rows. */
+  ticketId?: string | null
+  ticketNo?: string | null
+  ticketType?: string | null
+  ticketTitle?: string | null
+  ticketResult?: string | null
+  byName?: string | null
 }
 
 /** The battery and the error the robot reported when the state was recorded. A battery nobody measured is null, never 0. */
@@ -534,7 +550,30 @@ export function getRobotHealth(id: string) {
 }
 
 /** RB-09: only actions the robot announced; it must be stopped and idle; confirmRobotCode repeats the code. */
-export function robotSystemAction(id: string, action: 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN', confirmRobotCode: string) {
+export type SystemAction = 'RESTART_NAV' | 'RESTART_LOCALIZATION' | 'RESTART_CAMERA' | 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN'
+
+/** These take the robot off line for a while: the server wants the robot code typed back. */
+export const DISRUPTIVE_ACTIONS: readonly SystemAction[] = ['RESTART_STACK', 'REBOOT', 'SHUTDOWN']
+
+export interface EmergencyStopResult {
+  robotId: string
+  robotCode: string
+  robotOnline: boolean
+  stopCommandId: string | null
+  pausedJobs: string[]
+  clearedCommands: number
+  message: string
+}
+
+/** Stop the robot now, pause its running Jobs and close its open commands (needs robot.stop). */
+export function emergencyStopRobot(id: string, reason?: string) {
+  return apiFetch<EmergencyStopResult>(`/api/workflow-execution/robots/${id}/emergency-stop`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function robotSystemAction(id: string, action: SystemAction, confirmRobotCode?: string) {
   return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/system-actions`, {
     method: 'POST',
     body: JSON.stringify({ action, confirmRobotCode }),

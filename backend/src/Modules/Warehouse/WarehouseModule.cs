@@ -9,6 +9,7 @@ using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Features.AddStockVoucherLines;
 using WaroTrans.Warehouse.Features.CancelStockVoucher;
+using WaroTrans.Warehouse.Features.CatalogEditing;
 using WaroTrans.Warehouse.Features.CloseStockVoucherShort;
 using WaroTrans.Warehouse.Features.ConfirmStockVoucher;
 using WaroTrans.Warehouse.Features.CreateContainer;
@@ -62,6 +63,9 @@ public static class WarehouseModule
         services.AddScoped<ListProductsHandler>();
         services.AddScoped<CreateProductHandler>();
         services.AddScoped<SetProductStatusHandler>();
+        services.AddScoped<UpdateProductHandler>();
+        services.AddScoped<ProductCategoryEditingHandler>();
+        services.AddScoped<StorageLocationEditingHandler>();
         services.AddScoped<ListProductCategoriesHandler>();
         services.AddScoped<CreateProductCategoryHandler>();
         services.AddScoped<CreateStockVoucherHandler>();
@@ -96,6 +100,7 @@ public static class WarehouseModule
         group.MapListStorageLocations();
         group.MapCreateStorageLocation();
         group.MapSetStorageLocationStatus();
+        group.MapStorageLocationEditing();
         group.MapListInventory();
         group.MapListProducts();
         group.MapCreateProduct();
@@ -103,8 +108,10 @@ public static class WarehouseModule
         ResolveProductEndpoint.Map(group);
         GetProductInventoryContextEndpoint.Map(group);
         group.MapSetProductStatus();
+        group.MapUpdateProduct();
         group.MapListProductCategories();
         group.MapCreateProductCategory();
+        group.MapProductCategoryEditing();
         group.MapListStockVouchers();
         group.MapGetStockVoucher();
         group.MapCreateStockVoucher();

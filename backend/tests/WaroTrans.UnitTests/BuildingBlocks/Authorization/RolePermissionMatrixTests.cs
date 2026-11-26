@@ -9,7 +9,8 @@ public class RolePermissionMatrixTests
     public void Permission_names_are_unique_and_follow_resource_dot_action()
     {
         Assert.Equal(Permissions.All.Count, Permissions.All.Distinct(StringComparer.Ordinal).Count());
-        Assert.All(Permissions.All, p => Assert.Matches(@"^[a-z]+(\.[a-z]+)+$", p));
+        // resource.action, lower case; an action of several words joins them with "_" (recovery.technical.approve_motion).
+        Assert.All(Permissions.All, p => Assert.Matches(@"^[a-z]+(\.[a-z]+(_[a-z]+)*)+$", p));
     }
 
     [Fact]
@@ -39,6 +40,9 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.ConsoleAccess)]
     [InlineData(Permissions.TrafficManage)]
     [InlineData(Permissions.TransportReject)]
+    [InlineData(Permissions.RecoveryAssess)]
+    [InlineData(Permissions.RecoveryApproveMotion)]
+    [InlineData(Permissions.RecoveryConfirmClearance)]
     public void Staff_cannot_drive_reconfigure_or_administer(string permission)
     {
         Assert.False(RolePermissionMatrix.RoleHas(AppRoles.Staff, permission));
@@ -53,6 +57,7 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.ProductCreate)]
     [InlineData(Permissions.ContainerCreate)]
     [InlineData(Permissions.MapRead)]
+    [InlineData(Permissions.TrafficRead)]
     public void Staff_keeps_the_floor_rights_the_mobile_app_uses(string permission)
     {
         Assert.True(RolePermissionMatrix.RoleHas(AppRoles.Staff, permission));
@@ -68,6 +73,7 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.MapWrite)]
     [InlineData(Permissions.RobotManage)]
     [InlineData(Permissions.DispatchOverride)]
+    [InlineData(Permissions.JobOperate)] // moving cargo stays with Staff, even in a recovery
     public void Technician_cannot_grant_roles_change_stock_or_author_maps(string permission)
     {
         Assert.False(RolePermissionMatrix.RoleHas(AppRoles.Technician, permission));
@@ -80,6 +86,10 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.RobotManualDrive)]
     [InlineData(Permissions.RobotMaintenance)]
     [InlineData(Permissions.ConsoleAccess)]
+    [InlineData(Permissions.RecoveryAssess)]
+    [InlineData(Permissions.RecoveryApproveMotion)]
+    [InlineData(Permissions.RecoveryConfirmLocation)]
+    [InlineData(Permissions.RecoveryConfirmClearance)]
     public void Technician_reads_diagnoses_stops_and_drives_robots(string permission)
     {
         Assert.True(RolePermissionMatrix.RoleHas(AppRoles.Technician, permission));
