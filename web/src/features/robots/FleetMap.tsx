@@ -198,7 +198,13 @@ export function FleetMap({
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
         movements={movements}
-        trafficOverlay={costmap.view.traffic ? trafficOverlay : null}
+        trafficOverlay={
+          costmap.view.traffic
+            ? trafficOverlay
+            : trafficOverlay?.plannedPaths
+              ? { plannedPaths: trafficOverlay.plannedPaths }
+              : null
+        }
         costmapImages={costmap.costmapImages}
         cellSets={costmap.cellSets}
         callouts={[]}

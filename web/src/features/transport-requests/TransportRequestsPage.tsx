@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/features/auth/authContext'
 import { PERMISSIONS } from '@/shared/auth/permissions'
+import { FleetMapTools } from '@/features/robots/FleetMapTools'
+import { FleetMapTopBar } from '@/features/robots/FleetMapTopBar'
+import { useCostmapOverlay } from '@/features/robots/useCostmapOverlay'
 import { useTrafficOverlay } from '@/features/robots/useTrafficOverlay'
 import { Can } from '@/features/auth/RequirePermission'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,7 +17,6 @@ import { getActiveMapVersion } from '@/shared/api/navigation'
 import { getStockVoucher } from '@/shared/api/warehouses'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
-import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
@@ -357,6 +359,7 @@ export function TransportRequestsPage() {
     [robotsQuery.data],
   )
   const traffic = useTrafficOverlay(robotRefs, mayReadTraffic && !composing)
+  const costmap = useCostmapOverlay(traffic.snap, robotRefs, mayReadTraffic && !composing)
   const planOverlay = useMemo(
     () => (traffic.overlay?.plannedPaths ? { plannedPaths: traffic.overlay.plannedPaths } : null),
     [traffic.overlay],
@@ -371,6 +374,8 @@ export function TransportRequestsPage() {
         y: robot.poseY,
         yaw: robot.poseYaw,
         alert: robot.status === 'ERROR',
+        lengthM: robot.lengthM ?? null,
+        widthM: robot.widthM ?? null,
       })),
     [robotsQuery.data],
   )
@@ -533,6 +538,7 @@ export function TransportRequestsPage() {
 
       <section className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <WarehouseMap
+          floorTileMeters={!composing && costmap.view.floorGrid ? 0.35 : null}
           yawUnit="rad"
           zones={composing ? composerMap?.zones ?? [] : monitorMap.geometry.zones}
           edges={composing ? composerMap?.edges ?? [] : monitorMap.geometry.edges}
@@ -542,8 +548,15 @@ export function TransportRequestsPage() {
             composing ? composerMap?.occupancyImageUrl ?? null : monitorMap.geometry.occupancyImageUrl
           }
           robots={composing ? [] : mapRobots}
-          trafficOverlay={composing ? null : planOverlay}
-          layers={{ occupancy: true }}
+          trafficOverlay={composing ? null : costmap.view.traffic ? traffic.overlay : planOverlay}
+          costmapImages={composing ? undefined : costmap.costmapImages}
+          cellSets={composing ? undefined : costmap.cellSets}
+          layers={{
+            occupancy: !composing && costmap.view.traffic,
+            zones: composing ? true : costmap.view.zones,
+            edges: composing ? true : costmap.view.lanes,
+            legend: false,
+          }}
           labels="all"
           focusEndpointIds={mapFocus}
           focusRobotCodes={composing ? undefined : listMapView.focusRobotCodes}
@@ -554,14 +567,22 @@ export function TransportRequestsPage() {
         />
 
         {!composing ? (
-          <MapVersionToolbar
-            warehouses={monitorMap.warehouses}
-            warehouseId={monitorMap.warehouseId}
-            onWarehouseChange={monitorMap.setWarehouseId}
+          <FleetMapTopBar
+            mapVersion={monitorMap.version}
+            trafficLive={Boolean(traffic.snap)}
+            trafficEpoch={traffic.snap?.epoch ?? null}
             maps={monitorMap.maps}
-            mapVersionId={monitorMap.mapVersionId}
-            onMapVersionChange={monitorMap.setMapVersionId}
-            activeMapId={monitorMap.activeMapId}
+            onSelectMap={monitorMap.setMapVersionId}
+          />
+        ) : null}
+
+        {!composing && mayReadTraffic ? (
+          <FleetMapTools
+            costmap={costmap}
+            robots={mapRobots}
+            zones={monitorMap.geometry.zones}
+            edges={monitorMap.geometry.edges}
+            endpoints={mapEndpoints}
           />
         ) : null}
 
@@ -605,12 +626,6 @@ export function TransportRequestsPage() {
             </button>
           </div>
         ) : null}
-
-        <button
-          type="button"
-          className="absolute top-3 right-3 z-5 inline-flex h-9 items-center gap-2 rounded-full bg-red px-4 text-sm font-medium text-white shadow-float transition-colors duration-200 hover:bg-red-ink"
-        >
-          <Icon name="bolt" size={15} /> {t('Facility E-stop')}</button>
       </section>
 
       {banner ? (
