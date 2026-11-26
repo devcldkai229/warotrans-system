@@ -340,6 +340,8 @@ export function FleetPage() {
           bounds={monitorMap.geometry.bounds}
           occupancyImageUrl={monitorMap.geometry.occupancyImageUrl}
           mapVersion={monitorMap.version}
+          maps={monitorMap.maps}
+          onSelectMap={monitorMap.setMapVersionId}
         />
         {monitorMap.isLoading ? (
           <div className="pointer-events-none absolute top-14 left-3 z-5 rounded-full border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] px-3 py-1.5 text-xs text-muted shadow-float backdrop-blur-md">

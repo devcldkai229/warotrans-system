@@ -1,5 +1,6 @@
 /** Vietnamese for the maps area; keys are the English sentences. Generated from the reviewed word list. */
 export const vi_maps: Record<string, string> = {
+  'Show another map': 'Xem map khác',
   'Waypoint': 'Điểm trung gian',
   'Waypoint / intermediate point': 'Điểm đường / điểm trung gian',
   'Charger': 'Trạm sạc',
