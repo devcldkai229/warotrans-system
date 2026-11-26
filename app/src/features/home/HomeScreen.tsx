@@ -13,8 +13,10 @@ import {
   BatteryMedium,
   ChevronDown,
   ChevronUp,
+  Plus,
   ShieldAlert,
 } from 'lucide-react-native';
+import { t } from '../../shared/i18n';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import type { ThemeColors } from '../../shared/theme/colors';
@@ -108,6 +110,9 @@ export function HomeScreen() {
     }
   }, [onlineFleet, selectedRobotId]);
 
+  const canCreateTransport = sessionCan(session, PERMISSIONS.transportCreate);
+  const hasActiveJob = Boolean(activeJob.id);
+
   const isWaitingHandover = Boolean(activeJob.hasWaitingHandover);
   const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
   const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
@@ -128,6 +133,30 @@ export function HomeScreen() {
         ? '#30D158'
         : '#34C759'
       : colors.textMuted;
+
+  const emptyStatusDotColor = jobsQuery.isError
+    ? colors.danger
+    : !jobsQuery.isPending && fleetStatusCurrent && activeRobotCount > 0
+    ? isDark
+      ? '#30D158'
+      : '#34C759'
+    : colors.textMuted;
+  const emptyHeadline = jobsQuery.isPending
+    ? 'Loading Jobs…'
+    : jobsQuery.isError
+    ? 'Jobs Unavailable'
+    : 'No Active Jobs';
+  const emptySubtitle = jobsQuery.isError
+    ? jobsQuery.error.message
+    : jobsQuery.isPending
+    ? 'Checking active tasks…'
+    : !fleetStatusCurrent
+    ? 'Live status unavailable'
+    : activeRobotCount === 0
+    ? 'No online robots on this map'
+    : activeRobotCount === 1
+    ? '1 robot online'
+    : t('{count} robots online', { count: activeRobotCount });
 
   const toggleSheetExpand = () => {
     triggerHaptic('tap');
@@ -185,31 +214,88 @@ export function HomeScreen() {
       {/* 2. Floating Next Handover Task Card (Peek Sheet) */}
       <View
         onLayout={event => {
-          if (!isSheetExpanded || !activeJob.id) {
+          if (!isSheetExpanded || !hasActiveJob) {
             setPeekSheetHeight(event.nativeEvent.layout.height);
           }
         }}
         style={[
           styles.peekSheetContainer,
+          !hasActiveJob && styles.peekSheetCompact,
           WEB_SHEET_GLASS_STYLE,
           { bottom: dockHeight + 10 },
         ]}
       >
-        <Pressable
-          onPress={toggleSheetExpand}
-          style={styles.cardHeaderHandle}
-          accessibilityRole="button"
-          accessibilityLabel={isSheetExpanded ? 'Collapse card' : 'Expand card'}
-        >
-          <View style={styles.dragPill} />
-        </Pressable>
+        {hasActiveJob ? (
+          <Pressable
+            onPress={toggleSheetExpand}
+            style={styles.cardHeaderHandle}
+            accessibilityRole="button"
+            accessibilityLabel={isSheetExpanded ? 'Collapse card' : 'Expand card'}
+          >
+            <View style={styles.dragPill} />
+          </Pressable>
+        ) : null}
         {fleetQuery.isError ? <Text variant="caption" color={colors.dangerText}>Fleet could not be refreshed. Showing last reported positions.</Text> : null}
 
-        {!activeJob.id ? <View style={styles.emptyJobBox}>
-          <Text variant="headline">{jobsQuery.isPending ? 'Loading Jobs…' : jobsQuery.isError ? 'Jobs Unavailable' : 'No Active Jobs'}</Text>
-          {jobsQuery.isError ? <Text variant="body" color={colors.dangerText}>{jobsQuery.error.message}</Text> : null}
-          <Button title={jobsQuery.isError ? 'Retry Jobs' : 'View Jobs'} onPress={() => { if (jobsQuery.isError) void refetchJobs(); else navigate('jobs'); }} />
-        </View> : !isSheetExpanded ? (
+        {!hasActiveJob ? (
+          <View style={styles.collapsedRow}>
+            <View style={styles.collapsedInfo}>
+              <View style={styles.collapsedTopLine}>
+                <View style={[styles.collapsedStatusDot, { backgroundColor: emptyStatusDotColor }]} />
+                <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.collapsedJobCode}>
+                  {emptyHeadline}
+                </Text>
+              </View>
+              <Text
+                variant="caption"
+                color={jobsQuery.isError ? colors.dangerText : colors.textSecondary}
+                numberOfLines={1}
+                style={styles.collapsedTarget}
+              >
+                {emptySubtitle}
+              </Text>
+            </View>
+
+            {jobsQuery.isError ? (
+              <Button
+                title="Retry"
+                variant="primary"
+                size="sm"
+                onPress={() => {
+                  triggerHaptic('tap');
+                  void refetchJobs();
+                }}
+                style={styles.compactStartBtn}
+              />
+            ) : canCreateTransport ? (
+              <Button
+                title="Create Request"
+                variant="primary"
+                size="sm"
+                icon={Plus}
+                iconPosition="left"
+                onPress={() => {
+                  triggerHaptic('tap');
+                  navigate('transport_create');
+                }}
+                style={styles.compactStartBtn}
+              />
+            ) : (
+              <Button
+                title="View Jobs"
+                variant="secondary"
+                size="sm"
+                icon={ArrowRight}
+                iconPosition="right"
+                onPress={() => {
+                  triggerHaptic('tap');
+                  navigate('jobs');
+                }}
+                style={styles.compactStartBtn}
+              />
+            )}
+          </View>
+        ) : !isSheetExpanded ? (
           /* Collapsed Mode: crisp 2-line preview + primary CTA */
           <View style={styles.collapsedRow}>
             <Pressable
@@ -474,14 +560,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boole
     borderRadius: 2,
     backgroundColor: isDark ? 'rgba(255, 255, 255, 0.20)' : 'rgba(18, 19, 23, 0.16)',
   },
-  emptyJobBox: {
-    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 19, 23, 0.035)',
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(18, 19, 23, 0.07)',
-    padding: 14,
-    gap: 10,
+  peekSheetCompact: {
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   collapsedRow: {
     flexDirection: 'row',

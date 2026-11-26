@@ -85,6 +85,8 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(t('{count} staged at Outbound gate', { count: 2 }), '2 container đang tập kết tại cổng xuất');
   assert.equal(t('Allocated'), 'Đã phân bổ vị trí');
   assert.equal(t('Unallocated'), 'Chưa phân bổ vị trí');
+  assert.equal(t('No online robots on this map'), 'Chưa có robot trực tuyến trên bản đồ này');
+  assert.equal(t('{count} robots online', { count: 2 }), '2 robot trực tuyến');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(
