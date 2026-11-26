@@ -2632,11 +2632,12 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(RecoveryPhases.Assessed, assessed.Phase);
         Assert.Equal(RecoveryModes.SelfEvacuation, assessed.RecoveryMode);
 
-        // The failed robot drives itself, with its cargo, to the free recovery point (the QUEUE).
+        // The failed robot drives itself, with its cargo, out of the way to a free parking place: the recovery point (the
+        // queue point) stays free for the second robot.
         await Phased().EvacuateRecoverySourceAsync(jobId, await AccessAsync(jobId), null);
         var evacuation = _fleet.Commands[^1];
         Assert.Equal(first, evacuation.RobotId);
-        Assert.Equal((1.0, 5.0), (evacuation.X, evacuation.Y));
+        Assert.Equal((3.0, 5.0), (evacuation.X, evacuation.Y));
         Assert.Equal(RecoveryPhases.SourceRepositioning, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
 
         var notThere = await Assert.ThrowsAsync<ConflictException>(async () =>
@@ -2649,13 +2650,14 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(RecoveryPhases.SourceSecured, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
         Assert.Contains(_fleet.Stops, stop => stop.RobotId == first);
 
-        // Never where the failed robot stands; a free parking place is fine.
-        var onTop = await Assert.ThrowsAsync<DomainValidationException>(() => Phased().AssignRecoveryRobotAsync(jobId, second, queue));
+        // Never where the failed robot stands; the recovery (queue) point comes first.
+        var onTop = await Assert.ThrowsAsync<DomainValidationException>(() => Phased().AssignRecoveryRobotAsync(jobId, second, park));
         Assert.Equal("recovery_point_unsuitable", onTop.Code);
         var candidates = await Phased().ListRecoveryEndpointCandidatesAsync(jobId, forSource: false);
-        Assert.Equal("failed_robot_there", candidates.Single(c => c.EndpointId == queue).Unsuitable);
+        Assert.Equal("failed_robot_there", candidates.Single(c => c.EndpointId == park).Unsuitable);
+        Assert.Equal(queue, candidates[0].EndpointId);
 
-        await Phased().AssignRecoveryRobotAsync(jobId, second, park);
+        await Phased().AssignRecoveryRobotAsync(jobId, second, queue);
         Assert.Equal(RecoveryPhases.TargetEnRoute, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
         Assert.Equal(RecoveryPhases.AwaitingTransfer, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);

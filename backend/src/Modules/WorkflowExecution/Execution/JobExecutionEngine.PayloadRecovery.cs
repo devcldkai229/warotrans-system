@@ -25,8 +25,9 @@ public sealed record RecoveryEndpointCandidate(
 
 /// <summary>
 /// Payload recovery (WAROTRANS_PAYLOAD_RECOVERY_DESIGN.md): before a second robot comes for the cargo, a technician
-/// assesses the failed robot, confirms where it really stands, lets it drive itself to a recovery point (a wait point:
-/// QUEUE, EP-QUEUE*, EP-WAIT*, EP-RECOVERY*) when it is safe to, and confirms it stands secured. The case keeps the
+/// assesses the failed robot, confirms where it really stands, lets it drive itself out of the way (a free parking place)
+/// when it is safe to, and confirms it stands secured. The recovery point is the queue point (QUEUE, EP-QUEUE*, EP-WAIT*,
+/// EP-RECOVERY*; one on the lab map): the second robot takes the cargo there. The case keeps the
 /// failed robot's last pose and error from the moment it opened. Every motion goes through traffic like any MOVE.
 /// </summary>
 public sealed partial class JobExecutionEngine
@@ -179,7 +180,8 @@ public sealed partial class JobExecutionEngine
     }
 
     /// <summary>
-    /// Approved self-evacuation: the failed robot drives itself, with its cargo, to a free recovery point, through traffic
+    /// Approved self-evacuation: the failed robot drives itself, with its cargo, out of the way to a free parking place (the
+    /// queue point only when none is free, since that is where the second robot comes), through traffic
     /// like any MOVE. Its STOP hold is released for that drive only. A failed drive asks for a person.
     /// </summary>
     public async Task<JobRecoveryCase> EvacuateRecoverySourceAsync(
@@ -414,7 +416,10 @@ public sealed partial class JobExecutionEngine
     {
         var configured = WaitPoints.ConfiguredCodes(freeEndpoints?.FallbackEndpointCodes, trafficOptions?.Value.DeadlockRetreatEndpointCodes);
         var endpoints = (await navigation.GetEndpointsOnMapAsync(job.MapVersionId, cancellationToken))
-            .Where(e => forSource ? WaitPoints.Is(e, configured) : WaitPoints.IsStandAside(e, configured))
+            // The recovery point is the queue point (one on the lab map): it is where the second robot takes the cargo.
+            // The failed robot, when it may drive at all, goes out of the way to a free parking place, the queue point
+            // only when no parking place is free.
+            .Where(e => WaitPoints.IsStandAside(e, configured))
             .ToList();
         if (endpoints.Count == 0)
             return [];
@@ -457,7 +462,10 @@ public sealed partial class JobExecutionEngine
 
         return list
             .OrderBy(c => c.Unsuitable is null ? 0 : 1)
-            .ThenBy(c => forSource || c.EndpointType == nameof(EndpointType.QUEUE) ? 0 : 1) // the second robot prefers a wait point
+            // The failed robot prefers a parking place, the second robot the recovery (queue) point.
+            .ThenBy(c => forSource
+                ? (c.EndpointType == nameof(EndpointType.PARK) ? 0 : 1)
+                : (c.EndpointType == nameof(EndpointType.PARK) ? 1 : 0))
             .ThenBy(c => c.PathMeters ?? c.DistanceMeters)
             .ThenBy(c => c.Code, StringComparer.Ordinal)
             .ToList();
