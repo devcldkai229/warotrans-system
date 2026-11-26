@@ -14,6 +14,7 @@ import {
   listRecoveryRobotCandidates,
   releaseRecovery,
   requestRecovery,
+  resolveRecoveryManually,
   resumeRecoveryOnSameRobot,
   secureRecoverySource,
   unassignRecoveryRobot,
@@ -357,6 +358,9 @@ function StaffPart({
   const confirm = can('CONFIRM')
   const unload = can('UNLOAD')
   const resume = can('RESUME_SAME_ROBOT')
+  const resolve = can('RESOLVE_MANUALLY')
+  const [disposition, setDisposition] = useState<'RETURN_TO_STORAGE' | 'QUARANTINE_CARGO'>('RETURN_TO_STORAGE')
+  const [problem, setProblem] = useState('OTHER')
   const [robotId, setRobotId] = useState('')
   const [pointId, setPointId] = useState('')
   const [scan, setScan] = useState('')
@@ -412,6 +416,30 @@ function StaffPart({
           onClick={() => act(() => unloadRecoveryCargo(job.id, refCase, scansOf(onFailed, scanned), 'STAFF', undefined, note || undefined))}>
           {t('Scanned cargo taken off the failed robot (I hold it)')}
         </Button>
+      ) : null}
+
+      {resolve.allowed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-sm border border-outline-soft p-2">
+          <span className="w-full text-muted">{t('Or take the scanned cargo off the Job by hand:')}</span>
+          <select className={controlClass('sm', 'w-auto')} value={disposition}
+            onChange={(e) => setDisposition(e.target.value as 'RETURN_TO_STORAGE' | 'QUARANTINE_CARGO')}>
+            <option value="RETURN_TO_STORAGE">{t('Return to storage')}</option>
+            <option value="QUARANTINE_CARGO">{t('Quarantine')}</option>
+          </select>
+          {disposition === 'QUARANTINE_CARGO' ? (
+            <select className={controlClass('sm', 'w-auto')} value={problem} onChange={(e) => setProblem(e.target.value)}>
+              {['OTHER', 'CONTAINER_DAMAGED', 'UNSAFE_LOAD', 'BARCODE_UNREADABLE', 'WRONG_CONTAINER'].map((code) => (
+                <option key={code} value={code}>{code.replaceAll('_', ' ').toLowerCase()}</option>
+              ))}
+            </select>
+          ) : null}
+          <Button size="sm" variant="dangerGhost" disabled={busy || scansOf(containers, scanned).length === 0}
+            onClick={() => act(() => resolveRecoveryManually(job.id, refCase, disposition, scansOf(containers, scanned),
+              disposition === 'QUARANTINE_CARGO' ? problem : undefined, note || undefined))}>
+            {t('Take scanned cargo off the Job')}
+          </Button>
+          <span className="w-full text-[11px] text-muted">{t('Each container is held under a container issue; resolving that issue says which shelf it goes back to.')}</span>
+        </div>
       ) : null}
 
       {assign.allowed ? (

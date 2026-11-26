@@ -2441,4 +2441,12 @@ export const vi: Record<string, string> = {
   'A technician has to assess and secure the failed robot first.': 'Kỹ thuật viên phải đánh giá và xác nhận robot sự cố an toàn trước.',
   'A technician has to judge the robot repaired first.': 'Kỹ thuật viên phải xác nhận robot đã sửa xong trước.',
   'The failed robot stands at that point; choose another one.': 'Robot sự cố đang đứng ở điểm đó; hãy chọn điểm khác.',
+  'Take Cargo Off the Failed Robot': 'Lấy hàng khỏi robot hỏng',
+  'Scan each container you take off. Keep it for the rescue robot, or take it off the Job: back to storage or quarantined.': 'Quét từng container lấy xuống. Giữ lại cho robot cứu hộ, hoặc tách khỏi công việc: trả về kho hoặc cách ly.',
+  'Open Scanner': 'Mở máy quét',
+  '{done} of {total} scanned': 'Đã quét {done}/{total}',
+  'Taken Off — I Hold It': 'Đã lấy xuống — tôi đang giữ',
+  'Return to Storage': 'Trả về kho',
+  'Quarantine': 'Cách ly',
+  'Containers taken off the Job are held under a container issue; resolving it says which shelf they go back to.': 'Container tách khỏi công việc được giữ kèm sự cố container; khi xử lý sự cố sẽ chọn kệ trả hàng về.',
 };

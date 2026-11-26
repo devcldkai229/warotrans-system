@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Navigation.Contracts;
@@ -16,6 +17,13 @@ namespace WaroTrans.WorkflowExecution.Execution;
 
 /// <summary>One item of a technical recovery checklist (motor, localization, safety sensors, STOP, payload, battery …).</summary>
 public sealed record RecoveryChecklistItem(string Item, bool Ok, string? Note = null);
+
+/// <summary>What staff do with cargo taken off a failed robot by hand.</summary>
+public static class RecoveryDispositions
+{
+    public const string ReturnToStorage = "RETURN_TO_STORAGE";
+    public const string QuarantineCargo = "QUARANTINE_CARGO";
+}
 
 /// <summary>A place a robot may be sent to in a recovery, ranked: free first, then by path length from the cargo.</summary>
 /// <param name="PathMeters">Length of the way on the map (A* over the costmap); null when no map bundle is configured.</param>
@@ -376,6 +384,133 @@ public sealed partial class JobExecutionEngine
         await SaveAndPublishAsync(cancellationToken, transaction);
         logger.LogInformation("Job {JobNo}: {Count} container(s) unloaded from the failed robot to {Holder}", job.JobNo, ids.Count, holderType);
         return recovery;
+    }
+
+    /// <summary>
+    /// Manual disposition (WAROTRANS_PAYLOAD_RECOVERY_DESIGN.md 12.1): staff scanned containers off the failed robot and
+    /// take them off the Job: RETURN_TO_STORAGE (back to a shelf) or QUARANTINE_CARGO (kept aside for a problem). Each
+    /// container fails off the Job with a CONTAINER issue and Warehouse holds it where the robot stands; the issue's
+    /// resolution says where it ends up (a shelf, scrapped …). With nothing left the case closes RESOLVED_MANUALLY and the
+    /// Job ends (COMPLETED when something was delivered before, else FAILED). Others may still go to the second robot.
+    /// </summary>
+    public async Task<JobRecoveryCase> ResolveRecoveryManuallyAsync(
+        Guid jobId, RecoveryCaseAccess access, string disposition, IReadOnlyList<HandoverStopScan> scans, string? problemCode,
+        string? note, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        EnsureRecoveryOwner(recovery, access);
+        var kind = (disposition ?? string.Empty).Trim().ToUpperInvariant();
+        if (kind is not (RecoveryDispositions.ReturnToStorage or RecoveryDispositions.QuarantineCargo))
+            throw new DomainValidationException("Choose RETURN_TO_STORAGE or QUARANTINE_CARGO.", "recovery_disposition_invalid");
+        if (recovery.Status == JobRecoveryStatuses.TargetAssigned)
+            throw new ConflictException("Call the second robot back before taking the cargo off by hand.", "recovery_target_assigned");
+
+        var robot = recovery.FromRobotId is { } fromId ? await fleet.GetRobotAsync(fromId, cancellationToken) : null;
+        if (robot is { IsOnline: true, MotionHeld: false })
+            throw new ConflictException($"Robot {robot.Code} is not holding still. Stop it before taking cargo off.", "robot_not_stopped");
+
+        var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToHashSet();
+        var ids = (scans ?? []).Select(scan => scan.ContainerId).ToHashSet();
+        if (ids.Count == 0 || !ids.IsSubsetOf(onBoard))
+            throw new DomainValidationException("Scan only containers of this recovery that are still on the Job.", "recovery_containers_mismatch");
+        await VerifyContainerScansAsync(ids, scans, cancellationToken);
+        var code = kind == RecoveryDispositions.ReturnToStorage
+            ? ContainerProblemCodes.Other
+            : ContainerProblemFor(problemCode, atInspection: false);
+        var reason = (kind == RecoveryDispositions.ReturnToStorage
+                ? "Payload recovery: taken off by hand, to be returned to storage."
+                : "Payload recovery: taken off by hand and quarantined.")
+            + (string.IsNullOrWhiteSpace(note) ? string.Empty : $" {note.Trim()}");
+        if (reason.Length > 500) reason = reason[..500];
+
+        var now = DateTimeOffset.UtcNow;
+        var custody = await RecoveryCustodyAsync(recovery, cancellationToken);
+        var anchor = OrderedSteps(job).LastOrDefault(x => x.Step.Status != JobStepStatus.PENDING);
+        var failures = new List<ContainerFailure>();
+        foreach (var containerId in ids)
+        {
+            failures.Add(await FailContainerCoreAsync(job, anchor.Step ?? OrderedSteps(job).First().Step, containerId, code, reason, now, cancellationToken));
+            var from = custody.TryGetValue(containerId, out var held) ? held : (CustodyTypes.Robot, recovery.FromRobotId);
+            var key = $"{recovery.Id:N}:{containerId:N}:resolve";
+            if (!await db.CargoTransferRecords.AnyAsync(r => r.IdempotencyKey == key, cancellationToken))
+            {
+                db.CargoTransferRecords.Add(new CargoTransferRecord
+                {
+                    Id = Guid.NewGuid(), RecoveryCaseId = recovery.Id, JobId = job.Id, ContainerId = containerId,
+                    FromCustodyType = from.Item1, FromCustodyId = from.Item2, ToCustodyType = CustodyTypes.WarehouseHold,
+                    ConfirmedBy = access.Actor, ConfirmedAt = now, IdempotencyKey = key, Note = kind
+                });
+            }
+        }
+
+        var left = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToList();
+        recovery.ContainerIds = left;
+        if (left.Count == 0)
+        {
+            recovery.Status = JobRecoveryStatuses.ResolvedManually;
+            recovery.ConfirmedBy = access.Actor;
+            recovery.ConfirmedAt = now;
+            recovery.Note = kind;
+            recovery.ResolvedAt = now;
+            if (job.Status == JobStatus.RECOVERY_REQUIRED)
+            {
+                // Something was delivered before the robot failed: the Job did what it could; nothing at all: it failed.
+                var delivered = job.JobContainers.Any(c => c.Status == JobContainerStatus.DELIVERED);
+                foreach (var (task, open) in OrderedSteps(job).Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.READY
+                             or JobStepStatus.WAITING or JobStepStatus.EXECUTING))
+                {
+                    open.Status = JobStepStatus.SKIPPED;
+                    task.Status = JobTaskStatus.SKIPPED;
+                }
+
+                job.Status = delivered ? JobStatus.COMPLETED : JobStatus.FAILED;
+                job.CompletedAt = now;
+                job.FailureCode = delivered ? null : PayloadResolvedManuallyCode;
+                job.FailureMessage = delivered ? null : reason;
+                _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), AssignedRobot(job), job.FailureCode));
+            }
+        }
+
+        recovery.Version++;
+        await SaveAndPublishAsync(cancellationToken, transaction);
+        logger.LogWarning("Job {JobNo}: {Count} container(s) taken off by hand in recovery ({Disposition})", job.JobNo, ids.Count, kind);
+
+        var heldAt = recovery.SourceEndpointId ?? recovery.RecoveryEndpointId;
+        foreach (var failure in failures)
+            await ReportRecoveryContainerAsync(job, failure, kind, heldAt, access.Actor, cancellationToken);
+        return recovery;
+    }
+
+    /// <summary>The Job ended because its cargo was taken off by hand in a payload recovery.</summary>
+    public const string PayloadResolvedManuallyCode = "payload_resolved_manually";
+
+    private async Task ReportRecoveryContainerAsync(
+        Job job, ContainerFailure failure, string disposition, Guid? heldAt, Guid? actorId, CancellationToken cancellationToken)
+    {
+        if (issueReporter is null) return;
+        var containerId = failure.Container.ContainerId;
+        try
+        {
+            var issueId = await issueReporter.ReportContainerProblemAsync(
+                new ContainerProblemDraft(
+                    $"recovery:{job.Id:N}:{containerId:N}", job.Id, job.JobNo, null, null, containerId,
+                    failure.Container.TransportRequestId, AssignedRobot(job), actorId, failure.Code, [failure.Code],
+                    $"{failure.Reason} Taken off Job {job.JobNo} after its robot failed ({disposition}). "
+                    + (disposition == RecoveryDispositions.ReturnToStorage
+                        ? "Resolve this issue with the shelf it goes back to."
+                        : "Keep it aside until the problem is checked."),
+                    RemovedFromJob: true, HeldAtEndpointId: heldAt),
+                cancellationToken);
+            if (containerHolds is not null)
+                await containerHolds.HoldAsync(
+                    new ContainerHoldRequest(containerId, failure.Code, issueId, ContainerHoldMode.NOW, heldAt, job.Id, actorId, failure.Reason),
+                    cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Job {JobNo}: container {ContainerId} taken off in recovery but its issue or hold failed", job.JobNo, containerId);
+        }
     }
 
     /// <summary>The transfer to the second robot: one custody record per container, from wherever it was.</summary>

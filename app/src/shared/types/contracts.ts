@@ -586,6 +586,8 @@ export interface JobDetailResponse {
 export type JobRecoveryStatus = 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT';
 
 export type JobRecoveryAction =
+  | 'UNLOAD'
+  | 'RESOLVE_MANUALLY'
   | 'CLAIM'
   | 'RELEASE'
   | 'ASSIGN'

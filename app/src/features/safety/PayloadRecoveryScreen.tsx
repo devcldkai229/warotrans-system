@@ -28,6 +28,8 @@ import {
   listRecoveryEndpointCandidates,
   listRobots,
   releaseJobRecovery,
+  resolveRecoveryManually,
+  unloadRecoveryCargo,
   resumeRecoveryOnSameRobot,
   unassignRecoveryRobot,
   type MapVersionDetailDto,
@@ -71,6 +73,8 @@ import {
 } from './payloadRecoveryData';
 
 type BusyAction =
+  | 'unload'
+  | 'resolve'
   | 'load'
   | 'claim'
   | 'release'
@@ -294,6 +298,8 @@ export function PayloadRecoveryScreen() {
   const canConfirm = canOperate && isRecoveryActionAllowed(recovery, 'CONFIRM');
   const canArmButton = canOperate && isRecoveryActionAllowed(recovery, 'ARM_BUTTON');
   const canResumeSameRobot = canOperate && isRecoveryActionAllowed(recovery, 'RESUME_SAME_ROBOT');
+  const canUnloadCargo = canOperate && isRecoveryActionAllowed(recovery, 'UNLOAD');
+  const canResolveManually = canOperate && isRecoveryActionAllowed(recovery, 'RESOLVE_MANUALLY');
 
   const requestInactiveReason = [
     getRecoveryAction(recovery, 'ASSIGN')?.reason,
@@ -768,6 +774,89 @@ export function PayloadRecoveryScreen() {
                       <Text variant="body" color="textSecondary">
                         A technician first assesses the failed robot and confirms it stands safely. The rescue robot can be sent after that.
                       </Text>
+                    ) : null}
+                  </Card>
+                ) : null}
+
+                {/* Take the cargo off the failed robot (unload, or a manual disposition) */}
+                {(phase === 'assign' || technicianFirst) && recovery && (canUnloadCargo || canResolveManually) ? (
+                  <Card padding="md" gap={10}>
+                    <Text variant="headline">Take Cargo Off the Failed Robot</Text>
+                    <Text variant="body" color="textSecondary">
+                      Scan each container you take off. Keep it for the rescue robot, or take it off the Job: back to storage or quarantined.
+                    </Text>
+                    <View style={styles.scanRow}>
+                      <View style={styles.flexText}>
+                        <TextField
+                          value={manualCode}
+                          onChangeText={setManualCode}
+                          placeholder={t('Scan or type container barcode')}
+                          autoCapitalize="characters"
+                          autoCorrect={false}
+                          editable={!busy}
+                          accessibilityLabel={t('Container Barcode')}
+                        />
+                      </View>
+                      <Button
+                        title="Verify"
+                        variant="outline"
+                        size="sm"
+                        disabled={!!busy || !manualCode.trim()}
+                        onPress={() => {
+                          triggerHaptic('tap');
+                          applyRecoveryScan(manualCode);
+                        }}
+                      />
+                    </View>
+                    <Button title="Open Scanner" variant="outline" size="sm" disabled={!!busy} onPress={() => setScannerOpen(true)} />
+                    {scanError ? <Text variant="caption" color="dangerText">{scanError}</Text> : null}
+                    <Text variant="caption" color="textSecondary">
+                      {t('{done} of {total} scanned', { done: scanProgress.done, total: scanProgress.total })}
+                    </Text>
+                    {canUnloadCargo ? (
+                      <Button
+                        title="Taken Off — I Hold It"
+                        variant="primary"
+                        size="md"
+                        fullWidth
+                        disabled={!!busy || scanProgress.scans.length === 0}
+                        onPress={() =>
+                          void runRecoveryMutation('unload', () =>
+                            unloadRecoveryCargo(job.id, recovery.id, recovery.version, scanProgress.scans, 'STAFF', note),
+                          )
+                        }
+                      />
+                    ) : null}
+                    {canResolveManually ? (
+                      <View style={{ gap: 8 }}>
+                        <Button
+                          title="Return to Storage"
+                          variant="outline"
+                          size="md"
+                          fullWidth
+                          disabled={!!busy || scanProgress.scans.length === 0}
+                          onPress={() =>
+                            void runRecoveryMutation('resolve', () =>
+                              resolveRecoveryManually(job.id, recovery.id, recovery.version, 'RETURN_TO_STORAGE', scanProgress.scans, null, note),
+                            )
+                          }
+                        />
+                        <Button
+                          title="Quarantine"
+                          variant="danger"
+                          size="md"
+                          fullWidth
+                          disabled={!!busy || scanProgress.scans.length === 0}
+                          onPress={() =>
+                            void runRecoveryMutation('resolve', () =>
+                              resolveRecoveryManually(job.id, recovery.id, recovery.version, 'QUARANTINE_CARGO', scanProgress.scans, 'OTHER', note),
+                            )
+                          }
+                        />
+                        <Text variant="caption" color="textSecondary">
+                          Containers taken off the Job are held under a container issue; resolving it says which shelf they go back to.
+                        </Text>
+                      </View>
                     ) : null}
                   </Card>
                 ) : null}

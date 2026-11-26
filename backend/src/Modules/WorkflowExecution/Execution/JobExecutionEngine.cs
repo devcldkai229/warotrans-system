@@ -3874,7 +3874,7 @@ public sealed partial class JobExecutionEngine(
             if (!ActiveJobStatuses.Contains(job.Status))
             {
                 var openCase = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == job.Id && c.ResolvedAt == null, cancellationToken);
-                if (openCase is not null)
+                if (openCase is not null && openCase.ResolvedAt is null) // one just closed in this unit of work keeps its status
                 {
                     openCase.Status = JobRecoveryStatuses.Cancelled;
                     openCase.ResolvedAt = now;

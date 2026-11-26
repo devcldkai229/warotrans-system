@@ -32,5 +32,8 @@ public static class CustodyTypes
     public const string Robot = "ROBOT";
     public const string Staff = "STAFF";
     public const string RecoveryStation = "RECOVERY_STATION";
+
+    /// <summary>Taken off the Job by hand (returned to storage or quarantined): held by Warehouse under a CONTAINER issue.</summary>
+    public const string WarehouseHold = "WAREHOUSE_HOLD";
     public static readonly string[] Holders = [Staff, RecoveryStation];
 }
