@@ -25,6 +25,8 @@ import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
 import { MappingCanvas } from './MappingCanvas'
+import { keysToMove } from './drivePad'
+import { MappingDrivePad } from './MappingDrivePad'
 import { canRescan, rescanMapping } from './rescan'
 import {
   decodeGrid,
@@ -55,7 +57,7 @@ const STATUS_TEXT: Record<MappingSessionStatus, () => string> = {
   FAILED: () => t('Failed'),
 }
 
-const KEYS: Record<string, 'f' | 'b' | 'l' | 'r'> = {
+const KEYS: Record<string, 'f' | 'b' | 'l' | 'r' | 'q' | 'e'> = {
   ArrowUp: 'f',
   KeyW: 'f',
   ArrowDown: 'b',
@@ -64,11 +66,32 @@ const KEYS: Record<string, 'f' | 'b' | 'l' | 'r'> = {
   KeyA: 'l',
   ArrowRight: 'r',
   KeyD: 'r',
+  KeyQ: 'q',
+  KeyE: 'e',
 }
 
 /** Slow is what makes a good map: slam_toolbox needs overlapping scans. */
-const SPEEDS = [0.05, 0.1, 0.15, 0.2]
-const TURN_FOR = (linear: number) => Math.min(0.6, 0.2 + linear * 2.2)
+const SPEEDS: { value: number; label: () => string }[] = [
+  { value: 0.05, label: () => t('Very slow') },
+  { value: 0.1, label: () => t('Slow') },
+  { value: 0.15, label: () => t('Medium') },
+  { value: 0.2, label: () => t('Fast') },
+]
+/** Turning is what blurs a scan most: on its own setting, slow by default (rad/s). */
+const TURN_RATES: { value: number; label: () => string }[] = [
+  { value: 0.2, label: () => t('Very slow') },
+  { value: 0.35, label: () => t('Slow') },
+  { value: 0.5, label: () => t('Medium') },
+]
+type DriveMode = 'pad' | 'joystick'
+const DRIVE_MODE_KEY = 'warotrans.mapping.driveMode'
+const readDriveMode = (): DriveMode => {
+  try {
+    return window.localStorage.getItem(DRIVE_MODE_KEY) === 'joystick' ? 'joystick' : 'pad'
+  } catch {
+    return 'pad'
+  }
+}
 const TRAIL_STEP_M = 0.05
 const TRAIL_MAX = 4000
 
@@ -153,12 +176,29 @@ export function MappingPage() {
   const drive = useTeleopLoop(robotId, true)
   const { set: driveSet, stop: driveStop } = drive
   const [speed, setSpeed] = useState(0.1)
+  const [turnRate, setTurnRate] = useState(0.35)
+  const [driveMode, setDriveModeState] = useState<DriveMode>(readDriveMode)
+  const setDriveMode = (mode: DriveMode) => {
+    setDriveModeState(mode)
+    try {
+      window.localStorage.setItem(DRIVE_MODE_KEY, mode)
+    } catch {
+      // per-viewer convenience only
+    }
+  }
+  const [command, setCommand] = useState<[number, number]>([0, 0])
+  const [keyMove, setKeyMove] = useState<string | null>(null)
   const steer = useCallback(
     (forward: number, turn: number) => {
-      if (!canDrive) return driveStop()
-      driveSet(forward * speed, turn * TURN_FOR(speed))
+      if (!canDrive) {
+        setCommand([0, 0])
+        return driveStop()
+      }
+      const next: [number, number] = [forward * speed, turn * turnRate]
+      setCommand(next)
+      driveSet(...next)
     },
-    [canDrive, driveSet, driveStop, speed],
+    [canDrive, driveSet, driveStop, speed, turnRate],
   )
   useEffect(() => {
     if (!canDrive) driveStop()
@@ -168,8 +208,9 @@ export function MappingPage() {
   useEffect(() => {
     if (!canDrive) return
     const apply = () => {
-      const has = (k: string) => pressed.current.has(k)
-      steer((has('f') ? 1 : 0) - (has('b') ? 1 : 0), (has('l') ? 1 : 0) - (has('r') ? 1 : 0))
+      const move = keysToMove((k) => pressed.current.has(k))
+      setKeyMove(move.key)
+      steer(move.forward, move.turn)
     }
     const down = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName)) return
@@ -183,6 +224,8 @@ export function MappingPage() {
       } else if (event.code === 'Space') {
         event.preventDefault()
         pressed.current.clear()
+        setKeyMove(null)
+        setCommand([0, 0])
         driveStop()
       }
     }
@@ -315,17 +358,38 @@ export function MappingPage() {
             ) : !lease.heldByMe ? (
               <p className="text-sm text-muted">{t('Taking the manual-drive lease…')}</p>
             ) : null}
-            <Joystick disabled={!canDrive} onChange={steer} />
-            <label className="w-full text-sm text-ink-2">{t('Speed')}
-              <select className={cx(controlClass(), 'mt-1 block w-full')} value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-                {SPEEDS.map((v) => (
-                  <option key={v} value={v}>{v.toFixed(2)} m/s</option>
-                ))}
-              </select>
-            </label>
+            <div className="flex w-full rounded-lg border border-outline-soft p-0.5 text-sm" role="tablist" aria-label={t('Drive control')}>
+              {(['pad', 'joystick'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={driveMode === mode}
+                  className={cx('flex-1 rounded-md px-2 py-1', driveMode === mode ? 'bg-ink text-white' : 'text-ink-2 hover:bg-container-high')}
+                  onClick={() => setDriveMode(mode)}
+                >
+                  {mode === 'pad' ? t('Buttons') : t('Joystick')}
+                </button>
+              ))}
+            </div>
+            {driveMode === 'pad' ? (
+              <MappingDrivePad disabled={!canDrive} keyboardActive={keyMove} onChange={steer} />
+            ) : (
+              <Joystick disabled={!canDrive} onChange={steer} />
+            )}
+            <p className="text-sm tabular-nums text-ink-2" aria-live="polite">
+              {command[0] === 0 && command[1] === 0
+                ? t('Stopped')
+                : t('Driving {linear} m/s, turning {angular} rad/s', {
+                    linear: command[0].toFixed(2),
+                    angular: command[1].toFixed(2),
+                  })}
+            </p>
+            <ChipRow label={t('Driving speed')} options={SPEEDS} value={speed} unit="m/s" onChange={setSpeed} />
+            <ChipRow label={t('Turning speed')} options={TURN_RATES} value={turnRate} unit="rad/s" onChange={setTurnRate} />
             {drive.error ? <p className="text-xs text-red">{drive.error}</p> : null}
             <p className="text-xs text-muted">
-              {t('Drive slowly along every wall and back to where you started (closing the loop sharpens the map). Arrow keys / WASD drive, Space stops. Drive Assist stops the robot before obstacles.')}
+              {t('Hold a button to drive, let go to stop. Drive slowly along every wall, turn slowly on the spot, and come back to where you started (closing the loop sharpens the map). Keys: arrows / WASD drive, Q / E turn on the spot, Space stops. Drive Assist stops the robot before obstacles.')}
             </p>
           </section>
         ) : null}
@@ -400,6 +464,47 @@ export function MappingPage() {
           <Button variant="outline" onClick={() => navigate('/configure/facility')}>{t('Back to Facility')}</Button>
         ) : null}
       </aside>
+    </div>
+  )
+}
+
+
+function ChipRow({
+  label,
+  options,
+  value,
+  unit,
+  onChange,
+}: {
+  label: string
+  options: { value: number; label: () => string }[]
+  value: number
+  unit: string
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="w-full">
+      <p className="mb-1 text-sm text-ink-2">{label}</p>
+      <div className="grid grid-cols-4 gap-1" role="radiogroup" aria-label={label}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            className={cx(
+              'rounded-md border px-1 py-1.5 text-xs leading-tight',
+              value === option.value ? 'border-ink bg-ink text-white' : 'border-outline-soft text-ink-2 hover:bg-container-high',
+            )}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label()}
+            <span className="block tabular-nums opacity-70">
+              {option.value.toFixed(2)} {unit}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
