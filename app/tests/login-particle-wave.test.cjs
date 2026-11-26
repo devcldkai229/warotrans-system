@@ -2,54 +2,44 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
 
-test('native waves animate the original rows and stop when reduced motion is enabled', () => {
-  const loops = [];
-  let phases;
-  let cleanup;
-  const load = createLoader({
-    react: {
-      ...require('react'),
-      memo: component => component,
-      useState: initialize => [phases ??= initialize()],
-      useEffect: effect => {
-        cleanup?.();
-        cleanup = effect();
-      },
-    },
-    'react-native': {
-      Animated: {
-        View: 'animated-view',
-        Value: class {
-          constructor(value) { this.value = value; }
-          setValue(value) { this.value = value; }
-          interpolate(config) { return config; }
-        },
-        delay: duration => ({ duration }),
-        timing: (_phase, config) => config,
-        sequence: steps => steps,
-        loop: steps => {
-          const loop = {
-            steps,
-            start() { this.started = true; },
-            stop() { this.stopped = true; },
-          };
-          loops.push(loop);
-          return loop;
-        },
-      },
-      Easing: { inOut: easing => easing },
-      StyleSheet: { create: styles => styles },
-    },
-    'react-native-svg': { __esModule: true, default: 'svg', Circle: 'circle' },
-  });
-  const { LoginParticleWave } = load('src/features/auth/LoginParticleWave.tsx');
-  const render = reducedMotion => LoginParticleWave({ isDark: false, reducedMotion });
-  const rows = render(false).props.children.filter(Boolean);
-  assert.equal(rows.reduce((total, row) => total + row.props.children.props.children.length, 0), 234);
-  assert.ok(loops.length >= rows.length);
-  assert.ok(loops.every(loop => loop.started && loop.steps.slice(1).every(step => step.useNativeDriver)));
+const {
+  buildParticlePaths,
+  createParticleBuckets,
+  PARTICLE_PATH_SCALE,
+  PARTICLE_WAVE_STILL_TIME,
+  particleWaveTime,
+  updateParticleBuckets,
+} = createLoader()('src/features/auth/particleWave.ts');
 
-  render(true);
-  assert.ok(loops.every(loop => loop.stopped));
-  assert.ok(phases.every(phase => phase.value === 0.5));
+test('native SVG paths reproduce the canvas particles at the same size and time', () => {
+  const circle = /M(-?\d+) (-?\d+)a(\d+) \3 0 1 0 -(\d+) 0 \3 \3 0 1 0 \4 0z/g;
+  for (const [width, height] of [[390, 844], [844, 390]]) {
+    for (const isDark of [true, false]) {
+      const buckets = createParticleBuckets();
+      for (const time of [PARTICLE_WAVE_STILL_TIME, particleWaveTime(4200)]) {
+        updateParticleBuckets(buckets, width, height, time, isDark);
+        const paths = buildParticlePaths(width, height, time, isDark);
+        assert.ok(paths.some(Boolean));
+
+        paths.forEach((path, index) => {
+          const matches = [...path.matchAll(circle)];
+          const coords = buckets[index];
+          assert.equal(matches.map(match => match[0]).join(''), path);
+          assert.equal(matches.length * 3, coords.length);
+          matches.forEach(([, start, centerY, radius, diameter], dot) => {
+            const offset = dot * 3;
+            const x = Math.round(coords[offset] * PARTICLE_PATH_SCALE);
+            const y = Math.round(coords[offset + 1] * PARTICLE_PATH_SCALE);
+            const r = Math.round(coords[offset + 2] * PARTICLE_PATH_SCALE);
+            assert.deepEqual([Number(start), Number(centerY), Number(radius), Number(diameter)], [x + r, y, r, r * 2]);
+          });
+        });
+      }
+
+      assert.notDeepEqual(
+        buildParticlePaths(width, height, PARTICLE_WAVE_STILL_TIME, isDark),
+        buildParticlePaths(width, height, particleWaveTime(4200), isDark),
+      );
+    }
+  }
 });
