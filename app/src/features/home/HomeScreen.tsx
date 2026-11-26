@@ -80,6 +80,7 @@ export function HomeScreen() {
   const [selectedRobotId, setSelectedRobotId] = useState<string>('');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
+  const [endpointSheetOpen, setEndpointSheetOpen] = useState<boolean>(false);
   const { lastJobUpdate } = useRealtime();
   const operating = useQuery({ queryKey: ['operating-context'], queryFn: () => getOperatingContext(), staleTime: 0, refetchInterval: 30_000 });
   const jobsQuery = useQuery({ queryKey: ['home-jobs', session?.id], queryFn: () => listJobs(), refetchInterval: 5_000 });
@@ -204,6 +205,8 @@ export function HomeScreen() {
         jobMapVersionId={activeJob.id ? activeJob.mapVersionId : undefined}
         onLocalizeRobot={onLocalizeRobot}
         onManualDrive={onManualDrive}
+        floatingSheetBottom={dockHeight + 10}
+        onEndpointSheetOpenChange={setEndpointSheetOpen}
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {
           setSelectedRobotId(id);
@@ -212,6 +215,7 @@ export function HomeScreen() {
       />
 
       {/* 2. Floating Next Handover Task Card (Peek Sheet) */}
+      {!endpointSheetOpen ? (
       <View
         onLayout={event => {
           if (!isSheetExpanded || !hasActiveJob) {
@@ -515,6 +519,7 @@ export function HomeScreen() {
           </>
         )}
       </View>
+      ) : null}
     </View>
   );
 }

@@ -17,7 +17,6 @@ import {
   BatteryMedium,
   Bot,
   ChevronDown,
-  ChevronLeft,
   Focus,
   Grid3X3,
   Layers,
@@ -25,7 +24,6 @@ import {
   Navigation,
   Route,
   Scan,
-  SlidersHorizontal,
   Tag,
   X,
 } from 'lucide-react-native';
@@ -40,13 +38,13 @@ import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
-import { Button, SegmentedControl, StatusPill, Text, ToggleSwitch } from '../ui';
+import { Button, SegmentedControl, Text, ToggleSwitch } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
-import { BatteryIndicator } from '../ui/RobotBadges';
 import { triggerHaptic } from '../utils/haptics';
 import { worldToMapPercent } from '../utils/mapCoordinates';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
-import { RobotChargingPanel } from './RobotChargingPanel';
+import { EndpointFloatingSheet } from './EndpointFloatingSheet';
+import { RobotFloatingSheet } from './RobotFloatingSheet';
 import { useMapCamera } from './hooks/useMapCamera';
 import { useMapEnvironment } from './hooks/useMapEnvironment';
 import { useMapJobTrail } from './hooks/useMapJobTrail';
@@ -81,7 +79,6 @@ import { zoneColor, zoneLabel } from './mapPresentation';
 import {
   JOB_HIGHLIGHT_COLOR,
   LANE_BLUE,
-  ROBOT_COLOR,
   ZONE_DESCRIPTION,
 } from './mapStyle';
 import { buildJobMovement } from './mapTrails';
@@ -100,8 +97,6 @@ import {
   type MapFrame,
   type MapPoint,
 } from './mapTransform';
-import { robotStatusLabel } from './robotLabels';
-import { RobotLocalizePanel } from './RobotLocalizePanel';
 
 interface Props {
   map: MapVersionDetailDto;
@@ -121,6 +116,10 @@ interface Props {
   onPickEndpoint?: (endpoint: EndpointDto) => void;
   /** Given when the user may manually drive robots (robot.manual.drive). */
   onManualDrive?: (robotId: string) => void;
+  /** Bottom offset for the non-modal floating endpoint inspection card. */
+  floatingSheetBottom?: number;
+  /** Notifies the host screen when the non-modal endpoint card opens/closes so bottom cards do not stack. */
+  onEndpointSheetOpenChange?: (open: boolean) => void;
 }
 
 type LayerKey = 'stations' | 'labels' | 'zones' | 'lanes' | 'paths' | 'grid' | 'scan';
@@ -300,6 +299,8 @@ function MapCanvas({
   onLocalizeRobot,
   onPickEndpoint,
   onManualDrive,
+  floatingSheetBottom,
+  onEndpointSheetOpenChange,
 }: Omit<Props, 'contentInsets' | 'title'> & {
   frame: MapFrame;
   horizontal: boolean;
@@ -334,6 +335,8 @@ function MapCanvas({
     scan: false,
   });
   const [sheet, setSheet] = useState<'layers' | 'legend' | 'endpoint' | 'robot' | null>(null);
+  const [sheetOrigin, setSheetOrigin] = useState<'map' | 'layers'>('map');
+  const [floatingSheetHeight, setFloatingSheetHeight] = useState(0);
   const [endpointId, setEndpointId] = useState<string | null>(null);
   const [labelsDetailed, setLabelsDetailed] = useState(false);
   const [inspected, setInspected] = useState<MapInspectTarget | null>(null);
@@ -354,7 +357,7 @@ function MapCanvas({
 
   const handleSingleTap = useCallback((_screenPoint: MapPoint, basePoint: MapPoint) => {
     const ctx = tapContextRef.current;
-    if (ctx.sheet !== null) return;
+    if (ctx.sheet !== null && ctx.sheet !== 'endpoint' && ctx.sheet !== 'robot') return;
     if (Date.now() - lastEntityPressRef.current < 240) return;
     if (Date.now() - ctx.lastGestureAt < 220) return;
 
@@ -369,9 +372,13 @@ function MapCanvas({
     });
     if (hit) {
       triggerHaptic('tap');
+      setSheet(null);
       setInspected(hit);
     } else {
       setInspected(null);
+      if (ctx.sheet === 'endpoint' || ctx.sheet === 'robot') {
+        setSheet(null);
+      }
     }
   }, []);
 
@@ -501,6 +508,15 @@ function MapCanvas({
   const endpoint = map.endpoints.find(
     e => e.id === endpointId && e.isEnabled && e.mapVersionId === map.id,
   );
+  const endpointSheetActive = sheet === 'endpoint' && Boolean(endpoint);
+  const robotSheetActive = sheet === 'robot' && Boolean(robot && state);
+  const floatingInspectActive = endpointSheetActive || robotSheetActive;
+  useEffect(() => {
+    onEndpointSheetOpenChange?.(floatingInspectActive);
+  }, [floatingInspectActive, onEndpointSheetOpenChange]);
+  useEffect(() => () => {
+    onEndpointSheetOpenChange?.(false);
+  }, [onEndpointSheetOpenChange]);
   const mapCenterWorld = useMemo(
     () => baseToWorld({ x: frame.left + frame.mapWidth / 2, y: frame.top + frame.mapHeight / 2 }, map, frame),
     [map, frame],
@@ -668,6 +684,7 @@ function MapCanvas({
     setInspected(null);
     triggerHaptic('tap');
     onSelectRobot(code);
+    setSheetOrigin('map');
     setSheet('robot');
   };
 
@@ -681,6 +698,7 @@ function MapCanvas({
         return;
       }
       setEndpointId(item.id);
+      setSheetOrigin('map');
       setSheet('endpoint');
     }
   };
@@ -789,6 +807,12 @@ function MapCanvas({
   const scaleBottom = fullBleed ? bottomInset + 10 : undefined;
   const scaleTop = fullBleed ? undefined : top + (horizontal ? 56 : 0) + frame.height + 6;
   const inspectBottom = fullBleed ? bottomInset + 62 : 64;
+  const endpointBottom = floatingSheetBottom ?? (fullBleed ? bottomInset + 10 : 12);
+  const cameraBottom = floatingInspectActive
+    ? endpointBottom + (floatingSheetHeight || 168) + 10
+    : fullBleed
+      ? bottomInset + 10
+      : 12;
 
   return (
     <>
@@ -1111,7 +1135,7 @@ function MapCanvas({
           style={{
             position: 'absolute',
             right: 12,
-            bottom: fullBleed ? bottomInset + 10 : 12,
+            bottom: cameraBottom,
             zIndex: 12,
           }}
           pointerEvents="box-none"
@@ -1194,7 +1218,7 @@ function MapCanvas({
       ) : null}
 
       {/* Bottom-Left: OTTO Orientation Crosshair & Metric Coordinate Readout */}
-      {showOrientationFooter && !(inspected && !sheet) ? (
+      {showOrientationFooter && !(inspected && !sheet) && !floatingInspectActive ? (
         <View
           pointerEvents="none"
           style={[
@@ -1224,70 +1248,73 @@ function MapCanvas({
         </View>
       ) : null}
 
-      {sheet ? (
+      {endpointSheetActive && endpoint ? (
+        <EndpointFloatingSheet
+          endpoint={endpoint}
+          robots={robots}
+          jobContext={jobContext}
+          bottomOffset={endpointBottom}
+          compact={compact}
+          showBackToLayers={sheetOrigin === 'layers'}
+          onBackToLayers={backToLayers}
+          onFocus={() => {
+            const p = worldToBase(endpoint, map, frame);
+            if (p) {
+              stopFollowing();
+              camera.center(p);
+            }
+          }}
+          onClose={close}
+          onInspectRobot={selectRobot}
+          onLocalizeRobot={onLocalizeRobot}
+          onLayoutHeight={setFloatingSheetHeight}
+        />
+      ) : null}
+
+      {robotSheetActive && robot && state ? (
+        <RobotFloatingSheet
+          robot={robot}
+          state={state}
+          map={map}
+          jobContext={jobContext}
+          active={active}
+          following={following}
+          bottomOffset={endpointBottom}
+          compact={compact}
+          showBackToLayers={sheetOrigin === 'layers'}
+          onBackToLayers={backToLayers}
+          onFocus={() => {
+            if (!state.showPose) return;
+            const p = worldToBase({ x: robot.poseX, y: robot.poseY }, map, frame);
+            if (p) {
+              stopFollowing();
+              camera.center(p);
+            }
+          }}
+          onClose={close}
+          onToggleFollow={() => {
+            if (following) {
+              setFollowing(false);
+            } else if (state.canFollow && active) {
+              setFollowing(true);
+              close();
+            }
+          }}
+          onManualDrive={onManualDrive}
+          onLocalizeRobot={onLocalizeRobot}
+          onLayoutHeight={setFloatingSheetHeight}
+        />
+      ) : null}
+
+      {sheet === 'layers' || sheet === 'legend' ? (
         <SheetContainer inline={compact} onClose={close} accessibilityLabel="map details">
           {/* Header */}
           <View style={styles.sheetHeader}>
-            {sheet !== 'layers' && sheet !== 'legend' ? (
-              <Pressable
-                onPress={backToLayers}
-                accessibilityRole="button"
-                accessibilityLabel="Back to layers"
-                style={({ pressed }) => [styles.circleBtn, pressed && styles.btnPressed]}
-              >
-                <ChevronLeft size={18} color={colors.textPrimary} />
-              </Pressable>
-            ) : null}
-            {(sheet === 'endpoint' && endpoint) || (sheet === 'robot' && robot) ? (
-              <View style={styles.headerIconWell}>
-                {sheet === 'endpoint' && endpoint ? (
-                  <EndpointIcon
-                    type={endpoint.endpointType}
-                    code={endpoint.code}
-                    name={endpoint.name}
-                    size={18}
-                    isDark={isDark}
-                  />
-                ) : (
-                  <Bot
-                    size={18}
-                    color={robot?.isOnline ? colors.textPrimary : colors.textMuted}
-                  />
-                )}
-              </View>
-            ) : null}
             <View style={styles.sheetHeaderTitleGroup}>
               <Text variant="title" numberOfLines={1}>
-                {sheet === 'layers'
-                  ? 'Map Layers & View'
-                  : sheet === 'legend'
-                  ? 'Map Legend'
-                  : sheet === 'endpoint'
-                  ? endpoint?.name || 'Station Details'
-                  : robot?.code || 'Robot Telemetry'}
+                {sheet === 'layers' ? 'Map Layers & View' : 'Map Legend'}
               </Text>
-              {sheet === 'endpoint' || sheet === 'robot' ? (
-                <Text
-                  variant="caption"
-                  color="textSecondary"
-                  numberOfLines={1}
-                  style={sheet === 'endpoint' ? styles.headerSubtitleMono : undefined}
-                >
-                  {sheet === 'endpoint'
-                    ? endpoint
-                      ? `${endpoint.code} · ${endpoint.endpointType}`
-                      : ''
-                    : robot
-                    ? `${t(robotStatusLabel(robot.status))}${robot.isOnline ? '' : ` · ${t('Offline')}`}`
-                    : 'Offline'}
-                </Text>
-              ) : null}
             </View>
-            {sheet === 'endpoint' && endpoint && !endpoint.isEnabled ? (
-              <StatusPill status="OFFLINE" label="Disabled" size="sm" dot />
-            ) : sheet === 'robot' && robot && !robot.isOnline ? (
-              <StatusPill status="OFFLINE" label="Offline" size="sm" dot />
-            ) : null}
             <Pressable
               onPress={close}
               accessibilityRole="button"
@@ -1302,7 +1329,7 @@ function MapCanvas({
           <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetContent}>
             {sheet === 'legend' ? (
               <MapLegendContent map={map} isDark={isDark} showLivePaths={canReadTraffic} />
-            ) : sheet === 'layers' ? (
+            ) : (
               <>
                 {/* 1. Quick Presets */}
                 <View style={styles.sectionBlock}>
@@ -1505,10 +1532,13 @@ function MapCanvas({
                                   icon={Navigation}
                                   onPress={() => {
                                     triggerHaptic('tap');
-                                    selectRobot(r.code);
+                                    onSelectRobot(r.code);
                                     if (rState.canFollow && active) {
                                       setFollowing(true);
                                       close();
+                                    } else {
+                                      setSheetOrigin('layers');
+                                      setSheet('robot');
                                     }
                                   }}
                                 />
@@ -1549,6 +1579,7 @@ function MapCanvas({
                                   onPress={() => {
                                     triggerHaptic('tap');
                                     setEndpointId(e.id);
+                                    setSheetOrigin('layers');
                                     setSheet('endpoint');
                                   }}
                                 >
@@ -1677,160 +1708,6 @@ function MapCanvas({
                   ) : null}
                 </View>
               </>
-            ) : sheet === 'endpoint' && endpoint ? (
-              /* Station Detail View */
-              <View style={styles.detailContainer}>
-                <View style={styles.specBox}>
-                  <View style={styles.specCell}>
-                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
-                      X
-                    </Text>
-                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
-                      {`${endpoint.x.toFixed(2)} m`}
-                    </Text>
-                  </View>
-                  <View style={styles.specDividerV} />
-                  <View style={styles.specCell}>
-                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
-                      Y
-                    </Text>
-                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
-                      {`${endpoint.y.toFixed(2)} m`}
-                    </Text>
-                  </View>
-                  <View style={styles.specDividerV} />
-                  <View style={styles.specCell}>
-                    <Text variant="caption" color="textMuted" style={styles.specCellLabel}>
-                      Yaw
-                    </Text>
-                    <Text variant="bodyMedium" color="textPrimary" style={styles.specCellValue}>
-                      {`${((endpoint.yaw * 180) / Math.PI).toFixed(1)}°`}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailActions}>
-                  <Button
-                    title="Focus On Map"
-                    variant="primary"
-                    size="md"
-                    icon={Focus}
-                    fullWidth
-                    onPress={() => {
-                      triggerHaptic('success');
-                      const p = worldToBase(endpoint, map, frame);
-                      if (p) {
-                        stopFollowing();
-                        camera.center(p);
-                      }
-                      close();
-                    }}
-                  />
-                </View>
-              </View>
-            ) : sheet === 'robot' && robot && state ? (
-              /* Robot Detail View */
-              <View style={styles.detailContainer}>
-                <View style={styles.robotStats}>
-                  <View style={styles.robotStat}>
-                    <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
-                      Battery
-                    </Text>
-                    <BatteryIndicator
-                      percent={robot.batteryPercent}
-                      charging={robot.status === 'CHARGING'}
-                      size="lg"
-                      bar
-                    />
-                  </View>
-                  <View style={styles.robotStatDivider} />
-                  <View style={styles.robotStat}>
-                    <Text variant="caption" color="textMuted" style={styles.robotStatLabel}>
-                      Status
-                    </Text>
-                    <View style={styles.robotStatValueRow}>
-                      <View
-                        style={[
-                          styles.robotStatusDot,
-                          { backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted },
-                        ]}
-                      />
-                      <Text
-                        variant="bodyMedium"
-                        fontWeight="600"
-                        numberOfLines={1}
-                        style={styles.robotStatValue}
-                      >
-                        {robotStatusLabel(robot.status)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <RobotChargingPanel
-                  key={`charge-${robot.id}`}
-                  robotId={robot.id}
-                  robotCode={robot.code}
-                  status={robot.status}
-                  batteryPercent={robot.batteryPercent}
-                  chargingSince={robot.chargingSince}
-                  chargeFullAt={robot.chargeFullAt}
-                />
-
-                {onLocalizeRobot ? (
-                  <RobotLocalizePanel
-                    key={robot.id}
-                    robotCode={robot.code}
-                    isOnline={robot.isOnline}
-                    localizationStatus={robot.localizationStatus}
-                    mapVersionId={map.id}
-                    endpoints={map.endpoints}
-                    onLocalize={epId => onLocalizeRobot(robot.id, epId)}
-                  />
-                ) : null}
-
-                <View style={styles.detailActions}>
-                  <Button
-                    title={following ? 'Currently Following' : 'Follow Live Robot'}
-                    variant="primary"
-                    size="md"
-                    icon={Navigation}
-                    fullWidth
-                    disabled={!state.canFollow || !active}
-                    onPress={() => {
-                      triggerHaptic('success');
-                      setFollowing(true);
-                      close();
-                    }}
-                  />
-                  {onManualDrive ? (
-                    <Button
-                      title="Manual Drive"
-                      variant="secondary"
-                      size="md"
-                      icon={SlidersHorizontal}
-                      fullWidth
-                      onPress={() => {
-                        triggerHaptic('tap');
-                        close();
-                        onManualDrive(robot.id);
-                      }}
-                    />
-                  ) : null}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text variant="bodyMedium" color="textMuted">
-                  The selected object is no longer available on this map.
-                </Text>
-                <Button
-                  title="Back to Layers"
-                  variant="secondary"
-                  icon={ChevronLeft}
-                  onPress={backToLayers}
-                />
-              </View>
             )}
           </ScrollView>
         </SheetContainer>
@@ -1852,47 +1729,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     smallState: { position: 'absolute', left: 24, right: 24, justifyContent: 'center' },
     station: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 20 },
-    robotStats: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: 14,
-      borderCurve: 'continuous',
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-    },
-    robotStat: {
-      flex: 1,
-      gap: 5,
-    },
-    robotStatDivider: {
-      width: StyleSheet.hairlineWidth,
-      height: 28,
-      backgroundColor: colors.border,
-      marginHorizontal: 12,
-    },
-    robotStatLabel: {
-      fontSize: 11,
-      lineHeight: 14,
-      fontWeight: '500',
-    },
-    robotStatValueRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    robotStatusDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 3.5,
-    },
-    robotStatValue: {
-      fontSize: 13,
-      lineHeight: 17,
-      flexShrink: 1,
-    },
 
     topLeftHud: {
       position: 'absolute',
@@ -2086,23 +1922,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       borderBottomColor: colors.border,
       gap: 12,
     },
-    headerIconWell: {
-      width: 34,
-      height: 34,
-      borderRadius: 10,
-      borderCurve: 'continuous',
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(18, 19, 23, 0.06)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    },
     sheetHeaderTitleGroup: {
       flex: 1,
       minWidth: 0,
       gap: 2,
-    },
-    headerSubtitleMono: {
-      fontFamily: typography.fontMono,
     },
     circleBtn: {
       width: 36,
@@ -2373,47 +2196,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       justifyContent: 'center',
     },
 
-    // Detail Views
-    detailContainer: {
-      gap: 14,
-    },
-    specBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: 14,
-      borderCurve: 'continuous',
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingVertical: 12,
-      paddingHorizontal: 6,
-    },
-    specCell: {
-      flex: 1,
-      alignItems: 'center',
-      gap: 3,
-    },
-    specCellLabel: {
-      fontSize: 11,
-      lineHeight: 14,
-      fontWeight: '500',
-    },
-    specCellValue: {
-      fontSize: 13.5,
-      lineHeight: 18,
-      fontWeight: '700',
-      fontFamily: typography.fontMono,
-      fontVariant: ['tabular-nums'],
-    },
-    specDividerV: {
-      width: StyleSheet.hairlineWidth,
-      height: 26,
-      backgroundColor: colors.border,
-    },
-    detailActions: {
-      gap: 10,
-      marginTop: 8,
-    },
     inlineSheetBackdrop: {
       ...StyleSheet.absoluteFill,
       zIndex: 40,

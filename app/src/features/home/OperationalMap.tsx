@@ -32,13 +32,16 @@ interface Props {
   jobContext?: MapJobContext;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
   onManualDrive?: (robotId: string) => void;
+  floatingSheetBottom?: number;
+  onEndpointSheetOpenChange?: (open: boolean) => void;
 }
 
 /** A read-only operational view. All business geometry and robot identity come from this map version. */
 export function OperationalMap(props: Props) {
   return interactiveMapEnabled ? <MapViewport map={props.map} robots={props.fleet} selectedRobot={props.selectedRobotId}
     onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={{top:0,bottom:props.bottomInset}} showHeader={false} fullBleed={true}
-    jobContext={props.jobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}/> : <LegacyOperationalMap {...props}/>;
+    jobContext={props.jobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}
+    floatingSheetBottom={props.floatingSheetBottom} onEndpointSheetOpenChange={props.onEndpointSheetOpenChange}/> : <LegacyOperationalMap {...props}/>;
 }
 
 function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bottomInset, updateMode = 'polling' }: Props) {
@@ -181,7 +184,7 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
 
 function LocationSheet({endpoint,onClose}:{endpoint:EndpointDto;onClose:()=>void}) {
   const styles = useThemedStyles(createStyles);
-  return <BottomSheet onClose={onClose} accessibilityLabel="location details"><View style={styles.sheetTitle}><Text variant="title" style={styles.flex}>Location Details</Text><Button title="Close" icon={X} variant="ghost" size="sm" onPress={onClose} /></View>
+  return <BottomSheet onClose={onClose} accessibilityLabel="location details" autoHeight floating><View style={styles.sheetTitle}><Text variant="title" style={styles.flex}>Location Details</Text><Button title="Close" icon={X} variant="ghost" size="sm" onPress={onClose} /></View>
     <ScrollView contentContainerStyle={styles.sheetContent}><Text variant="title">{endpoint.name}</Text><Text variant="code">{endpoint.code}</Text><Text variant="body">{endpoint.endpointType}</Text><Text variant="body">X {endpoint.x.toFixed(2)} m · Y {endpoint.y.toFixed(2)} m</Text><Text variant="caption">Configured By Admin</Text></ScrollView>
   </BottomSheet>;
 }

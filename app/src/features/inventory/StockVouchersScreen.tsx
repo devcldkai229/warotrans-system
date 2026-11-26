@@ -21,10 +21,12 @@ const STATUSES = [
 
 export function StockVouchersScreen() {
   const { styles, colors } = useThemedStyles(createVoucherStyles);
-  const { navigate, goBack } = useNavigation();
+  const { navigate, goBack, params } = useNavigation();
   const insets = useSafeAreaInsets();
   const { session, allowed, query: warehouseQuery, warehouse, selectionError } = useVoucherWarehouse();
-  const [type, setType] = useState<StockVoucherType | 'ALL'>('ALL');
+  const [type, setType] = useState<StockVoucherType | 'ALL'>(() =>
+    params?.voucherType === 'INBOUND' || params?.voucherType === 'OUTBOUND' ? params.voucherType : 'ALL',
+  );
   const [status, setStatus] = useState<StockVoucherStatus | ''>('');
   const [search, setSearch] = useState('');
   const [serverSearch, setServerSearch] = useState('');

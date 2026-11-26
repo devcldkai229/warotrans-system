@@ -49,6 +49,7 @@ export function JobLiveMapScreen() {
   const sheetBottom = SHEET_GAP;
   const dockZoneBottom = sheetBottom + (sheetHeight || SHEET_FALLBACK_HEIGHT) + DOCK_ZONE_GAP;
   const [selectedRobot, setSelectedRobot] = useState<string>(params?.robotId || '');
+  const [endpointSheetOpen, setEndpointSheetOpen] = useState(false);
   const [toastFeedback, setToastFeedback] = useState<string | null>(null);
   const jobId = params?.jobId || '';
   const job = useQuery({ queryKey: ['live-map-job', jobId], queryFn: () => getJobDetail(jobId), enabled: !!jobId, refetchInterval: 5_000 });
@@ -143,10 +144,12 @@ export function JobLiveMapScreen() {
                 robotCode: liveJob.robot,
               }
             : undefined}
-          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 0, bottom: dockZoneBottom }} />
+          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 0, bottom: dockZoneBottom }}
+          floatingSheetBottom={sheetBottom} onEndpointSheetOpenChange={setEndpointSheetOpen} />
         {mapError && <View style={styles.toast}><Text style={styles.toastText}>{mapError}</Text></View>}
 
         {/* Telemetry Bottom Sheet */}
+        {!endpointSheetOpen ? (
         <View
           style={[styles.telemetrySheet, { bottom: sheetBottom }]}
           onLayout={(event) => setSheetHeight(event.nativeEvent.layout.height)}
@@ -189,6 +192,7 @@ export function JobLiveMapScreen() {
             </Text>
           </View>
         </View>
+        ) : null}
       </View>
     </View>
   );
