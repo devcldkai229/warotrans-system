@@ -121,9 +121,13 @@ function ThemedAppShell() {
           code, pre, kbd, samp {
             font-family: 'JetBrains Mono', Menlo, 'SF Mono', Consolas, 'Roboto Mono', monospace !important;
           }
-          :focus-visible {
-            outline: auto !important;
-            outline-offset: 3px;
+          :focus-visible:not(input):not(textarea) {
+            outline: 2px solid rgba(50, 121, 249, 0.65) !important;
+            outline-offset: 2px;
+          }
+          input:focus, textarea:focus, input:focus-visible, textarea:focus-visible {
+            outline: none !important;
+            box-shadow: none !important;
           }
           button, [role="button"], a {
             cursor: pointer !important;
