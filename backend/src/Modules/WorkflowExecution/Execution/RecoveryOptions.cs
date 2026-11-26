@@ -15,4 +15,13 @@ public sealed class RecoveryOptions
     public bool AutoRequeueWithoutCargo { get; set; } = true;
 
     public bool EnableTransferButton { get; set; }
+
+    /// <summary>
+    /// Payload recovery design: a second robot is sent only after a technician assessed the failed robot and confirmed it
+    /// stands secured (SOURCE_SECURED). Off = the earlier flow (send a robot straight away), for older setups.
+    /// </summary>
+    public bool RequireSourceSecured { get; set; } = true;
+
+    /// <summary>How many times a recovery MOVE may be sent again before the case asks for a person (INTERVENTION_REQUIRED).</summary>
+    public int MaxRecoveryMoveAttempts { get; set; } = 3;
 }

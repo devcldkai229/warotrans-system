@@ -529,6 +529,12 @@ public sealed partial class JobExecutionEngine(
 
     private async Task AdvanceCoreAsync(Job job, CancellationToken cancellationToken, IDbContextTransaction? transaction = null)
     {
+        if (job.Status == JobStatus.RECOVERY_REQUIRED)
+        {
+            await SyncRecoveryAsync(job, cancellationToken, transaction);
+            return;
+        }
+
         if (job.Status != JobStatus.RUNNING)
         {
             return;
@@ -802,7 +808,7 @@ public sealed partial class JobExecutionEngine(
         job.MarkRecoveryRequired(code, message);
         var robotId = AssignedRobot(job);
         var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToList();
-        db.JobRecoveryCases.Add(new JobRecoveryCase
+        var opened = new JobRecoveryCase
         {
             Id = Guid.NewGuid(),
             JobId = job.Id,
@@ -810,8 +816,11 @@ public sealed partial class JobExecutionEngine(
             Status = JobRecoveryStatuses.Open,
             Reason = code,
             ContainerIds = onBoard,
-            CreatedAt = now
-        });
+            CreatedAt = now,
+            FaultErrorCode = code.Length <= 100 ? code : code[..100]
+        };
+        await RecordFaultSnapshotAsync(opened, robotId, cancellationToken);
+        db.JobRecoveryCases.Add(opened);
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code, job.MapVersionId));
         await SaveAndPublishAsync(cancellationToken, transaction);
         logger.LogWarning("Job {JobNo}: robot failed with {Count} container(s) on board; recovery required", job.JobNo, onBoard.Count);
@@ -820,7 +829,8 @@ public sealed partial class JobExecutionEngine(
         {
             await issueReporter.ReportAsync(
                 new SystemIssueDraft(
-                    $"payload-recovery:{job.Id}",
+                    // One issue per case: a Job that fails twice gets two.
+                    $"payload-recovery:{job.Id}:{opened.Id}",
                     job.Id,
                     job.JobNo,
                     null,
@@ -1052,6 +1062,18 @@ public sealed partial class JobExecutionEngine(
             throw new DomainValidationException("That is the robot that failed. Use resume on the same robot instead.", "recovery_same_robot");
         }
 
+        // The second robot comes only once a technician secured the failed one (cases opened before phases: as before).
+        if (RecoveryRequiresSourceSecured && recovery.Phase is not null && recovery.SourceSecuredAt is null)
+        {
+            throw new ConflictException("A technician has to assess the failed robot and confirm it is secured first.",
+                "recovery_source_not_secured");
+        }
+
+        if (endpointId == recovery.SourceEndpointId)
+        {
+            throw new DomainValidationException("The failed robot stands there: choose another place.", "recovery_point_unsuitable");
+        }
+
         var robot = await fleet.GetRobotAsync(robotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
         var busy = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
@@ -1107,6 +1129,7 @@ public sealed partial class JobExecutionEngine(
         recovery.ToRobotId = robotId;
         recovery.RecoveryEndpointId = endpointId;
         recovery.MoveStepId = step.Id;
+        if (recovery.Phase is not null) recovery.Phase = RecoveryPhases.TargetEnRoute;
         recovery.Version++;
         await SaveAndPublishAsync(cancellationToken, transaction);
 
@@ -1122,6 +1145,7 @@ public sealed partial class JobExecutionEngine(
             recovery.ToRobotId = null;
             recovery.RecoveryEndpointId = null;
             recovery.MoveStepId = null;
+            if (recovery.Phase is not null) recovery.Phase = RecoveryPhases.SourceSecured;
             recovery.Version++;
             await SaveAndPublishAsync(cancellationToken);
             throw new ConflictException($"Robot {robot.Code} could not be sent: {problem}", "recovery_move_failed");
@@ -1165,6 +1189,8 @@ public sealed partial class JobExecutionEngine(
         recovery.ToRobotId = null;
         recovery.RecoveryEndpointId = null;
         recovery.MoveStepId = null;
+        if (recovery.Phase is not null)
+            recovery.Phase = recovery.SourceSecuredAt is not null ? RecoveryPhases.SourceSecured : RecoveryPhases.Assessed;
         recovery.Version++;
         await SaveAndPublishAsync(cancellationToken, transaction);
         return recovery;
@@ -1282,6 +1308,13 @@ public sealed partial class JobExecutionEngine(
         if (recovery.Status != JobRecoveryStatuses.Open)
         {
             throw new ConflictException("Another robot is on its way; call it back first.", "recovery_target_assigned");
+        }
+
+        // The robot that failed goes on only after a technician judged it repaired (cases opened before phases: as before).
+        if (RecoveryRequiresSourceSecured && recovery.Phase is not null
+            && recovery.AssessmentResult != RecoveryAssessmentResults.SameRobotRecoverable)
+        {
+            throw new ConflictException("A technician has to judge the robot repaired before it goes on.", "recovery_assessment_required");
         }
 
         var robotId = recovery.FromRobotId
@@ -1969,7 +2002,7 @@ public sealed partial class JobExecutionEngine(
     {
         var now = DateTimeOffset.UtcNow;
         var jobIds = await db.Jobs.AsNoTracking()
-            .Where(j => j.Status == JobStatus.RUNNING
+            .Where(j => (j.Status == JobStatus.RUNNING || j.Status == JobStatus.RECOVERY_REQUIRED)
                         && j.JobTasks.Any(t => t.JobSteps.Any(s => (s.StepType == StepType.WAIT || s.StepType == StepType.CHECK || s.StepType == StepType.MOVE) && s.Status == JobStepStatus.WAITING)))
             .Select(j => j.Id)
             .ToListAsync(cancellationToken);
@@ -1978,12 +2011,15 @@ public sealed partial class JobExecutionEngine(
         foreach (var jobId in jobIds)
         {
             var job = await LoadJobAsync(jobId, cancellationToken);
-            if (job.Status != JobStatus.RUNNING)
+            if (job.Status != JobStatus.RUNNING && job.Status != JobStatus.RECOVERY_REQUIRED)
             {
                 continue;
             }
 
+            // In a recovery only its own MOVEs (executionScope RECOVERY) wait and are woken.
+            var recoveryOnly = job.Status == JobStatus.RECOVERY_REQUIRED;
             var due = OrderedSteps(job)
+                .Where(x => !recoveryOnly || IsRecoveryTask(x.Task))
                 .Where(x => x.Step.Status == JobStepStatus.WAITING
                             && (x.Step.StepType is StepType.WAIT or StepType.CHECK
                                 || (x.Step.StepType == StepType.MOVE

@@ -43,6 +43,9 @@ public static class RolePermissionMatrix
                 Permissions.RobotManualDrive, Permissions.RobotMaintenance, Permissions.RobotPower,
                 Permissions.RobotDiagnostics,
                 Permissions.TrafficRead, Permissions.TrafficManage,
+                // Payload recovery: the robot side (assess, approve its motion, locate it, secure it), not the cargo.
+                Permissions.RecoveryAssess, Permissions.RecoveryApproveMotion, Permissions.RecoveryConfirmLocation,
+                Permissions.RecoveryConfirmClearance,
                 Permissions.IssueRead, Permissions.IssueCreate, Permissions.IssueManage,
                 Permissions.AuditRead,
                 Permissions.NotificationRead,

@@ -46,6 +46,20 @@ public sealed class FreeEndpointSelector(
             return null;
         }
 
+        var (taken, others) = await TakenAsync(robot, exceptJobId, cancellationToken);
+        return Pick((robot.PoseX, robot.PoseY), candidates, policy, taken, others, idle.Value.OccupiedRadiusMeters);
+    }
+
+    /// <summary>How far a robot standing near an endpoint keeps it taken (FleetIdle:OccupiedRadiusMeters).</summary>
+    public double OccupiedRadiusMeters => idle.Value.OccupiedRadiusMeters;
+
+    /// <summary>
+    /// Endpoints already spoken for (positioning targets, robot-care Jobs, MOVEs of other live Jobs) and where the other
+    /// robots on the map stand. <paramref name="robot"/> itself is not counted.
+    /// </summary>
+    public async Task<(HashSet<Guid> Taken, List<(double X, double Y)> Others)> TakenAsync(
+        RobotSnapshot robot, Guid? exceptJobId, CancellationToken cancellationToken)
+    {
         var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))
             .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
             .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == robot.CurrentMapVersionId)
@@ -81,8 +95,7 @@ public sealed class FreeEndpointSelector(
                 select step.TargetEndpointId!.Value)
             .ToListAsync(cancellationToken);
         taken.UnionWith(moving);
-
-        return Pick((robot.PoseX, robot.PoseY), candidates, policy, taken, others, idle.Value.OccupiedRadiusMeters);
+        return (taken, others);
     }
 
     /// <summary>The choice itself, without the database: NEAREST by straight-line distance, FIRST_AVAILABLE in list order.</summary>

@@ -47,9 +47,13 @@ public sealed class JobExecutionEngineTests
     private WorkflowExecutionDbContext _db = null!;
     private Guid _mapVersionId;
 
+    /// <summary>
+    /// Without options the earlier recovery flow (a second robot may be sent before any technician step): the tests of
+    /// that flow keep testing it. The payload recovery tests pass RequireSourceSecured = true.
+    /// </summary>
     private JobExecutionEngine Engine(RecoveryOptions? configuration = null) =>
         new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance,
-            warehouse: _warehouse, recoveryOptions: configuration is null ? null : Options.Create(configuration));
+            warehouse: _warehouse, recoveryOptions: Options.Create(configuration ?? new RecoveryOptions { RequireSourceSecured = false }));
 
     private RobotCommandLifecycleJobStepHandler ResultHandler() =>
         new(_db, Engine(), _events, NullLogger<RobotCommandLifecycleJobStepHandler>.Instance);
@@ -2326,7 +2330,8 @@ public sealed class JobExecutionEngineTests
         var recovery = await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId);
         Assert.Equal(_fleet.RobotId, recovery.FromRobotId);
         Assert.Equal(2, recovery.ContainerIds.Count);
-        Assert.Equal($"payload-recovery:{jobId}", Assert.Single(reporter.SystemDrafts).SourceKey);
+        Assert.Equal($"payload-recovery:{jobId}:{recovery.Id}", Assert.Single(reporter.SystemDrafts).SourceKey);
+        Assert.Equal(RecoveryPhases.AssessmentRequired, recovery.Phase);
 
         // Still the Job's robot, and busy: nothing else may take it while it may hold cargo.
         Assert.Equal(_fleet.RobotId, (await _db.JobRobotAssignments.SingleAsync(a => a.JobId == jobId && a.EndedAt == null)).RobotId);
@@ -2396,7 +2401,7 @@ public sealed class JobExecutionEngineTests
         var second = _fleet.AddRobot(_mapVersionId);
         _fleet.Robots[second] = _fleet.Robots[second] with { MaxContainers = 1, Capabilities = [RobotRecoveryTransfer.Capability] };
         var recovery = await _db.JobRecoveryCases.SingleAsync(item => item.JobId == jobId);
-        var engine = Engine(new RecoveryOptions { EnableTransferButton = robotButton });
+        var engine = Engine(new RecoveryOptions { EnableTransferButton = robotButton, RequireSourceSecured = false });
         var claim = new RecoveryCaseAccess(recovery.Id, recovery.Version, _staff);
         await engine.SetRecoveryClaimAsync(jobId, claim, false, default);
         var access = claim with { Version = recovery.Version };
@@ -2570,6 +2575,160 @@ public sealed class JobExecutionEngineTests
         Assert.False(await _db.JobRobotAssignments.AnyAsync(a => a.JobId == jobId && a.EndedAt == null));
     }
 
+
+    // ------------------------------------------------------------------ payload recovery: technician first (2026-11-26)
+
+    private JobExecutionEngine Phased() => Engine(new RecoveryOptions { RequireSourceSecured = true });
+
+    private static readonly RecoveryChecklistItem[] AllGood =
+    [
+        new("Motor and driver stop safely", true), new("Localization trusted", true), new("Lidar and safety sensors", true),
+        new("STOP and collision monitor", true), new("Payload secure", true), new("Battery enough", true)
+    ];
+
+    /// <summary>A QUEUE (recovery point for both robots) at (1, 5) and a parking place at (3, 5).</summary>
+    private (Guid Queue, Guid Park) RecoveryPlaces()
+    {
+        var queue = Guid.NewGuid();
+        var park = Guid.NewGuid();
+        _navigation.Poses[queue] = new EndpointPoseSnapshot(queue, _mapVersionId, "EP-QUEUE", 1.0, 5.0, 0.0, true);
+        _navigation.Poses[park] = new EndpointPoseSnapshot(park, _mapVersionId, "EP-PARKING-A", 3.0, 5.0, 0.0, true);
+        _navigation.OnMap.Add(new EndpointPoseWithType(queue, "EP-QUEUE", "Queue", WaroTrans.Navigation.Enums.EndpointType.QUEUE, true, 1.0, 5.0, 0.1));
+        _navigation.OnMap.Add(new EndpointPoseWithType(park, "EP-PARKING-A", "Parking A", WaroTrans.Navigation.Enums.EndpointType.PARK, true, 3.0, 5.0, 0.1));
+        return (queue, park);
+    }
+
+    private async Task<RecoveryCaseAccess> AccessAsync(Guid jobId)
+    {
+        var open = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId && c.ResolvedAt == null);
+        return new RecoveryCaseAccess(open.Id, open.Version, _staff);
+    }
+
+    [Fact]
+    public async Task A_second_robot_comes_only_after_a_technician_assessed_evacuated_and_secured_the_failed_one()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        var first = _fleet.RobotId;
+        PlaceRobot(first, 6.0, 2.0);
+        await RobotOfflineAsync();
+        var (queue, park) = RecoveryPlaces();
+        var second = _fleet.AddRobot(_mapVersionId);
+
+        var opened = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        Assert.Equal(RecoveryPhases.AssessmentRequired, opened.Phase);
+        Assert.Equal(6.0, opened.LastPoseX);
+        Assert.NotNull(opened.LastPoseAt);
+
+        var tooEarly = await Assert.ThrowsAsync<ConflictException>(() => Phased().AssignRecoveryRobotAsync(jobId, second, park));
+        Assert.Equal("recovery_source_not_secured", tooEarly.Code);
+
+        var failing = await Assert.ThrowsAsync<DomainValidationException>(async () => await Phased().AssessRecoveryAsync(jobId,
+            await AccessAsync(jobId), RecoveryAssessmentResults.SelfEvacuationApproved,
+            [new RecoveryChecklistItem("Motor and driver stop safely", false)], null));
+        Assert.Equal("recovery_checklist_failed", failing.Code);
+
+        await Phased().AssessRecoveryAsync(jobId, await AccessAsync(jobId), RecoveryAssessmentResults.SelfEvacuationApproved, AllGood, "camera only");
+        var assessed = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        Assert.Equal(RecoveryPhases.Assessed, assessed.Phase);
+        Assert.Equal(RecoveryModes.SelfEvacuation, assessed.RecoveryMode);
+
+        // The failed robot drives itself, with its cargo, to the free recovery point (the QUEUE).
+        await Phased().EvacuateRecoverySourceAsync(jobId, await AccessAsync(jobId), null);
+        var evacuation = _fleet.Commands[^1];
+        Assert.Equal(first, evacuation.RobotId);
+        Assert.Equal((1.0, 5.0), (evacuation.X, evacuation.Y));
+        Assert.Equal(RecoveryPhases.SourceRepositioning, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
+
+        var notThere = await Assert.ThrowsAsync<ConflictException>(async () =>
+            await Phased().SecureRecoverySourceAsync(jobId, await AccessAsync(jobId), null));
+        Assert.Equal("recovery_source_not_arrived", notThere.Code);
+
+        await RobotResultAsync(evacuation.JobStepId);
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        await Phased().SecureRecoverySourceAsync(jobId, await AccessAsync(jobId), "standing at the queue");
+        Assert.Equal(RecoveryPhases.SourceSecured, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
+        Assert.Contains(_fleet.Stops, stop => stop.RobotId == first);
+
+        // Never where the failed robot stands; a free parking place is fine.
+        var onTop = await Assert.ThrowsAsync<DomainValidationException>(() => Phased().AssignRecoveryRobotAsync(jobId, second, queue));
+        Assert.Equal("recovery_point_unsuitable", onTop.Code);
+        var candidates = await Phased().ListRecoveryEndpointCandidatesAsync(jobId, forSource: false);
+        Assert.Equal("failed_robot_there", candidates.Single(c => c.EndpointId == queue).Unsuitable);
+
+        await Phased().AssignRecoveryRobotAsync(jobId, second, park);
+        Assert.Equal(RecoveryPhases.TargetEnRoute, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        Assert.Equal(RecoveryPhases.AwaitingTransfer, (await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId)).Phase);
+
+        await Phased().ConfirmRecoveryTransferAsync(jobId, [C1, C2], _staff, "moved by hand");
+        Assert.Equal(second, (await _db.JobRobotAssignments.SingleAsync(a => a.JobId == jobId && a.EndedAt == null)).RobotId);
+        Assert.Equal(JobStatus.PAUSED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+    }
+
+    [Fact]
+    public async Task An_offline_robot_never_drives_itself_and_its_place_is_confirmed_before_it_counts_as_secured()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        var first = _fleet.RobotId;
+        await RobotOfflineAsync();
+        _fleet.Robots[first] = _fleet.Robots[first] with { IsOnline = false };
+        var (queue, _) = RecoveryPlaces();
+
+        var offline = await Assert.ThrowsAsync<ConflictException>(async () => await Phased().AssessRecoveryAsync(jobId,
+            await AccessAsync(jobId), RecoveryAssessmentResults.SelfEvacuationApproved, AllGood, null));
+        Assert.Equal("recovery_robot_offline", offline.Code);
+
+        await Phased().AssessRecoveryAsync(jobId, await AccessAsync(jobId), RecoveryAssessmentResults.ManualRecoveryRequired, [], "no power");
+        var evacuate = await Assert.ThrowsAsync<ConflictException>(async () =>
+            await Phased().EvacuateRecoverySourceAsync(jobId, await AccessAsync(jobId), null));
+        Assert.Equal("recovery_motion_not_approved", evacuate.Code);
+
+        var unverified = await Assert.ThrowsAsync<ConflictException>(async () =>
+            await Phased().SecureRecoverySourceAsync(jobId, await AccessAsync(jobId), null));
+        Assert.Equal("recovery_location_unverified", unverified.Code);
+
+        await Phased().VerifyRecoveryLocationAsync(jobId, await AccessAsync(jobId), queue, null, null);
+        await Phased().SecureRecoverySourceAsync(jobId, await AccessAsync(jobId), "pushed to the queue by hand");
+        var secured = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        Assert.Equal(RecoveryPhases.SourceSecured, secured.Phase);
+        Assert.True(secured.LocationVerified);
+        Assert.Equal(1.0, secured.VerifiedX);
+        // Offline: nothing can reach it, no STOP is sent.
+        Assert.DoesNotContain(_fleet.Stops, stop => stop.RobotId == first);
+    }
+
+    [Fact]
+    public async Task Asking_for_recovery_turns_a_paused_job_with_cargo_into_one_case_however_often_it_is_asked()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await Engine().PauseAsync(jobId, "robot stuck behind a pallet", _staff);
+        Assert.Equal(JobStatus.PAUSED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        var first = await Phased().RequestRecoveryAsync(jobId, "it cannot go on");
+        var again = await Phased().RequestRecoveryAsync(jobId, "pressed twice");
+
+        Assert.Equal(first.Id, again.Id);
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Equal(RecoveryPhases.AssessmentRequired, first.Phase);
+        Assert.Single(await _db.JobRecoveryCases.Where(c => c.JobId == jobId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task The_failed_robot_goes_on_itself_only_after_a_technician_judged_it_repaired()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await RobotOfflineAsync();
+
+        var notJudged = await Assert.ThrowsAsync<ConflictException>(async () =>
+            await Phased().ResumeRecoveryOnSameRobotAsync(jobId, _staff, null));
+        Assert.Equal("recovery_assessment_required", notJudged.Code);
+
+        await Phased().AssessRecoveryAsync(jobId, await AccessAsync(jobId), RecoveryAssessmentResults.SameRobotRecoverable, AllGood, "loose cable");
+        await Phased().ResumeRecoveryOnSameRobotAsync(jobId, _staff, "fixed");
+
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Equal(JobRecoveryStatuses.ResumedSameRobot, (await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId)).Status);
+    }
 
     // ------------------------------------------------------------------ one robot per area (queue point)
 

@@ -79,6 +79,20 @@ public static class Permissions
     public const string TrafficManage = "traffic.manage";
     public const string DispatchOverride = "dispatch.override";
 
+    // Payload recovery: what a technician decides about a failed robot. Moving the cargo stays job.operate (Staff).
+
+    /// <summary>Record the technical assessment of a robot that failed with cargo (self-evacuation, manual, repaired).</summary>
+    public const string RecoveryAssess = "recovery.technical.assess";
+
+    /// <summary>Let a failed robot drive itself to a recovery point, under traffic control.</summary>
+    public const string RecoveryApproveMotion = "recovery.technical.approve_motion";
+
+    /// <summary>Confirm where a failed robot really stands (its last pose is only a hint).</summary>
+    public const string RecoveryConfirmLocation = "recovery.technical.confirm_location";
+
+    /// <summary>Confirm the failed robot stands still and safe, so a second robot may come for its cargo.</summary>
+    public const string RecoveryConfirmClearance = "recovery.technical.confirm_clearance";
+
     // Operations
     public const string NotificationRead = "notification.read";
     public const string IssueRead = "issue.read";
@@ -134,6 +148,7 @@ public static class Permissions
         WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel, HumanTaskTakeover,
         RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotLocalize, RobotStop, RobotManualDrive,
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
+        RecoveryAssess, RecoveryApproveMotion, RecoveryConfirmLocation, RecoveryConfirmClearance,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,
         StatisticsRead,
         EvidenceRead, EvidencePlayback, EvidenceAnnotate, EvidenceExport, EvidenceAdmin,
