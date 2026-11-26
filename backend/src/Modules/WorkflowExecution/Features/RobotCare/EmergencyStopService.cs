@@ -39,10 +39,9 @@ public sealed class EmergencyStopService(
         var why = string.IsNullOrWhiteSpace(reason) ? "Emergency stop from the console" : reason.Trim();
         if (why.Length > 200) why = why[..200];
 
-        // 1. Stop the wheels before anything else.
-        Guid? stop = robot.IsOnline ? await fleet.StopRobotAsync(robotId, "STOP", why, cancellationToken) : null;
-
-        // 2. Pause what it was running: the engine must not send the next MOVE.
+        // 1. Pause what it was running. The pause itself sends STOP (mode PAUSE) at once and reopens the running MOVE,
+        //    so the robot's CANCELED answer is not taken as a failure. Sending our own STOP first raced with that answer
+        //    (e2e P5, 2026-11-26: the MOVE failed under the pause and the request ended in a 500).
         var running = await db.JobRobotAssignments.AsNoTracking()
             .Where(a => a.RobotId == robotId && a.EndedAt == null && a.Job.Status == JobStatus.RUNNING)
             .Select(a => new { a.JobId, a.Job.JobNo })
@@ -61,6 +60,9 @@ public sealed class EmergencyStopService(
                 logger.LogWarning("Emergency stop of {Robot}: Job {JobNo} not paused: {Code} {Message}", robot.Code, job.JobNo, ex.Code, ex.Message);
             }
         }
+
+        // 2. Hold the robot whatever it was doing (no Job, a return to park, a Job that could not be paused).
+        Guid? stop = robot.IsOnline ? await fleet.StopRobotAsync(robotId, "STOP", why, cancellationToken) : null;
 
         // 3. Close every open command (the pause above may have sent a STOP PAUSE: keep the newest STOP open too).
         var cleared = await fleet.ClearOpenCommandsAsync(robotId, stop, why, cancellationToken);

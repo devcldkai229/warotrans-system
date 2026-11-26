@@ -112,29 +112,38 @@ public sealed partial class RobotControlService(
     /// <summary>See <see cref="WaroTrans.Fleet.Contracts.IFleetModule.ClearOpenCommandsAsync"/>.</summary>
     public async Task<int> ClearOpenCommandsAsync(Guid robotId, Guid? keep, string reason, CancellationToken cancellationToken)
     {
+        // Set-based: robot results land at the same moment (the STOP cancels the goal); tracked entities would fail
+        // their concurrency check against them.
         var now = clock.GetUtcNow();
-        var open = await db.RobotCommands
+        var open = await db.RobotCommands.AsNoTracking()
             .Where(c => c.RobotId == robotId && c.Id != keep
                 && (c.Status == RobotCommandStatus.SENT || c.Status == RobotCommandStatus.ACKED || c.Status == RobotCommandStatus.RUNNING))
+            .Select(c => new { c.Id, c.Type })
             .ToListAsync(cancellationToken);
-        foreach (var command in open)
+        var ids = open.Select(c => c.Id).ToList();
+        if (ids.Count > 0)
         {
-            command.Status = RobotCommandStatus.CANCELED;
-            command.Outcome = "CLEARED";
-            command.ErrorCode = "EMERGENCY_STOP";
-            command.CompletedAt = now;
+            await db.RobotCommands
+                .Where(c => ids.Contains(c.Id)
+                    && (c.Status == RobotCommandStatus.SENT || c.Status == RobotCommandStatus.ACKED || c.Status == RobotCommandStatus.RUNNING))
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(c => c.Status, RobotCommandStatus.CANCELED)
+                    .SetProperty(c => c.Outcome, "CLEARED")
+                    .SetProperty(c => c.ErrorCode, "EMERGENCY_STOP")
+                    .SetProperty(c => c.CompletedAt, now), cancellationToken);
         }
 
-        var robot = await db.Robots.FirstAsync(r => r.Id == robotId, cancellationToken);
-        if (robot.CurrentCommandId is { } current && current != keep)
-        {
-            robot.CurrentCommandId = null;
-            if (robot.Status == RobotStatus.EXECUTING) robot.Status = robot.IsOnline ? RobotStatus.AVAILABLE : RobotStatus.OFFLINE;
-        }
+        await db.Robots
+            .Where(r => r.Id == robotId && r.CurrentCommandId != null && r.CurrentCommandId != keep)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(r => r.CurrentCommandId, (Guid?)null)
+                .SetProperty(r => r.Status, r => r.Status == RobotStatus.EXECUTING
+                    ? (r.IsOnline ? RobotStatus.AVAILABLE : RobotStatus.OFFLINE)
+                    : r.Status)
+                .SetProperty(r => r.UpdatedAt, now), cancellationToken);
 
-        robot.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        await RobotStateJournal.WriteAsync(db, robotId, robot.Status, "emergency_stop", RobotStateEventSource.OPERATOR, cancellationToken);
+        var status = await db.Robots.AsNoTracking().Where(r => r.Id == robotId).Select(r => r.Status).FirstAsync(cancellationToken);
+        await RobotStateJournal.WriteAsync(db, robotId, status, "emergency_stop", RobotStateEventSource.OPERATOR, cancellationToken);
         await audit.RecordAsync(
             new AuditEntry("robot.commands_cleared", "ROBOT", robotId,
                 After: new Dictionary<string, object?> { ["cleared"] = open.Count, ["commands"] = open.Select(c => c.Type.ToString()).ToList() },
