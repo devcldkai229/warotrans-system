@@ -436,6 +436,34 @@ public sealed class RobotCareService(
                 continue; // busy, lost or held: not an idle robot that can simply move
             }
 
+            // Both robots idle (the waiting one only goes to park): the one in the way parks too, at a free parking place
+            // the other is not going to, instead of stepping aside to free floor. In the V024 west room every patch of
+            // free floor lay on the other robot's way home, and the two kept making way for each other (sim 2026-11-25,
+            // after D1). A parked robot is passed in the narrow band.
+            if (!await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == waiterId && a.EndedAt == null, cancellationToken)
+                && await ChooseFreeEndpointAsync(blocker, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow) is { } parkId
+                && await navigation.GetEndpointPoseAsync(parkId, cancellationToken) is { IsEnabled: true } park)
+            {
+                try
+                {
+                    await fleet.StartReturnToParkAsync(blockerId, park.Id, park.X, park.Y, park.Yaw, cancellationToken);
+                    lock (YieldLock)
+                    {
+                        LastYield[blockerId] = now;
+                    }
+
+                    sent++;
+                    logger.LogInformation("Robot {Blocker} (idle) parks at {Park}: {Waiter} is going to park too",
+                        blocker.Code, park.Code, waiter.Code);
+                }
+                catch (AppException refused)
+                {
+                    logger.LogInformation("Robot {Blocker} cannot park: {Code}", blocker.Code, refused.Code);
+                }
+
+                continue;
+            }
+
             // Where the waiting robot is going: the endpoint of its open MOVE, if any.
             var goal = await db.JobSteps.AsNoTracking()
                 .Where(s => s.StepType == StepType.MOVE && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING)
@@ -539,12 +567,25 @@ public sealed class RobotCareService(
                 return !body.Overlaps(waiterWay.Cells);
             }
 
+            // Every place a live Job still goes to, not only its current step (lab 2026-11-25 V024: the idle RBT-002 at
+            // PARKING-B made way for RBT-001 going to INBOUND by driving to EP-SHELF-A-1, the shelf RBT-001 went to next).
+            var laterTargets = (await db.JobSteps.AsNoTracking()
+                    .Where(s => s.StepType == StepType.MOVE && s.TargetEndpointId != null
+                                && s.Status != JobStepStatus.COMPLETED && s.Status != JobStepStatus.SKIPPED
+                                && s.Status != JobStepStatus.FAILED && s.Status != JobStepStatus.CANCELLED
+                                && s.JobTask.Job.Status != JobStatus.COMPLETED && s.JobTask.Job.Status != JobStatus.FAILED
+                                && s.JobTask.Job.Status != JobStatus.CANCELLED)
+                    .Select(s => s.TargetEndpointId!.Value)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet();
+            // A robot stands aside only at a parking place or wait point; free floor next; a bay or any other endpoint
+            // only as the very last resort, and never one a Job still goes to.
             var target = Pick(standAside.Where(OffItsPath))
-                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
-                                                      && !headedTo.Contains(e.Id) && OffItsPath(e)))
-                         ?? Pick(standAside)
-                         ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER
-                                                      && !headedTo.Contains(e.Id) && OffItsWay(e)));
+                         ?? Pick(standAside.Where(e => !laterTargets.Contains(e.Id) && OffItsWay(e)));
+            var lastResort = Pick(standAside.Where(e => !laterTargets.Contains(e.Id)))
+                             ?? Pick(endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER && !standAside.Contains(e)
+                                                          && !headedTo.Contains(e.Id) && !laterTargets.Contains(e.Id)
+                                                          && (OffItsPath(e) || OffItsWay(e))));
             // Any free place beats standing in the way of a robot with work (the cooldown stops ping-pong).
             if (target is null || Away(target) <= 0.30)
             {
@@ -574,6 +615,14 @@ public sealed class RobotCareService(
                     continue;
                 }
 
+                if (lastResort is not null && Away(lastResort) > 0.30)
+                {
+                    target = lastResort;
+                }
+            }
+
+            if (target is null || Away(target) <= 0.30)
+            {
                 var why = string.Join("; ", endpoints.Where(e => e.IsEnabled && e.EndpointType != EndpointType.CHARGER).Select(e =>
                     $"{e.Code}:{(RouteClear(e) ? "" : "route ")}{(OffItsPath(e) ? "" : "onpath ")}{(targets.Contains(e.Id) ? "target " : "")}"
                     + $"{(headedTo.Contains(e.Id) ? "headed " : "")}{(Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5 ? "" : "here ")}"
@@ -667,15 +716,26 @@ public sealed class RobotCareService(
 
             var holdsJob = await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == robot.Id && a.EndedAt == null, cancellationToken);
             var endpoints = await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken);
-            var alreadyParked = endpoints.Any(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= ParkedRadius(e));
+            // Parked = on a parking place that is not another robot's home (standing on RBT-002's home, RBT-001 still
+            // goes back to its own).
+            var otherHomes = (trafficOptions?.Value.RobotHomeEndpoints ?? new Dictionary<string, string>())
+                .Where(h => h.Key != robot.Code).Select(h => h.Value).ToHashSet(StringComparer.Ordinal);
+            // On another robot's home it stays while its own home is taken (lab 2026-11-25: two robots on each other's
+            // homes were sent "home" to the place they stood on, again and again).
+            var onPark = endpoints.Where(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= ParkedRadius(e)).ToList();
+            var alreadyParked = onPark.Any(e => !otherHomes.Contains(e.Code))
+                                || (onPark.Count > 0 && await FreeHomeAsync(robot, cancellationToken) is null);
             if (holdsJob || alreadyParked)
             {
                 continue;
             }
 
-            // A parking place first; when all are taken, a wait point (= queue = recovery point), unless the robot
-            // already stands on one.
-            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
+            // Its own home first (Traffic:RobotHomeEndpoints), then a parking place; when all are taken, a wait point
+            // (= queue = recovery point), unless the robot already stands on one. Lab 2026-11-25 (V024): RBT-001, idle at
+            // SHELF-A-1 after a Job, was sent to the nearest free place, EP-PARKING-B (RBT-002's home), and stood in the
+            // way of RBT-002 coming down the same corridor; the two then met head-on.
+            var target = await FreeHomeAsync(robot, cancellationToken)
+                         ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, cancellationToken, ParkWorkflow);
             if (target is null)
             {
                 var atFallback = endpoints.Any(e => IsRecoveryPoint(e) && Distance(robot, e) <= ParkedRadius(e));
