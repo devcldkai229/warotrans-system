@@ -250,7 +250,7 @@ export type RecoveryPhase =
 export type RecoveryAssessmentResult = 'SELF_EVACUATION_APPROVED' | 'MANUAL_RECOVERY_REQUIRED' | 'SAME_ROBOT_RECOVERABLE'
 
 export type RecoveryAction =
-  | 'CLAIM' | 'RELEASE' | 'ASSIGN' | 'UNASSIGN' | 'CONFIRM' | 'ARM_BUTTON' | 'RESUME_SAME_ROBOT' | 'UNLOAD'
+  | 'CLAIM' | 'RELEASE' | 'ASSIGN' | 'UNASSIGN' | 'CONFIRM' | 'ARM_BUTTON' | 'RESUME_SAME_ROBOT' | 'UNLOAD' | 'RESOLVE_MANUALLY'
   | 'ASSESS' | 'VERIFY_LOCATION' | 'SOURCE_EVACUATE' | 'SOURCE_SECURE'
 
 export interface RecoveryChecklistItem {
@@ -391,6 +391,15 @@ export function unloadRecoveryCargo(
   jobId: string, ref: CaseRef, scans: RecoveryScan[], holder: 'STAFF' | 'RECOVERY_STATION', endpointId?: string, note?: string,
 ) {
   return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/unload-confirm`, { ...ref, scans, holder, endpointId: endpointId ?? null, note: note ?? null })
+}
+
+/** Cargo taken off the failed robot by hand: back to storage or quarantined (held under a CONTAINER issue). */
+export function resolveRecoveryManually(
+  jobId: string, ref: CaseRef, disposition: 'RETURN_TO_STORAGE' | 'QUARANTINE_CARGO', scans: RecoveryScan[], problemCode?: string, note?: string,
+) {
+  return post<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/resolve-manually`, {
+    ...ref, disposition, scans, problemCode: problemCode ?? null, note: note ?? null,
+  })
 }
 
 export function confirmRecoveryTransfer(jobId: string, ref: CaseRef, robotId: string, scans: RecoveryScan[], note?: string) {

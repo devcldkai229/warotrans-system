@@ -89,4 +89,11 @@ export const vi_recovery: Record<string, string> = {
   'Cargo sits firmly': 'Hàng đặt chắc chắn',
   'STOP, collision monitor and watchdog active': 'STOP, collision monitor và watchdog hoạt động',
   'Battery enough for the way': 'Pin đủ cho quãng đường',
+  'Or take the scanned cargo off the Job by hand:': 'Hoặc xử lý thủ công hàng vừa quét (tách khỏi công việc):',
+  'Return to storage': 'Trả về kho',
+  Quarantine: 'Cách ly',
+  'Take scanned cargo off the Job': 'Tách hàng đã quét khỏi công việc',
+  'Each container is held under a container issue; resolving that issue says which shelf it goes back to.':
+    'Mỗi container được giữ lại kèm một sự cố container; khi xử lý sự cố đó sẽ chọn kệ để trả hàng về.',
+  'Taken off the Job (held)': 'Đã tách khỏi công việc (đang giữ)',
 }

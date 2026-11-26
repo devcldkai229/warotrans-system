@@ -67,6 +67,9 @@ public sealed record SecureRecoverySourceRequest(Guid CaseId, int Version, strin
 /// <param name="HolderType">Who holds it now: ROBOT (the failed one, or the second after the transfer), STAFF or RECOVERY_STATION.</param>
 public sealed record RecoveryContainerDto(Guid ContainerId, string? Barcode, string HolderType = "ROBOT", Guid? HolderId = null);
 
+public sealed record ResolveRecoveryManuallyRequest(
+    Guid CaseId, int Version, string Disposition, IReadOnlyList<HandoverStopScan> Scans, string? ProblemCode, string? Note);
+
 public sealed record UnloadRecoveryCargoRequest(
     Guid CaseId, int Version, IReadOnlyList<HandoverStopScan> Scans, string Holder, Guid? EndpointId, string? Note);
 
@@ -286,6 +289,23 @@ public static class JobRecoveryEndpoints
             .WithSummary("Staff scanned containers off the failed robot; a person (STAFF) or a recovery point (RECOVERY_STATION) holds them")
             .WithTags("Jobs");
 
+        group.MapPost("/jobs/{id:guid}/recovery/resolve-manually", async (
+                Guid id, ResolveRecoveryManuallyRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db,
+                ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IWarehouseModule warehouse, CancellationToken cancellationToken) =>
+            {
+                await warehouseScope.EnsureJobAccessAsync(id, currentUser, cancellationToken);
+                if (request.Note?.Length > 500)
+                    throw new DomainValidationException("Keep the note to 500 characters.", "recovery_note_too_long");
+                await engine.ResolveRecoveryManuallyAsync(id, new(request.CaseId, request.Version, Actor(currentUser)), request.Disposition,
+                    request.Scans ?? [], request.ProblemCode, request.Note, cancellationToken);
+                return Results.Ok(new { recovery = await ReadAsync(id, db, warehouse, engine, currentUser, cancellationToken) });
+            })
+            .RequirePermission(Permissions.JobOperate)
+            .Audited("job.recovery_resolved_manually", "JOB", "id")
+            .WithName("ResolveJobRecoveryManually")
+            .WithSummary("Cargo taken off the failed robot by hand: RETURN_TO_STORAGE or QUARANTINE_CARGO (held under a CONTAINER issue)")
+            .WithTags("Jobs");
+
         group.MapPost("/jobs/{id:guid}/recovery/assessment", async (
                 Guid id, AssessRecoveryRequest request, JobExecutionEngine engine, WorkflowExecutionDbContext db, IRobotAccessScope robotScope,
                 ICurrentUser currentUser, StaffWarehouseScope warehouseScope, IWarehouseModule warehouse, CancellationToken cancellationToken) =>
@@ -404,6 +424,7 @@ public static class JobRecoveryEndpoints
                 ActionAvailability.Of("CONFIRM", confirmDenial, canOperate),
                 ActionAvailability.Of("ARM_BUTTON", confirmDenial ?? (canArm ? null : "recovery_button_unavailable"), canOperate),
                 ActionAvailability.Of("RESUME_SAME_ROBOT", ownership ?? requestDenial ?? (target ? "recovery_target_assigned" : sameRobotDenial), canOperate),
+                ActionAvailability.Of("RESOLVE_MANUALLY", ownership ?? (target ? "recovery_target_assigned" : null), canOperate),
                 ActionAvailability.Of("UNLOAD", ownership ?? (assignDenial ?? (custody.Values.Any(c => c.Type == "ROBOT" && c.Id == recovery.FromRobotId)
                     ? null : "recovery_nothing_on_robot")), canOperate),
                 // The robot side: a technician's, no claim needed.

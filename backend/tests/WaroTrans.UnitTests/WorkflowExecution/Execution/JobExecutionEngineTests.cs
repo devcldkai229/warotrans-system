@@ -2777,6 +2777,43 @@ public sealed class JobExecutionEngineTests
         Assert.All(after.Values, held => Assert.Equal((CustodyTypes.Robot, (Guid?)second), held));
     }
 
+    [Fact]
+    public async Task Cargo_taken_off_by_hand_leaves_the_job_held_by_warehouse_and_the_case_closes_when_none_is_left()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        var first = _fleet.RobotId;
+        await RobotOfflineAsync();
+        _fleet.Robots[first] = _fleet.Robots[first] with { MotionHeld = true };
+        _warehouse.Set(C1, ContainerStatus.IN_TRANSIT);
+        _warehouse.Set(C2, ContainerStatus.IN_TRANSIT);
+        var open = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        await Engine().SetRecoveryClaimAsync(jobId, new RecoveryCaseAccess(open.Id, open.Version, _staff), false, CancellationToken.None);
+
+        var unknown = await Assert.ThrowsAsync<DomainValidationException>(async () => await Engine().ResolveRecoveryManuallyAsync(jobId,
+            await AccessAsync(jobId), "THROW_AWAY", [new HandoverStopScan(C1, _warehouse.Containers[C1].Barcode)], null, null));
+        Assert.Equal("recovery_disposition_invalid", unknown.Code);
+
+        // One back to storage: the case stays open for the other one.
+        await Engine().ResolveRecoveryManuallyAsync(jobId, await AccessAsync(jobId), RecoveryDispositions.ReturnToStorage,
+            [new HandoverStopScan(C1, _warehouse.Containers[C1].Barcode)], null, "shelf A");
+        var still = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        Assert.Null(still.ResolvedAt);
+        Assert.Equal([C2], still.ContainerIds);
+        Assert.Equal(JobContainerStatus.FAILED, (await _db.JobContainers.SingleAsync(c => c.JobId == jobId && c.ContainerId == C1)).Status);
+
+        // The last one quarantined: the case closes and the Job ends (nothing was delivered: FAILED).
+        await Engine().ResolveRecoveryManuallyAsync(jobId, await AccessAsync(jobId), RecoveryDispositions.QuarantineCargo,
+            [new HandoverStopScan(C2, _warehouse.Containers[C2].Barcode)], "CONTAINER_DAMAGED", "dented");
+        var closed = await _db.JobRecoveryCases.AsNoTracking().SingleAsync(c => c.JobId == jobId);
+        Assert.Equal(JobRecoveryStatuses.ResolvedManually, closed.Status);
+        Assert.NotNull(closed.ResolvedAt);
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.FAILED, job.Status);
+        Assert.Null(await _db.JobRobotAssignments.FirstOrDefaultAsync(a => a.JobId == jobId && a.EndedAt == null));
+        var records = await _db.CargoTransferRecords.Where(r => r.JobId == jobId).ToListAsync();
+        Assert.Equal(2, records.Count(r => r.ToCustodyType == CustodyTypes.WarehouseHold));
+    }
+
     // ------------------------------------------------------------------ one robot per area (queue point)
 
     /// <summary>An area around pickup A (1, 2) with queue point EP-Q at (1, 5).</summary>

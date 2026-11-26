@@ -32,6 +32,7 @@ export const HOLDER_LABEL: Record<string, string> = {
   ROBOT: msg('On a robot'),
   STAFF: msg('Held by a person'),
   RECOVERY_STATION: msg('At a recovery point'),
+  WAREHOUSE_HOLD: msg('Taken off the Job (held)'),
 }
 
 /** Why an action or a place cannot be used, in words; a code this list does not know is shown readable. */
