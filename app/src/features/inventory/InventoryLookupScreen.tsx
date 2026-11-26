@@ -459,7 +459,16 @@ export function InventoryLookupScreen() {
             const isStored = statusText === 'STORED';
 
             return (
-              <View key={c.id || c.barcode} style={styles.containerCard}>
+              <Pressable
+                key={c.id || c.barcode}
+                onPress={() => {
+                  triggerHaptic('tap');
+                  navigate('container_detail', { containerId: c.id, barcode: c.barcode });
+                }}
+                style={({ pressed }) => [styles.containerCard, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`Open container ${c.barcode} details`}
+              >
                 {/* Card Header Row */}
                 <View style={styles.containerCardHeader}>
                   <View style={styles.headerLeftGroup}>
@@ -488,7 +497,8 @@ export function InventoryLookupScreen() {
                   </View>
 
                   {isStored && c.currentStorageLocationId && !c.inActiveTransport ? <Pressable
-                    onPress={() => {
+                    onPress={(event) => {
+                      event.stopPropagation();
                       triggerHaptic('tap');
                       navigate('transport_create', { workflow: 'INTERNAL_RELOCATION', containers: [c.barcode] });
                     }}
@@ -525,7 +535,7 @@ export function InventoryLookupScreen() {
                     {c.productName || 'Product Unavailable'} ({c.productSku || 'SKU Unavailable'})
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
 

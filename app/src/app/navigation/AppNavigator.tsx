@@ -8,6 +8,7 @@ import { CreateContainerScreen } from '../../features/inventory/CreateContainerS
 import { StockVouchersScreen } from '../../features/inventory/StockVouchersScreen';
 import { CreateStockVoucherScreen } from '../../features/inventory/CreateStockVoucherScreen';
 import { StockVoucherDetailScreen } from '../../features/inventory/StockVoucherDetailScreen';
+import { ContainerDetailScreen } from '../../features/inventory/ContainerDetailScreen';
 import { InventoryLookupScreen } from '../../features/inventory/InventoryLookupScreen';
 import { JobDetailScreen } from '../../features/jobs/JobDetailScreen';
 import { JobsScreen } from '../../features/jobs/JobsScreen';
@@ -58,6 +59,8 @@ export function AppNavigator() {
         return <CreateStockVoucherScreen />;
       case 'stock_voucher_detail':
         return <StockVoucherDetailScreen />;
+      case 'container_detail':
+        return <ContainerDetailScreen />;
       case 'home':
         return <HomeScreen />;
       case 'jobs':

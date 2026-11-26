@@ -9,9 +9,10 @@ export interface ContainerVoucherSummary {
 export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
+  currentStorageLocationName?: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
   supplierPackageBarcode?: string | null; contentsQuantity?: number | null;
-  updatedAt?: string; inActiveTransport?: boolean; voucher?: ContainerVoucherSummary | null;
+  createdBy?: string; createdAt?: string; updatedAt?: string; inActiveTransport?: boolean; voucher?: ContainerVoucherSummary | null;
   qty?: number; category?: string; zoneLabel?: string;
 }
 export interface ListContainersResponse { items: ContainerListItem[]; total: number }
@@ -60,12 +61,12 @@ export async function listContainers(params: { warehouseId: string; status?: str
 }
 export interface ContainerDetailResponse extends Omit<ContainerListItem, 'currentEndpointId' | 'currentEndpointCode'> {
   currentStorageLocationName: string | null; createdBy: string; createdAt: string; updatedAt: string;
+  currentEndpointId?: string | null;
 }
 async function getContainerDetails(path: string): Promise<ContainerListItem> {
   const response = await apiFetch<ContainerDetailResponse>(path);
-  // The detail route does not return a Navigation endpoint. Callers may resolve it
-  // from currentStorageLocationId; never reuse an endpoint from another snapshot.
-  return { ...response, currentEndpointId: null };
+  // The detail route may omit a Navigation endpoint. Preserve it when present; never reuse an endpoint from another snapshot.
+  return { ...response, currentEndpointId: response.currentEndpointId ?? null };
 }
 /** How many goods each box holds, while it is still being received (refused with container_contents_locked after). */
 export function setContainerContents(items: { containerId: string; quantity: number }[], signal?: AbortSignal) {

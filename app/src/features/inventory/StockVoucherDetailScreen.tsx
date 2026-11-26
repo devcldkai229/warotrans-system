@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, CheckCircle2, FileText, MapPin, Printer, QrCode, ScanLine, Truck } from 'lucide-react-native';
@@ -16,6 +16,7 @@ import { addStockVoucherLines, cancelStockVoucher, closeStockVoucherShort, confi
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text, TextField } from '../../shared/ui';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import {
   clearPendingBatch,
   inboundBatchProblem,
@@ -334,10 +335,24 @@ export function StockVoucherDetailScreen() {
 
             {(data.status !== 'DRAFT' || hasServerBatchLines || !inbound) && !!data.lines.length && <Card gap={8} style={styles.reviewCard}>
               <Text variant="headline">Containers</Text>
-              {data.lines.map((line, index) => <View key={line.id} style={[styles.summaryRow, index === 0 && { paddingTop: 4 }, index === data.lines.length - 1 && { borderBottomWidth: 0, paddingBottom: 2 }]}>
+              {data.lines.map((line, index) => <Pressable
+                key={line.id}
+                onPress={() => {
+                  triggerHaptic('tap');
+                  navigate('container_detail', { containerId: line.containerId, barcode: line.containerBarcode });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Open container ${line.containerBarcode} details`}
+                style={({ pressed }) => [
+                  styles.summaryRow,
+                  index === 0 && { paddingTop: 4 },
+                  index === data.lines.length - 1 && { borderBottomWidth: 0, paddingBottom: 2 },
+                  pressed && styles.pressed,
+                ]}
+              >
                 <View style={styles.summaryIcon}><Box size={18} strokeWidth={1.8} color={colors.primaryText} /></View>
                 <View style={styles.summaryInfo}>
-                  <View style={styles.between}>{checked.includes(line.containerBarcode) ? <CheckCircle2 size={16} color={colors.success} /> : null}<Text variant="code" selectable style={{ flex: 1 }}>{line.containerBarcode}</Text><StatusPill status={line.containerStatus} /></View>
+                  <View style={styles.between}>{checked.includes(line.containerBarcode) ? <CheckCircle2 size={16} color={colors.success} /> : null}<Text variant="code" style={{ flex: 1 }}>{line.containerBarcode}</Text><StatusPill status={line.containerStatus} /></View>
                   <Text variant="bodyMedium" numberOfLines={1}>{line.productName}</Text>
                   {line.closedShort ? <Text variant="caption" color="warningText">Closed Short</Text> : null}
                   <Text variant="caption" color="textSecondary" numberOfLines={1}>
@@ -350,7 +365,7 @@ export function StockVoucherDetailScreen() {
                     {line.currentLevelNo != null ? ` ${t('· Level {level}', { level: line.currentLevelNo })}` : ''}
                   </Text>
                 </View>
-              </View>)}
+              </Pressable>)}
             </Card>}
           </ScrollView>
           <Scanner visible={scanning} continuous expect={['CONTAINER']} title="Check containers of this voucher" manualLabel="Container code"

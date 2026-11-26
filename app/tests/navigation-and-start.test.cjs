@@ -21,6 +21,8 @@ test('workflow aliases preserve the intended workflow instead of substituting In
 test('voucher links preserve document/warehouse identity and remain separate from transport creation', () => {
   assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=stock-vouchers&warehouseId=wh')), { screen: 'stock_vouchers', params: { warehouseId: 'wh' } });
   assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=stock-voucher&voucherId=pn-1&warehouseId=wh')), { screen: 'stock_voucher_detail', params: { warehouseId: 'wh', voucherId: 'pn-1' } });
+  assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=container-detail&barcode=C181126001')), { screen: 'container_detail', params: { barcode: 'C181126001' } });
+  assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=container_detail&containerId=c-1')), { screen: 'container_detail', params: { containerId: 'c-1' } });
   assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=stock-voucher-new&warehouseId=wh&voucherType=OUTBOUND')), { screen: 'stock_voucher_create', params: { warehouseId: 'wh', voucherType: 'OUTBOUND' } });
   assert.equal(parseNavigationUrl('https://app.test/?screen=create-container').screen, 'create_container');
 });
