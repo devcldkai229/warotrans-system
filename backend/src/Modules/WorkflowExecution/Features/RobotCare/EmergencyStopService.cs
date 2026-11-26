@@ -53,7 +53,7 @@ public sealed class EmergencyStopService(
         {
             try
             {
-                await engine.PauseAsync(job.JobId, $"Emergency stop: {why}", actor, cancellationToken);
+                await engine.PauseAsync(job.JobId, $"{JobExecutionEngine.EmergencyStopReasonPrefix} {why}", actor, cancellationToken);
                 paused.Add(job.JobNo);
             }
             catch (AppException ex)

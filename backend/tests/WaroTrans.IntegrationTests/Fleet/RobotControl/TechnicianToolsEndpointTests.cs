@@ -207,4 +207,38 @@ public sealed class TechnicianToolsEndpointTests(WaroTransWebApplicationFactory 
         var camera = await Client.PostAsJsonAsync($"/api/fleet/robots/{robotId}/system-actions", new { action = "RESTART_CAMERA" });
         Assert.Equal("robot_capability_unsupported", await camera.ReadErrorCodeAsync());
     }
+
+    [Theory]
+    [InlineData("person in the aisle", true)]
+    [InlineData("Emergency stop: box about to fall", false)]
+    public async Task Cancelling_a_paused_job_releases_its_robot_unless_an_emergency_stop_holds_it(string pauseReason, bool released)
+    {
+        var robotId = await SeedRobotAsync(r => r.MotionHeld = true);
+        var now = DateTimeOffset.UtcNow;
+        var jobId = Guid.NewGuid();
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+            execution.Jobs.Add(new Job
+            {
+                Id = jobId, JobNo = "JOB-PC-" + Guid.NewGuid().ToString("N")[..4], ProvisioningKey = Guid.NewGuid().ToString("N"),
+                WorkflowId = Guid.NewGuid(), MapVersionId = Guid.NewGuid(), Status = JobStatus.PAUSED, CreatedAt = now,
+                OperatorPausedAt = now, FailureCode = WaroTrans.WorkflowExecution.Execution.JobExecutionEngine.OperatorPausedCode,
+                FailureMessage = pauseReason,
+                ContextValues = new Dictionary<string, JsonElement>
+                {
+                    [WaroTrans.WorkflowExecution.Execution.JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(robotId)
+                }
+            });
+            execution.JobRobotAssignments.Add(new JobRobotAssignment { Id = Guid.NewGuid(), JobId = jobId, RobotId = robotId, StartedAt = now });
+            await execution.SaveChangesAsync();
+        }
+
+        var before = Mqtt.Published.Count(m => m.Type == "RESUME");
+        var cancel = await Client.PostAsJsonAsync($"/api/workflow-execution/jobs/{jobId}/cancel", new { reason = "not needed" });
+        Assert.True(cancel.IsSuccessStatusCode, await cancel.Content.ReadAsStringAsync());
+        Assert.Equal(released, Mqtt.Published.Count(m => m.Type == "RESUME") > before);
+        var robot = await Client.GetFromJsonAsync<JsonElement>($"/api/fleet/robots/{robotId}");
+        Assert.Equal(!released, robot.GetProperty("motionHeld").GetBoolean());
+    }
 }
