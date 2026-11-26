@@ -26,6 +26,7 @@ import { FleetPage } from '@/features/robots/FleetPage'
 import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { RobotTechnicalPage } from '@/features/robots/technical/RobotTechnicalPage'
 import { TicketsPage } from '@/features/tickets/TicketsPage'
+import { RecoveryInboxPage } from '@/features/jobs/RecoveryInboxPage'
 import { JournalListPage } from '@/features/journals/JournalListPage'
 import { IncidentCasePage } from '@/features/ai-investigation/pages/IncidentCasePage'
 import { IncidentInboxPage } from '@/features/ai-investigation/pages/IncidentInboxPage'
@@ -63,6 +64,7 @@ function App() {
                 <Route path="fleet/:robotCode" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
                 <Route path="fleet/:robotCode/technical" element={<Guard permission={PERMISSIONS.robotRead}><RobotTechnicalPage /></Guard>} />
                 <Route path="jobs/:jobId" element={<Guard permission={PERMISSIONS.jobRead}><JobDetailPage /></Guard>} />
+                <Route path="recovery" element={<Guard permission={PERMISSIONS.jobRead}><RecoveryInboxPage /></Guard>} />
                 <Route path="tickets" element={<Guard permission={PERMISSIONS.robotRead}><TicketsPage /></Guard>} />
                 <Route path="tickets/:ticketId" element={<Guard permission={PERMISSIONS.robotRead}><TicketsPage /></Guard>} />
                 <Route path="issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
@@ -105,6 +107,7 @@ function App() {
               <Route path="/management" element={<Guard permission={[PERMISSIONS.userManage, PERMISSIONS.warehouseRead]}><ManagementPage /></Guard>} />
               <Route path="/operations/issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
               <Route path="/operations/tickets" element={<Guard permission={PERMISSIONS.robotRead}><TicketsPage /></Guard>} />
+              <Route path="/operations/recovery" element={<Guard permission={PERMISSIONS.jobRead}><RecoveryInboxPage /></Guard>} />
               <Route path="/operations/tickets/:ticketId" element={<Guard permission={PERMISSIONS.robotRead}><TicketsPage /></Guard>} />
               <Route path="/operations/issues/:issueId" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
               <Route path="/operations/robot-history" element={<Guard permission={PERMISSIONS.robotRead}><RobotHistoryPage /></Guard>} />
