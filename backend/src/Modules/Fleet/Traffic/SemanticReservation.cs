@@ -458,10 +458,60 @@ public static class SemanticReservation
     }
 
     /// <summary>
+    /// Like <see cref="WholePathResources"/>, with the directions the path drives through each resource (unit vectors
+    /// between consecutive samples). Used to tell a robot that follows another one on a lane from one that meets it.
+    /// </summary>
+    public static Dictionary<string, List<(double Ux, double Uy)>> WholePathHeadings(
+        SemanticTrafficPolicy policy, ImmutableArray<SemanticPlanPose> poses)
+    {
+        var headings = new Dictionary<string, List<(double Ux, double Uy)>>(StringComparer.Ordinal);
+        if (poses.IsDefaultOrEmpty)
+        {
+            return headings;
+        }
+
+        var samples = SweptSamples(policy, poses, double.PositiveInfinity);
+        for (var i = 0; i < samples.Count; i++)
+        {
+            var dir = SampleDirection(samples, i);
+            foreach (var rid in samples[i].Resources)
+            {
+                if (!headings.TryGetValue(rid, out var list))
+                {
+                    headings[rid] = list = [];
+                }
+
+                if (dir is { } d)
+                {
+                    list.Add(d);
+                }
+            }
+        }
+
+        return headings;
+    }
+
+    /// <summary>Unit direction of travel at sample <paramref name="i"/>, or null where the path does not move.</summary>
+    public static (double Ux, double Uy)? SampleDirection(List<(double X, double Y, HashSet<string> Resources)> samples, int i)
+    {
+        var (a, b) = i + 1 < samples.Count ? (i, i + 1) : (i - 1, i);
+        if (a < 0)
+        {
+            return null;
+        }
+
+        var dx = samples[b].X - samples[a].X;
+        var dy = samples[b].Y - samples[a].Y;
+        var len = Math.Sqrt(dx * dx + dy * dy);
+        return len < 1e-6 ? null : (dx / len, dy / len);
+    }
+
+    /// <summary>
     /// A robot held at this sample may stop here: it ends up within the reserve radius of it, which must touch no
     /// NO_STOP zone and no single-occupancy zone it was not already in (waiting inside one would block it for nothing).
     /// </summary>
-    public static bool MayWaitAt(SemanticTrafficPolicy policy, double x, double y, IReadOnlySet<string> zonesAtStart)
+    public static bool MayWaitAt(
+        SemanticTrafficPolicy policy, double x, double y, IReadOnlySet<string> zonesAtStart, double mouthClearance = 0)
     {
         var radius = policy.ReserveRadiusMeters;
         if (!policy.NoStopZones.IsDefaultOrEmpty && policy.NoStopZones.Any(z => DiscHitsZone(x, y, radius, z.Ring)))
@@ -469,7 +519,9 @@ public static class SemanticReservation
             return false;
         }
 
-        var zoneRadius = policy.ZoneReserveRadiusMeters;
+        // A zone it does not hold is kept this much further away: a robot that waits right at the mouth of a locked zone
+        // stands in the way out of the robot inside it, which it waits for (sim V024: both waited for each other).
+        var zoneRadius = policy.ZoneReserveRadiusMeters + Math.Max(0, mouthClearance);
         return policy.SingleOccupancyZones.IsDefaultOrEmpty
                || policy.SingleOccupancyZones.All(z =>
                    zonesAtStart.Contains($"zone:{z.Code}") || !DiscHitsZone(x, y, zoneRadius, z.Ring));

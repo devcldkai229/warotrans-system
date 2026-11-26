@@ -110,3 +110,22 @@ chờ, không tính lại liên tục (tránh lỗi A5 đổi qua đổi lại).
    driver dừng khẩn dưới 6 cm.
 2. Thêm 2 zone khoá trên V024 (hành lang trái, cửa QUEUE): bạn vẽ trên web, hay tôi thêm qua DB?
 3. Ngưỡng lùi tối đa khi nhường: 0.4 m có ổn không?
+
+## Trạng thái triển khai (2026-11-25, tối)
+
+Quyết định của bạn: giữ robot kia trong costmap toàn cục nhưng thu nhỏ; NO_STOP vẽ thẳng vào V024, trừ khu SHELF-B.
+
+| Phần | Nhánh | Trạng thái |
+|---|---|---|
+| 1.1 Costmap toàn cục: robot kia = INSCRIBED (253, không phình) + 0.20 m | warotrans `feature/fleet-less-sensitive` | Xong, có test; **chưa build / deploy lên Pi** (robot đang tắt) |
+| 1.2 Margin thân xe 5 → 2 cm | như trên | Xong |
+| 1.3 `[HeldByRobot]`: có robot trong 0.8 m, ±70° phía trước thì cửa sổ 60 s không chạy (tối đa 180 s) | như trên | Xong, pytest 463 pass |
+| rbt2 đồng bộ | warotrans-rbt2 `feature/fleet-less-sensitive` | Đã sync, pytest pass |
+| 2.1 `SemanticPrefixGrant=true` (profile RealRobot) | system `feature/prefix-grant-safe-stops` | Xong |
+| 2.2 Đoạn cấp tính đường robot kia **từ vị trí hiện tại** (trước đây tính cả phần nó đã đi qua) + cho nối đuôi cùng chiều | như trên | Xong. Test mới chứng minh lỗi: trước khi sửa robot sau chỉ được tới y = 0.1, sau khi sửa > 2 m |
+| 2.3 NO_STOP trên V024 (DB, đã backup `warotrans_postgres_before_v024_nostop_*`) | DB + bundle `map_one_v024` | `ZONE-NO-STOP-YARD` (x 0.45–1.80, y −3.95 → −3.25) và `ZONE-NO-STOP-LANE-A2-EXIT` (x 0.65–1.05, y −0.30 → 0.05). Không chạm endpoint / pre-goal nào. Bundle mới **fingerprint `42645d72`** |
+| 4 (phần đơn giản) Robot đang làm Job đi trước robot rảnh / đang về đỗ | system, như trên | Xong (ưu tiên 1 so với 0; aging 0.1/s nên robot rảnh không bị bỏ đói) |
+| 3 Lùi ngắn trên lane, 4 "đang chở hàng" | — | Chờ số đo lab |
+
+**Trước khi chạy lab:** deploy bundle `42645d72` + code lên **cả hai** Pi (colcon build `warotrans_fleet_layer`, `warotrans_fleet`), khởi
+động lại Host. Host và robot phải cùng fingerprint, nếu không traffic từ chối plan.

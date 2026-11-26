@@ -347,6 +347,16 @@ public sealed class TrafficState
             request.JobStepId,
             request.JobId);
 
+        if (WouldCreateWaitForCycle(robot.RobotId, resources)
+            && NarrowPastStillRobots(robot, request, resources) is { } passBy)
+        {
+            // The cycle only closes through robots that cannot move (no grant): pass them in the narrow band instead of
+            // waiting for each other (sim V024 S3: one robot stood at EP-SHELF-C waiting for ZONE-CENTER, the other held
+            // ZONE-CENTER and could not turn into lane BOUND-1 past the first one's turning circle; 3 minutes).
+            Log($"grant-narrow-past-still:{robot.RobotId}");
+            resources = passBy;
+        }
+
         if (WouldCreateWaitForCycle(robot.RobotId, resources))
         {
             robot.WaitingReason = TrafficWaitingReason.DeadlockRisk;
@@ -469,17 +479,44 @@ public sealed class TrafficState
             return [];
         }
 
-        var needed = new HashSet<string>(StringComparer.Ordinal);
+        // What the other moving robots still need: their plans from where they are now (the part they drove is not
+        // needed any more; lab 2026-11-25: a robot waited for cells the other had long left), with the directions they
+        // drive through each resource.
+        var needed = new Dictionary<string, List<(double Ux, double Uy)>>(StringComparer.Ordinal);
         foreach (var other in _robots.Values)
         {
-            if (other.RobotId != robot.RobotId && other.ActiveCommandId is not null)
+            if (other.RobotId == robot.RobotId || other.ActiveCommandId is null || other.ProposedPath.IsDefaultOrEmpty)
             {
-                needed.UnionWith(SemanticReservation.WholePathResources(policy, other.ProposedPath));
+                continue;
+            }
+
+            var ahead = other.X is double ox && other.Y is double oy
+                ? TrimProposedPathFromPose(other.ProposedPath, ox, oy).Path
+                : other.ProposedPath;
+            foreach (var (rid, dirs) in SemanticReservation.WholePathHeadings(policy, ahead))
+            {
+                if (!needed.TryGetValue(rid, out var list))
+                {
+                    needed[rid] = list = [];
+                }
+
+                list.AddRange(dirs);
             }
         }
 
-        var zonesAtStart = samples[0].Resources
-            .Where(rid => rid.StartsWith("zone:", StringComparison.Ordinal))
+        // Where the other robots stand now: the grant must not end with this robot's body right against one of them
+        // (sim V024 S5: a follower stopped 0.15 m behind a robot parked on its way; the cells did not overlap).
+        var others = _robots.Values
+            .Where(o => o.RobotId != robot.RobotId && o.X is not null && o.Y is not null)
+            .Select(o => (X: o.X!.Value, Y: o.Y!.Value))
+            .ToList();
+
+        // A locked zone the robot may wait in: only one its centre already stands in. A body that merely touched the
+        // edge of one at the start (lab 2026-11-25 U2: RBT-002 at EP-SHELF-C, beside ZONE-CENTER) drove deep into it
+        // and held it while it waited, and the robot it waited for needed that zone: DEADLOCK_RISK for 2.5 minutes.
+        var zonesAtStart = policy.SingleOccupancyZones
+            .Where(z => SemanticReservation.PointInRing(samples[0].X, samples[0].Y, z.Ring))
+            .Select(z => $"zone:{z.Code}")
             .ToHashSet(StringComparer.Ordinal);
         var held = new HashSet<string>(StringComparer.Ordinal);
         ImmutableArray<string> best = [];
@@ -488,7 +525,7 @@ public sealed class TrafficState
         {
             var here = samples[i].Resources;
             var ids = here.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
-            if (here.Overlaps(needed)
+            if (MeetsAnotherRobot(here, SemanticReservation.SampleDirection(samples, i), needed)
                 || FindPriorWaiter(robot.RobotId, ids, request.Priority) is not null
                 || !CanAcquire(ids, robot.RobotId, out _, out _))
             {
@@ -496,7 +533,8 @@ public sealed class TrafficState
             }
 
             held.UnionWith(here);
-            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart))
+            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart, ZoneMouthClearanceMeters)
+                && others.All(o => Math.Sqrt(Math.Pow(samples[i].X - o.X, 2) + Math.Pow(samples[i].Y - o.Y, 2)) >= WaitClearanceMeters))
             {
                 best = held.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
             }
@@ -504,6 +542,39 @@ public sealed class TrafficState
 
         return best;
     }
+
+    /// <summary>
+    /// Following another robot (both drive the same way through every shared cell: cos &gt; <see
+    /// cref="FollowMinCos"/>) is fine: the follower ends up behind it, and the cells the leader holds stay out of the
+    /// grant anyway (CanAcquire). Head-on, crossing, a zone, or a cell where the direction is unknown is a meeting.
+    /// </summary>
+    private static bool MeetsAnotherRobot(
+        HashSet<string> here, (double Ux, double Uy)? mine, Dictionary<string, List<(double Ux, double Uy)>> needed)
+    {
+        foreach (var rid in here)
+        {
+            if (!needed.TryGetValue(rid, out var theirs))
+            {
+                continue;
+            }
+
+            if (mine is not { } m || theirs.Count == 0 || !rid.StartsWith("cell:", StringComparison.Ordinal)
+                || theirs.Any(t => t.Ux * m.Ux + t.Uy * m.Uy <= FollowMinCos))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private const double FollowMinCos = 0.7;
+
+    /// <summary>Extra room a step-by-step grant leaves before a locked zone it does not hold (the way out of it).</summary>
+    private const double ZoneMouthClearanceMeters = 0.30;
+
+    /// <summary>Centre to centre: a step-by-step grant never ends closer to another robot (about 0.25 m body to body).</summary>
+    private const double WaitClearanceMeters = 0.60;
 
     /// <summary>
     /// A robot holding part of its plan, re-evaluated (something was freed, or it asked again). The rest of the plan or
@@ -857,6 +928,42 @@ public sealed class TrafficState
     }
 
     /// <summary>A robot that stands still: no grant, no command (idle, parked, or held at a service stop).</summary>
+    /// <summary>
+    /// The plan in the narrow band (no drift room: the robot gate stops a robot that drifts out of it), when that band is
+    /// free now, closes no wait-for cycle, jumps no prior waiter, and every robot holding something of the full band
+    /// cannot move: it has no grant (it stands, or waits for one). Null otherwise.
+    /// </summary>
+    private ImmutableArray<string>? NarrowPastStillRobots(
+        RobotRuntime robot, SemanticPlanProposeRequest request, ImmutableArray<string> full)
+    {
+        if (_semantic is null || _semantic.UsesZoneChain)
+        {
+            return null;
+        }
+
+        var holders = full
+            .SelectMany(rid => _holders.TryGetValue(rid, out var h) ? h : [])
+            .Where(h => h != robot.RobotId)
+            .Distinct()
+            .ToList();
+        if (holders.Count == 0 || !holders.All(CannotMove))
+        {
+            return null;
+        }
+
+        var narrow = SemanticReservation.CollectResources(_semantic, request.Poses, narrow: true);
+        return CanAcquire(narrow, robot.RobotId, out _, out _)
+               && FindPriorWaiter(robot.RobotId, narrow, request.Priority) is null
+               && !WouldCreateWaitForCycle(robot.RobotId, narrow)
+            ? narrow
+            : null;
+    }
+
+    /// <summary>No grant: its gate is shut, it stands (parked, at a stop, or waiting for traffic).</summary>
+    private bool CannotMove(Guid robotId) =>
+        _robots.TryGetValue(robotId, out var r) && r.Authority is null
+        && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService or TrafficRobotPhase.Waiting;
+
     private bool StandsStill(Guid robotId) =>
         _robots.TryGetValue(robotId, out var r) && r.Authority is null && r.ActiveCommandId is null
         && r.Phase is TrafficRobotPhase.Idle or TrafficRobotPhase.HoldingService;
