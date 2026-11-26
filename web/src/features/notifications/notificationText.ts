@@ -56,6 +56,38 @@ const TEMPLATES: string[] = [
   msg('Reason: {reason}'),
   msg('Cancelled request {request} still has cargo on a robot'),
   msg('{count} container(s) are on a robot. Unload them and cancel the Job, or resume it to deliver them.'),
+  msg('The robot needs help transferring its cargo.'),
+  msg('The robot needs help transferring its cargo. Reason: {reason}.'),
+  // Context lines a robot / Job notification carries (one sentence per line, see backend NotificationContext)
+  msg('Last position: at {place}.'),
+  msg('Last position: {distance} m from {place}.'),
+  msg('Last position: x {x}, y {y}.'),
+  msg('Battery {percent}%.'),
+  msg('It holds Job {job} ({status}).'),
+  msg('Job {job}, step "{step}".'),
+  msg('Target: {place}.'),
+  msg('Robot {robot}.'),
+  msg('The robot is offline.'),
+  msg('The robot holds motion (stopped).'),
+  msg('Check its power and Wi-Fi.'),
+  msg('Check its power and Wi-Fi. If it does not come back, its Job needs recovery.'),
+  msg('The robot may be overloaded or its Wi-Fi weak: check its connection and health.'),
+  msg('Send it to the charger when it is free.'),
+  msg('Open its Technical page for the health of its sensors and Nav2.'),
+  // What a robot's refusal code means (NotificationContext.RejectMeaning)
+  msg('The robot is busy with another command or a restart.'),
+  msg('The robot had no such command running, so there was nothing to cancel.'),
+  msg('The robot does not know where it is: localize it.'),
+  msg("The robot's stop state did not allow it: stop or resume the robot first."),
+  msg('The robot runs another map than the command: change its map.'),
+  msg("The command arrived too late: check the robot's clock and Wi-Fi."),
+  msg('Navigation (Nav2) is not running on the robot: restart Nav2 or the stack.'),
+  msg('The robot is not set up for this action (run the install script on the robot).'),
+  msg("The robot's software does not support this command: update the robot."),
+  msg('The command was meant for another robot.'),
+  msg('The command belongs to another Job than the robot is running.'),
+  msg('Traffic control did not allow the move: the robot waits for its path to clear.'),
+  msg('The command was malformed: report this to the developers.'),
   // Issue (the content of these is what the person wrote, so it is left alone)
   msg('Issue {issue} reported ({severity})'),
   msg('Issue {issue} was assigned to you'),
@@ -91,12 +123,18 @@ function recognise(text: string, compiled: ReturnType<typeof compile>[]) {
   return null
 }
 
+/** A notification is one sentence per line (robot and Job context lines); each line is translated on its own. */
 function localize(text: string): string {
+  return text.includes('\n') ? text.split('\n').map(localizeLine).join('\n') : localizeLine(text)
+}
+
+function localizeLine(text: string): string {
   const found = recognise(text, COMPILED)
   if (!found) return text
   const { template, values } = found
   if (typeof values.waited === 'string') values.waited = localizeDuration(values.waited)
   if (typeof values.severity === 'string') values.severity = humanize(values.severity)
+  if (template === 'It holds Job {job} ({status}).' && typeof values.status === 'string') values.status = humanize(values.status)
   // A Job's failure reason is a machine code; say what it means (an operator's typed reason is left alone).
   if (template.endsWith(' Reason: {reason}.') && typeof values.reason === 'string') values.reason = failureTitle(values.reason)
   return t(template, values)

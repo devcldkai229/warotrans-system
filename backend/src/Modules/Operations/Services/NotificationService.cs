@@ -56,6 +56,7 @@ public sealed class NotificationService(
                 : new RelatedEntityRef { Type = draft.EntityType, Id = draft.EntityId.Value },
             Route = NotificationRoutes.For(draft.EntityType, draft.EntityId),
             DedupeKey = draft.DedupeKey,
+            Links = draft.Links?.Where(l => !string.IsNullOrWhiteSpace(l.Route)).Take(8).ToList() ?? [],
             CreatedAt = now
         };
 
@@ -74,7 +75,8 @@ public sealed class NotificationService(
                 notification.RecipientRoles,
                 notification.RobotId,
                 notification.Route,
-                notification.WarehouseId),
+                notification.WarehouseId,
+                notification.Links),
             cancellationToken);
 
         return notification.Id;

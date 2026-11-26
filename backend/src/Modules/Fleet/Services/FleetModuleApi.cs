@@ -284,6 +284,9 @@ public sealed class FleetModuleApi(
         }
     }
 
+    public Task<int> ClearOpenCommandsAsync(Guid robotId, Guid? keep, string reason, CancellationToken cancellationToken = default) =>
+        robotControl.ClearOpenCommandsAsync(robotId, keep, reason, cancellationToken);
+
     public async Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
     {
         try

@@ -21,4 +21,12 @@ public sealed class RobotWorkQuery(WorkflowExecutionDbContext db) : IRobotWorkQu
             a => a.RobotId == robotId && a.EndedAt == null
                 && a.Job.Status == Enums.JobStatus.PAUSED && a.Job.FailureCode == JobExecutionEngine.OperatorPausedCode,
             cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, string>> GetJobNumbersAsync(
+        IReadOnlyCollection<Guid> jobIds, CancellationToken cancellationToken = default)
+    {
+        if (jobIds.Count == 0) return new Dictionary<Guid, string>();
+        var ids = jobIds.Distinct().ToList();
+        return await db.Jobs.AsNoTracking().Where(j => ids.Contains(j.Id)).ToDictionaryAsync(j => j.Id, j => j.JobNo, cancellationToken);
+    }
 }

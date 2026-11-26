@@ -100,6 +100,14 @@ public interface IFleetModule
     Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Emergency stop: every command of the robot still open (sent, acknowledged, running) except <paramref name="keep"/>
+    /// is closed as CANCELED, so nothing the robot answers later restarts work; the robot has no current command after.
+    /// Returns how many were closed.
+    /// </summary>
+    Task<int> ClearOpenCommandsAsync(Guid robotId, Guid? keep, string reason, CancellationToken cancellationToken = default) =>
+        Task.FromResult(0);
+
+    /// <summary>
     /// Arms the physical HUMAN_INTERACTION confirm button on the robot (MQTT interaction_request).
     /// Not a RobotCommand.
     /// </summary>
@@ -186,6 +194,10 @@ public interface IRobotWorkQuery
 
     Task<bool> HasOperatorPausedJobAsync(Guid robotId, CancellationToken cancellationToken = default) =>
         Task.FromResult(false);
+
+    /// <summary>Job numbers (J…) of these Jobs, for the robot history; unknown ids are left out.</summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetJobNumbersAsync(IReadOnlyCollection<Guid> jobIds, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
 }
 
 public sealed record IdleRobot(RobotSnapshot Robot, DateTimeOffset? LastCommandAt);

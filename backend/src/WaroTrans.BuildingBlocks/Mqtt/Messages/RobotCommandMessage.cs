@@ -57,10 +57,20 @@ public sealed class StopCommandPayload
 /// <summary>SYSTEM_ACTION payload (RB-09).</summary>
 public sealed class SystemActionPayload
 {
+    /// <summary>Nav2 lifecycle RESET + STARTUP (planner, controller, costmaps).</summary>
+    public const string RestartNav = "RESTART_NAV";
+    /// <summary>map_server + AMCL lifecycle RESET + STARTUP; the robot puts its last pose back.</summary>
+    public const string RestartLocalization = "RESTART_LOCALIZATION";
+    /// <summary>Camera stream and evidence agent.</summary>
+    public const string RestartCamera = "RESTART_CAMERA";
+    /// <summary>Every process of the robot stack (the robot drops off line for ~1 min).</summary>
     public const string RestartStack = "RESTART_STACK";
     public const string Reboot = "REBOOT";
     public const string Shutdown = "SHUTDOWN";
-    public static readonly string[] All = [RestartStack, Reboot, Shutdown];
+    public static readonly string[] All = [RestartNav, RestartLocalization, RestartCamera, RestartStack, Reboot, Shutdown];
+
+    /// <summary>These take the robot off line: the caller has to type the robot code back.</summary>
+    public static readonly string[] Disruptive = [RestartStack, Reboot, Shutdown];
 
     public string Action { get; set; } = string.Empty;
 }

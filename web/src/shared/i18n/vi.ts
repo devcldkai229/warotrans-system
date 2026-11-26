@@ -7,6 +7,7 @@ import { vi_journals } from './vi/journals'
 import { vi_management } from './vi/management'
 import { vi_maps } from './vi/maps'
 import { vi_notifications } from './vi/notifications'
+import { vi_technician } from './vi/technician'
 import { vi_operations_robots } from './vi/operations-robots'
 import { vi_requests } from './vi/requests'
 import { vi_roles } from './vi/roles'
@@ -24,6 +25,7 @@ export const vi: Record<string, string> = {
   ...vi_management,
   ...vi_maps,
   ...vi_notifications,
+  ...vi_technician,
   ...vi_operations_robots,
   ...vi_requests,
   ...vi_roles,

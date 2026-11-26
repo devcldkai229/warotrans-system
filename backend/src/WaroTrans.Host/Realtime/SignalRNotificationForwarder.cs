@@ -26,6 +26,7 @@ public sealed class SignalRNotificationForwarder(IHubContext<NotificationsHub> h
                 e.EntityType,
                 e.EntityId,
                 e.Route,
+                links = e.Links ?? [],
                 e.CreatedAt
             },
             cancellationToken);

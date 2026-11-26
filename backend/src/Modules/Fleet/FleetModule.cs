@@ -76,6 +76,7 @@ public static class FleetModule
         services.AddScoped<TeleopRobotHandler>();
         services.Configure<ManualDriveOptions>(configuration.GetSection(ManualDriveOptions.SectionName));
         services.AddScoped<WaroTrans.Fleet.Features.RobotControl.RobotControlService>();
+        services.AddScoped<WaroTrans.Fleet.Features.TechnicalTickets.TechnicalTicketService>();
         services.Configure<WaroTrans.Fleet.Features.RobotControl.AutoLocalizeOptions>(
             configuration.GetSection(WaroTrans.Fleet.Features.RobotControl.AutoLocalizeOptions.SectionName));
         services.AddHostedService<WaroTrans.Fleet.Features.RobotControl.AutoLocalizeHostedService>();
@@ -151,6 +152,7 @@ public static class FleetModule
         group.MapGetTrafficSnapshot();
         WaroTrans.Fleet.Features.GetSemanticLayers.Endpoint.MapGetSemanticLayers(group);
         group.MapTrafficOperatorEndpoints();
+        Features.TechnicalTickets.TechnicalTicketEndpoints.MapTechnicalTickets(group);
         var lab = endpoints.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Features.Lab.LabOptions>>();
         Features.Lab.LabEndpoints.MapLab(endpoints, lab.Value.Enabled);
         return endpoints;

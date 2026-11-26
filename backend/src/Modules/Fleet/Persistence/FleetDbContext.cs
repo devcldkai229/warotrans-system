@@ -14,6 +14,7 @@ public sealed class FleetDbContext(DbContextOptions<FleetDbContext> options) : D
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
     public DbSet<RobotCommand> RobotCommands => Set<RobotCommand>();
     public DbSet<MaintenanceRecord> MaintenanceRecords => Set<MaintenanceRecord>();
+    public DbSet<TechnicalTicket> TechnicalTickets => Set<TechnicalTicket>();
     public DbSet<RobotPositioningIntent> RobotPositioningIntents => Set<RobotPositioningIntent>();
     public DbSet<MappingSession> MappingSessions => Set<MappingSession>();
 

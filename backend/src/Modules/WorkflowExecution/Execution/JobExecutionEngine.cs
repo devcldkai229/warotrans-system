@@ -4120,6 +4120,9 @@ public sealed partial class JobExecutionEngine(
     /// <summary>FailureCode of a Job an operator paused (WFX-03); Resume also releases the robot's motion hold.</summary>
     public const string OperatorPausedCode = "operator_paused";
 
+    /// <summary>Pause reason written by an emergency stop from the console (EmergencyStopService).</summary>
+    public const string EmergencyStopReasonPrefix = "Emergency stop:";
+
     /// <summary>
     /// WFX-03: an operator pauses a RUNNING Job. The robot gets STOP mode PAUSE (cancel the goal, hold motion); the
     /// MOVE in progress is reopened and its command marked superseded, so the robot's CANCELED result is ignored and
@@ -4204,6 +4207,12 @@ public sealed partial class JobExecutionEngine(
                 "cargo_onboard_reason_required");
         }
 
+        // A Job an operator paused holds its robot (STOP mode PAUSE). Once the Job is cancelled and nothing is on the
+        // robot, that hold has no owner left: release it, or the robot stands held and no Job can ever take it
+        // (e2e P3, 2026-11-26). An emergency stop keeps its hold: the person who pressed it resumes the robot.
+        var releaseHold = job.Status == JobStatus.PAUSED && job.FailureCode == OperatorPausedCode && onboard == 0
+            && !(job.FailureMessage?.StartsWith(EmergencyStopReasonPrefix, StringComparison.Ordinal) ?? false);
+
         var openRecovery = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == job.Id && c.ResolvedAt == null, cancellationToken);
         if (openRecovery is not null)
         {
@@ -4274,6 +4283,13 @@ public sealed partial class JobExecutionEngine(
         job.FailureMessage = reason ?? "Cancelled by operator.";
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
         await SaveAndPublishAsync(cancellationToken, transaction);
+        if (releaseHold && robotId is { } heldRobot
+            && await fleet.GetRobotAsync(heldRobot, CancellationToken.None) is { IsOnline: true, MotionHeld: true })
+        {
+            await fleet.ResumeRobotAsync(heldRobot, CancellationToken.None);
+            logger.LogInformation("Job {JobNo} cancelled while paused: robot hold released", job.JobNo);
+        }
+
         return job;
     }
 

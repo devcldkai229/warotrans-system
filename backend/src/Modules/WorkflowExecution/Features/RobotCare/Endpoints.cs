@@ -10,6 +10,8 @@ namespace WaroTrans.WorkflowExecution.Features.RobotCare;
 
 public sealed record RobotCareRequest(Guid? EndpointId);
 
+public sealed record EmergencyStopRequest(string? Reason);
+
 public sealed record StartMaintenanceRunRequest(IReadOnlyList<Guid>? RobotIds, Guid EndpointId);
 
 /// <param name="Force">Unplug before the battery is full (the robot is needed now).</param>
@@ -36,6 +38,17 @@ public static class RobotCareEndpoints
 {
     public static void Map(RouteGroupBuilder group)
     {
+        group.MapPost("/robots/{id:guid}/emergency-stop", async (
+                Guid id, EmergencyStopRequest? request, EmergencyStopService stops, ICurrentUser currentUser, CancellationToken cancellationToken) =>
+                Results.Ok(await stops.StopAsync(id, request?.Reason, currentUser.AccountId ?? Guid.Empty, cancellationToken)))
+            .RequirePermission(Permissions.RobotStop)
+            .RequireRobotScope()
+            .Audited("robot.emergency_stop", "ROBOT", "id")
+            .WithName("EmergencyStopRobot")
+            .WithSummary("Stop the robot now and clear its commands")
+            .WithDescription("STOP (hold every motion, cancel the goal), pause every running Job of the robot, close its open commands. The robot moves again only when its Job is resumed, or the robot is resumed when it had none. Not a physical E-stop.")
+            .WithTags("Robots");
+
         group.MapPost("/robots/{id:guid}/return-to-park", async (
                 Guid id, RobotCareRequest? request, RobotCareService care, JobQueries queries, ICurrentUser currentUser, CancellationToken cancellationToken) =>
             {

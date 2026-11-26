@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import { useAuth } from '@/features/auth/authContext'
 import type { Robot } from '@/shared/api/contracts'
 import { getRobotHistory } from '@/shared/api/fleet'
@@ -16,6 +17,7 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import {
   describeDetails,
   describeHistoryItem,
+  describeCommandDetails,
   filtersAreActive,
   HISTORY_SOURCES,
   historyQuery,
@@ -36,6 +38,7 @@ const PAGE_SIZE = 20
  * robot; the server refuses the rest.
  */
 export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> }) {
+  const paths = usePaths()
   const { capabilities } = useAuth()
   const allowed = canActOnRobot(capabilities, PERMISSIONS.robotRead, robot.id)
   const [filters, setFilters] = useState<HistoryFilters>(NO_FILTERS)
@@ -98,6 +101,7 @@ export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> 
             <option value="">{t('State changes and commands')}</option>
             <option value="STATE">{t('State changes only')}</option>
             <option value="COMMAND">{t('Commands only')}</option>
+            <option value="TICKET">{t('Technical tickets only')}</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">
@@ -180,14 +184,23 @@ export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> 
                     <div className="min-w-0">
                       <p className="text-sm break-words text-ink">{describeHistoryItem(item)}</p>
                       {describeDetails(item) ? <p className="mt-0.5 text-xs break-words text-ink-2">{describeDetails(item)}</p> : null}
+                      {describeCommandDetails(item) ? <p className="mt-0.5 text-xs break-words text-ink-2">{describeCommandDetails(item)}</p> : null}
                       <p className="mt-0.5 text-xs text-muted">
                         {formatDateTimeWithYear(item.occurredAt)}
-                        {item.kind === 'COMMAND' ? ` · ${t('Command')}` : source ? ` · ${source}` : ''}
+                        {item.kind === 'COMMAND' ? ` · ${t('Command')}` : item.kind === 'TICKET' ? ` · ${t('Technical ticket')}` : source ? ` · ${source}` : ''}
                         {item.jobId ? (
                           <>
                             {' · '}
-                            <Link to={`/monitor/jobs/${item.jobId}`} className="underline-offset-2 hover:underline">
-                              {t('Job')}
+                            <Link to={paths.job(item.jobId)} className="underline-offset-2 hover:underline">
+                              {item.jobNo ?? t('Job')}
+                            </Link>
+                          </>
+                        ) : null}
+                        {item.ticketId ? (
+                          <>
+                            {' · '}
+                            <Link to={paths.tickets(item.ticketId)} className="underline-offset-2 hover:underline">
+                              {t('Open ticket')}
                             </Link>
                           </>
                         ) : null}

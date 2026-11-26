@@ -98,6 +98,7 @@ builder.Services.AddSingleton<WaroTrans.Fleet.Traffic.ITrafficRealtimeNotifier, 
 builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<NotificationCreated>, SignalRNotificationForwarder>();
+builder.Services.AddScoped<WaroTrans.Host.Realtime.NotificationContext>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, AdminNotificationProducer>();
