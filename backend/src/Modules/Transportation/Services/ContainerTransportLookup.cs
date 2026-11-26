@@ -22,4 +22,16 @@ public sealed class ContainerTransportLookup(TransportationDbContext db) : ICont
             .ToListAsync(cancellationToken);
         return busy.ToHashSet();
     }
+
+    public Task<int> CountActiveTransportsAtLocationAsync(
+        Guid storageLocationId,
+        Guid endpointId,
+        CancellationToken cancellationToken = default) =>
+        TransportReservations.ActiveDetails(db)
+            .CountAsync(
+                d => d.SourceStorageLocationId == storageLocationId
+                     || d.DestinationStorageLocationId == storageLocationId
+                     || d.SourceEndpointId == endpointId
+                     || d.DestinationEndpointId == endpointId,
+                cancellationToken);
 }

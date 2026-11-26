@@ -53,6 +53,7 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.ProductCreate)]
     [InlineData(Permissions.ContainerCreate)]
     [InlineData(Permissions.MapRead)]
+    [InlineData(Permissions.TrafficRead)]
     public void Staff_keeps_the_floor_rights_the_mobile_app_uses(string permission)
     {
         Assert.True(RolePermissionMatrix.RoleHas(AppRoles.Staff, permission));

@@ -280,7 +280,13 @@ export function ManagementPage() {
               <ProductsSection products={products} setProducts={setProducts} categories={categories} loadState={catalogState} />
             ) : null}
             {tab === 'categories' ? (
-              <CategoriesSection categories={categories} setCategories={setCategories} products={products} loadState={catalogState} />
+              <CategoriesSection
+                categories={categories}
+                setCategories={setCategories}
+                products={products}
+                setProducts={setProducts}
+                loadState={catalogState}
+              />
             ) : null}
             {tab === 'containers' ? <ContainersSection locations={locationListing.items} onChanged={reloadContainers} /> : null}
             {tab === 'inventory' ? <InventorySection /> : null}

@@ -9,6 +9,9 @@ import { findEndpointByName } from '@/shared/map/scene'
 import { WarehouseMap, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { FleetMapTopBar } from './FleetMapTopBar'
 import { FleetMapTools } from './FleetMapTools'
+
+/** The warehouse floor tiles (12 x 10 tiles of 35 cm on MAP-ONE). */
+const FLOOR_TILE_METERS = 0.35
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
 import { RobotPreviewCard } from './RobotPreviewCard'
 import { shownRobotStatus } from './robotStatus'
@@ -83,6 +86,8 @@ export function FleetMap({
         y: robot.poseY,
         yaw: robot.poseYaw,
         alert: robot.status === 'ERROR' || (trafficOverlay?.quarantinedRobotCodes?.includes(robot.code) ?? false),
+        lengthM: robot.lengthM ?? null,
+        widthM: robot.widthM ?? null,
       })),
     [robots, trafficOverlay],
   )
@@ -175,7 +180,7 @@ export function FleetMap({
   return (
     <>
       <WarehouseMap
-        appearance="otto"
+        floorTileMeters={costmap.view.floorGrid ? FLOOR_TILE_METERS : null}
         yawUnit="rad"
         zones={zones}
         edges={edges}

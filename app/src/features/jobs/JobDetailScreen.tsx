@@ -241,8 +241,12 @@ export function JobDetailScreen() {
   const activeContainerId = typeof activeContainerRaw === 'string' ? activeContainerRaw : undefined;
   // Quality inspection is its own step (Passed / Failed with what is wrong), not a handover: it never opens Verify.
   const inspectionStep = activeStep?.operationCode === 'INSPECTION_CONFIRM' && activeStep.status === 'WAITING' ? activeStep : null;
+  const passedIds = new Set(
+    (Array.isArray(inspectionStep?.outputValues?.inspectionPassed) ? inspectionStep!.outputValues!.inspectionPassed as { containerId?: string }[] : [])
+      .map(entry => entry?.containerId).filter((id): id is string => typeof id === 'string'),
+  );
   const inspectable = inspectionStep
-    ? (job.containers ?? []).filter(container => container.containerId && container.status === 'ONBOARD')
+    ? (job.containers ?? []).filter(container => container.containerId && container.status === 'ONBOARD' && !passedIds.has(container.containerId))
     : [];
   const [inspecting, setInspecting] = useState<{ id: string; barcode: string } | null>(null);
   const activeContainer = job.containers.find(container => container.containerId === activeContainerId);

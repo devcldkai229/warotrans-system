@@ -2,11 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowDown, ArrowRight, Box, Check, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, List, Map as MapIcon, MapPin, Minus, Package, Plus, ScanLine, Search, Warehouse } from 'lucide-react-native';
+import { ArrowDown, ArrowRight, Box, Check, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, List, Map as MapIcon, MapPin, Package, ScanLine, Search, Warehouse } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
-import { ReceivingProductPicker } from '../inventory/ReceivingProductPicker';
-import { voucherDate } from '../inventory/stockVoucherData';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
@@ -16,8 +14,8 @@ import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import {
   getContainerByBarcode, getMapVersionDetail, getOperatingContext, getTransportRequest, getWorkflowRequestInputSchema,
-  listContainers, listPublishedWorkflows, listStorageLocations, listTransportRequests, previewOutboundPick,
-  type ContainerListItem, type CreateTransportRequestResponse, type OutboundPickResponse, type ProductItem, type QueueTransportRequestResponse,
+  listContainers, listPublishedWorkflows, listStorageLocations, listTransportRequests,
+  type ContainerListItem, type CreateTransportRequestResponse, type QueueTransportRequestResponse,
 } from '../../shared/api';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { MapViewport } from '../../shared/maps/MapViewport';
@@ -27,7 +25,7 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import { parseStaffInputs } from './dispatchData';
 import { submitDispatch } from './dispatchSubmission';
 import { startQueuedJobs, type JobStartResult } from './startQueuedJobs';
-import { activeContainerIds, outboundFifoScopeKey, parseOutboundFifoCount } from './transportDraft';
+import { activeContainerIds } from './transportDraft';
 import {
   allowedPlaces, buildDetails, composerPlaces, defaultDestination, defaultSource, groupContainers, ineligibleReason, movementProblem,
   outboundGates, outboundMovementProblem, placeForEndpoint, searchPlaces, suggestedPlaces, workflowKindOf,
@@ -42,7 +40,7 @@ const KIND_TITLE: Record<WorkflowKind, string> = {
 };
 const KIND_HINT: Record<WorkflowKind, string> = {
   INBOUND: 'Containers on a confirmed receiving voucher that are not on a shelf yet.',
-  OUTBOUND: 'Containers currently stored on a shelf.',
+  OUTBOUND: 'Containers of a confirmed shipping voucher, still on their shelves.',
   INTERNAL: 'Containers that are on a shelf now.',
   OTHER: 'Containers ready for transport.',
 };
@@ -89,23 +87,10 @@ export function TransportComposerScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ created: CreateTransportRequestResponse; queued: QueueTransportRequestResponse | null; queueError: string | null; started: JobStartResult[] } | null>(null);
   const [extra, setExtra] = useState<ContainerListItem[]>([]);
-  const [outboundMode, setOutboundMode] = useState<'fifo' | 'manual'>(() => (repeatId || routeBarcodes.length ? 'manual' : 'fifo'));
   const [outboundGate, setOutboundGate] = useState<ComposerPlace | null>(null);
   const [gatePickerOpen, setGatePickerOpen] = useState(false);
-  const [fifoProduct, setFifoProduct] = useState<ProductItem | null>(null);
-  const [fifoCountText, setFifoCountText] = useState('1');
-  const [fifoProductPicker, setFifoProductPicker] = useState<{ barcode: string | null } | null>(null);
-  const [fifoScannerOpen, setFifoScannerOpen] = useState(false);
-  const [fifoPreview, setFifoPreview] = useState<OutboundPickResponse | null>(null);
-  const [fifoPreviewScope, setFifoPreviewScope] = useState('');
-  const [fifoLoading, setFifoLoading] = useState(false);
-  const [fifoError, setFifoError] = useState<string | null>(null);
-  const [fifoNotice, setFifoNotice] = useState<string | null>(null);
-  const fifoAbort = useRef<AbortController | null>(null);
   const lock = useRef(false);
   const canStartJobs = sessionCan(session, PERMISSIONS.jobOperate);
-
-  useEffect(() => () => { fifoAbort.current?.abort(); }, []);
 
   const workflow = data?.workflows.find(item => item.id === workflowId);
   const kind = workflowKindOf(workflow?.code);
@@ -117,20 +102,6 @@ export function TransportComposerScreen() {
     () => (outboundGate && gates.some(gate => gate.endpointId === outboundGate.endpointId) ? outboundGate : gates.length === 1 ? gates[0] : null),
     [outboundGate, gates],
   );
-  const isFifoMode = kind === 'OUTBOUND' && outboundMode === 'fifo';
-  const fifoCount = parseOutboundFifoCount(fifoCountText);
-  const fifoCountInvalid = fifoCountText.trim().length > 0 && fifoCount === null;
-  const currentFifoScope = data && fifoProduct && fifoCount && effectiveOutboundGate
-    ? outboundFifoScopeKey({
-        warehouseId: data.warehouse.id,
-        mapId: data.map.id,
-        productId: fifoProduct.id,
-        containerCount: fifoCount,
-        destinationEndpointId: effectiveOutboundGate.endpointId,
-      })
-    : '';
-  const currentFifoPreview = fifoPreview && currentFifoScope && fifoPreviewScope === currentFifoScope ? fifoPreview : null;
-  const fifoReady = Boolean(workflow && currentFifoPreview && currentFifoPreview.isComplete && currentFifoPreview.items.length > 0 && !fifoLoading && effectiveOutboundGate);
   const locationName = (id: string | null) => places.find(place => place.storageLocationId === id)?.name ?? t('Unknown shelf');
   const allContainers = useMemo(() => [...new Map([...(data?.containers ?? []), ...extra].map(item => [item.id, item])).values()], [data, extra]);
   const byId = useMemo(() => new Map(allContainers.map(item => [item.id, item])), [allContainers]);
@@ -157,7 +128,6 @@ export function TransportComposerScreen() {
       const initialPlaces = composerPlaces({ endpoints: data.map.endpoints, locations: data.locations, mapId: data.map.id });
       const initialKind = match ? workflowKindOf(match.code) : 'OTHER';
       if (initialKind === 'OUTBOUND') {
-        setOutboundMode('manual');
         const previousGateId = data.previous.details[0]?.destinationEndpointId;
         const previousGate = previousGateId ? outboundGates(initialPlaces).find(gate => gate.endpointId === previousGateId) ?? null : null;
         if (previousGate) setOutboundGate(previousGate);
@@ -173,7 +143,6 @@ export function TransportComposerScreen() {
   useEffect(() => {
     if (!data || !workflow || !routeBarcodes.length || prefilled.current === `${routeKey}:${workflow.id}`) return;
     prefilled.current = `${routeKey}:${workflow.id}`;
-    if (kind === 'OUTBOUND') setOutboundMode('manual');
     const wanted = routeBarcodes.map(code => allContainers.find(item => item.barcode === code)).filter((item): item is ContainerListItem => !!item);
     const usable = wanted.filter(item => !ineligibleReason(item, kind, held));
     const refused = wanted.filter(item => ineligibleReason(item, kind, held));
@@ -188,77 +157,14 @@ export function TransportComposerScreen() {
     setStep('places');
   }, [data, workflow, routeKey, kind, allContainers, places]);
 
-  const resetFifoState = () => {
-    fifoAbort.current?.abort();
-    fifoAbort.current = null;
-    setFifoLoading(false);
-    setFifoProduct(null);
-    setFifoCountText('1');
-    setFifoPreview(null);
-    setFifoPreviewScope('');
-    setFifoError(null);
-    setFifoNotice(null);
-  };
-
-  const requestFifoPreview = async (overrideCount?: number, preserveNotice?: string) => {
-    const count = overrideCount ?? fifoCount;
-    if (!data || !fifoProduct || !count || !effectiveOutboundGate) return;
-    fifoAbort.current?.abort();
-    const controller = new AbortController();
-    fifoAbort.current = controller;
-    const scope = outboundFifoScopeKey({
-      warehouseId: data.warehouse.id,
-      mapId: data.map.id,
-      productId: fifoProduct.id,
-      containerCount: count,
-      destinationEndpointId: effectiveOutboundGate.endpointId,
-    });
-    setFifoLoading(true);
-    setFifoError(null);
-    setFifoNotice(preserveNotice ?? null);
-    try {
-      const result = await previewOutboundPick({
-        warehouseId: data.warehouse.id,
-        mapVersionId: data.map.id,
-        productId: fifoProduct.id,
-        containerCount: count,
-        destinationEndpointId: effectiveOutboundGate.endpointId,
-      }, controller.signal);
-      if (controller.signal.aborted || fifoAbort.current !== controller) return;
-      setFifoPreview(result);
-      setFifoPreviewScope(scope);
-    } catch (failure) {
-      const aborted = controller.signal.aborted || (typeof failure === 'object' && failure !== null && 'name' in failure && failure.name === 'AbortError');
-      if (aborted || fifoAbort.current !== controller) return;
-      setFifoPreview(null);
-      setFifoPreviewScope('');
-      setFifoError(getUserErrorMessage(failure, 'Could not load FIFO outbound preview. Try again.'));
-    } finally {
-      if (fifoAbort.current === controller) setFifoLoading(false);
-    }
-  };
-
   const chooseWorkflow = (id: string) => {
     triggerHaptic('tap');
     if (id !== workflowId) {
       setSelected([]); setMovements({}); setInputs({}); setError(null); setNotice(null);
-      resetFifoState();
       setOutboundGate(null);
-      setOutboundMode('fifo');
       setStep('containers');
     }
     setWorkflowId(id); setWorkflowSheet(false);
-  };
-  const switchOutboundMode = (mode: 'fifo' | 'manual') => {
-    if (mode === outboundMode) return;
-    triggerHaptic('tap');
-    fifoAbort.current?.abort();
-    setFifoLoading(false);
-    setError(null);
-    setNotice(null);
-    setFifoError(null);
-    setFifoNotice(null);
-    setOutboundMode(mode);
   };
   const toggle = (item: ContainerListItem) => {
     triggerHaptic('tap');
@@ -319,16 +225,13 @@ export function TransportComposerScreen() {
   const placesReady = selectedItems.length > 0 && problems.every(problem => !problem);
   const back = () => {
     if (receipt) { goBack(); return; }
-    if (step === 'review') setStep(isFifoMode ? 'containers' : 'places'); else if (step === 'places') setStep('containers'); else goBack();
+    if (step === 'review') setStep('places'); else if (step === 'places') setStep('containers'); else goBack();
   };
   const submit = async () => {
     if (lock.current || !data || !workflow) return;
-    if (isFifoMode && (!currentFifoPreview || !currentFifoPreview.isComplete || !fifoProduct || !fifoCount || !effectiveOutboundGate)) return;
     lock.current = true; setPending(true); setError(null);
     try {
-      const details = isFifoMode
-        ? currentFifoPreview!.items.map(item => item.detail)
-        : buildDetails(selectedItems, effectiveMovements);
+      const details = buildDetails(selectedItems, effectiveMovements);
       const workflowInputs = parseStaffInputs(staffFields, inputs);
       const result = await submitDispatch({
         warehouseId: data.warehouse.id,
@@ -337,28 +240,18 @@ export function TransportComposerScreen() {
         workflowInputs,
         note: null,
         details,
-        ...(isFifoMode ? { outboundFifo: { productId: fifoProduct!.id, containerCount: fifoCount! } } : {}),
       }, true);
       const started = startNow && canStartJobs && result.queued ? await startQueuedJobs(result.queued.jobs) : [];
       triggerHaptic('success');
       setReceipt({ ...result, started });
     } catch (failure) {
-      if (isFifoMode && failure instanceof ApiError && failure.status === 409 && failure.code === 'outbound_fifo_selection_changed') {
-        const changedNotice = t('The FIFO selection changed. Review the updated containers before submitting.');
-        setFifoPreview(null);
-        setFifoPreviewScope('');
-        setError(null);
-        setStep('containers');
-        void requestFifoPreview(undefined, changedNotice);
-        return;
-      }
       setError(getUserErrorMessage(failure, failure instanceof Error ? failure.message : 'The request could not be created.'));
     } finally { lock.current = false; setPending(false); }
   };
 
   const title = receipt ? 'Request Created' : step === 'containers' ? 'Choose Containers' : step === 'places' ? 'Pick-up & Delivery' : 'Review Request';
-  const stepLabels = isFifoMode ? ['Containers', 'Review'] : ['Containers', 'Places', 'Review'];
-  const stepIndex = isFifoMode ? (step === 'containers' ? 0 : 1) : (step === 'containers' ? 0 : step === 'places' ? 1 : 2);
+  const stepLabels = ['Containers', 'Places', 'Review'];
+  const stepIndex = step === 'containers' ? 0 : step === 'places' ? 1 : 2;
 
   if (!data) {
     return <View style={styles.screen}>
@@ -391,16 +284,7 @@ export function TransportComposerScreen() {
             </View>
             <ChevronDown size={16} color={colors.textMuted} />
           </Pressable>
-          {kind === 'OUTBOUND' ? (
-            <SegmentedControl
-              value={outboundMode}
-              onChange={switchOutboundMode}
-              accessibilityLabel="Outbound selection mode"
-              options={[{ label: 'By Product (FIFO)', value: 'fifo' }, { label: 'Manual Containers', value: 'manual' }]}
-            />
-          ) : null}
-          {!isFifoMode ? <>
-            <View style={styles.searchRow}>
+          <View style={styles.searchRow}>
               <TextField value={query} onChangeText={setQuery} placeholder="Barcode, product or voucher" leftIcon={<Search size={16} color={colors.textMuted} />}
                 showClearButton autoCorrect={false} autoCapitalize="none" containerStyle={{ flex: 1 }} accessibilityLabel="Search containers" />
               <Pressable style={({ pressed }) => [styles.scanButton, pressed && styles.pressed]} onPress={() => setScanner(true)} accessibilityRole="button" accessibilityLabel="Scan a container">
@@ -409,144 +293,8 @@ export function TransportComposerScreen() {
             </View>
             {workflow ? <Text variant="caption" color="textSecondary">{t(KIND_HINT[kind])}{hiddenCount ? ` ${t('{count} other containers are hidden.', { count: hiddenCount })}` : ''}</Text> : null}
             {notice ? <Text variant="caption" color="primaryText">{notice}</Text> : null}
-          </> : null}
         </View>
-        {isFifoMode ? <>
-          <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 140 + insets.bottom }]} keyboardShouldPersistTaps="handled">
-            <View style={styles.fifoCard}>
-              <Text variant="caption" color="textSecondary">Product</Text>
-              <View style={styles.searchRow}>
-                <Pressable style={({ pressed }) => [styles.placeButton, { flex: 1 }, !fifoProduct && styles.placeButtonEmpty, pressed && styles.pressed]}
-                  onPress={() => setFifoProductPicker({ barcode: null })} accessibilityRole="button" accessibilityLabel="Choose Product">
-                  <Package size={18} color={fifoProduct ? colors.primaryText : colors.textSecondary} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text variant="bodyMedium" fontWeight="700" color={fifoProduct ? colors.textPrimary : colors.primaryText} numberOfLines={1}>
-                      {fifoProduct ? fifoProduct.name : t('Tap to choose or scan a product')}
-                    </Text>
-                    {fifoProduct ? <Text variant="code" color="textSecondary" numberOfLines={1}>{fifoProduct.sku}</Text> : null}
-                  </View>
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </Pressable>
-                <Pressable style={({ pressed }) => [styles.scanButton, pressed && styles.pressed]}
-                  onPress={() => setFifoScannerOpen(true)} accessibilityRole="button" accessibilityLabel="Scan product barcode">
-                  <ScanLine size={20} color={colors.primaryText} />
-                </Pressable>
-              </View>
-
-              <Text variant="caption" color="textSecondary">Container Count (1–200)</Text>
-              <View style={styles.fifoStepper}>
-                <Pressable
-                  style={({ pressed }) => [styles.fifoStepBtn, (!fifoCount || fifoCount <= 1) && styles.disabledControl, pressed && styles.pressed]}
-                  disabled={!fifoCount || fifoCount <= 1}
-                  onPress={() => setFifoCountText(String(Math.max(1, (fifoCount ?? 1) - 1)))}
-                  accessibilityRole="button" accessibilityLabel="Decrease Container Count">
-                  <Minus size={18} color={(!fifoCount || fifoCount <= 1) ? colors.textMuted : colors.textPrimary} />
-                </Pressable>
-                <TextInput
-                  style={styles.fifoStepInput}
-                  value={fifoCountText}
-                  onChangeText={text => setFifoCountText(text.replace(/[^0-9]/g, '').slice(0, 3))}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                  selectTextOnFocus
-                  accessibilityLabel={t('FIFO Container Count')}
-                />
-                <Pressable
-                  style={({ pressed }) => [styles.fifoStepBtn, (fifoCount ?? 0) >= 200 && styles.disabledControl, pressed && styles.pressed]}
-                  disabled={(fifoCount ?? 0) >= 200}
-                  onPress={() => setFifoCountText(String(Math.min(200, (fifoCount ?? 0) + 1)))}
-                  accessibilityRole="button" accessibilityLabel="Increase Container Count">
-                  <Plus size={18} color={(fifoCount ?? 0) >= 200 ? colors.textMuted : colors.textPrimary} />
-                </Pressable>
-              </View>
-              {fifoCountInvalid ? <Text variant="caption" color="dangerText">Enter between 1 and 200 containers.</Text> : null}
-
-              <Text variant="caption" color="textSecondary">Outbound Gate</Text>
-              {gates.length === 0 ? (
-                <View style={styles.warningBox}>
-                  <Text variant="caption" color="warningText">No outbound point is configured on this map.</Text>
-                </View>
-              ) : gates.length === 1 && effectiveOutboundGate ? (
-                <View style={styles.staticPlaceRow}>
-                  <MapPin size={16} color={colors.primaryText} />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyMedium" fontWeight="700">{effectiveOutboundGate.name}</Text>
-                    <Text variant="caption" color="textMuted">{t('Station')} · {effectiveOutboundGate.code}</Text>
-                  </View>
-                </View>
-              ) : (
-                <PlaceButton label="Outbound Gate" place={effectiveOutboundGate} onPress={() => setGatePickerOpen(true)} />
-              )}
-
-              <Button
-                title={currentFifoPreview ? 'Refresh FIFO Preview' : 'Preview FIFO Containers'}
-                loading={fifoLoading}
-                disabled={!fifoProduct || !fifoCount || !effectiveOutboundGate || fifoLoading}
-                onPress={() => { void requestFifoPreview(); }}
-              />
-            </View>
-
-            {fifoNotice ? <View style={styles.warningBox}><Text variant="caption" color="warningText" accessibilityRole="alert">{fifoNotice}</Text></View> : null}
-            {fifoError ? <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{fifoError}</Text></View> : null}
-
-            {currentFifoPreview ? <View style={styles.fifoCard}>
-              <View style={styles.groupHeader}>
-                <Text variant="bodyMedium" fontWeight="700" style={{ flex: 1 }}>
-                  {t('Reviewed FIFO Selection · {count}', { count: currentFifoPreview.items.length })}
-                </Text>
-                {currentFifoPreview.isComplete
-                  ? <CheckCircle2 size={18} color={colors.success} />
-                  : <CircleAlert size={18} color={colors.warning} />}
-              </View>
-              {!currentFifoPreview.isComplete ? (
-                <View style={styles.warningBox}>
-                  <Text variant="caption" color="warningText">
-                    {t('Only {available} of {requested} containers are available for FIFO pickup. Adjust the count or product and preview again.', {
-                      available: currentFifoPreview.items.length,
-                      requested: currentFifoPreview.requestedCount,
-                    })}
-                  </Text>
-                  {currentFifoPreview.items.length > 0 ? (
-                    <Button
-                      title={t('Use Available ({count})', { count: currentFifoPreview.items.length })}
-                      variant="outline"
-                      size="sm"
-                      onPress={() => {
-                        const available = currentFifoPreview.items.length;
-                        setFifoCountText(String(available));
-                        void requestFifoPreview(available);
-                      }}
-                    />
-                  ) : null}
-                </View>
-              ) : null}
-              {currentFifoPreview.items.map(item => {
-                const shelf = locationName(item.detail.sourceStorageLocationId);
-                const levelText = item.detail.sourceLevelNo != null ? ` · ${t('Level {level}', { level: item.detail.sourceLevelNo })}` : '';
-                return <View key={item.detail.containerId} style={styles.containerRow}>
-                  <View style={styles.moveIndex}><Text variant="caption" fontWeight="700" color={colors.primaryText}>{item.detail.sequenceNo}</Text></View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text variant="code" fontWeight="700">{item.barcode}</Text>
-                    <View style={styles.routeLine}>
-                      <Text variant="caption" color="textSecondary" numberOfLines={1} style={{ flexShrink: 1 }}>{shelf}{levelText}</Text>
-                      <ArrowRight size={12} color={colors.textMuted} />
-                      <Text variant="caption" fontWeight="700" numberOfLines={1} style={{ flexShrink: 1 }}>{effectiveOutboundGate?.name ?? item.detail.destinationEndpointId}</Text>
-                    </View>
-                    <Text variant="caption" color="textMuted">{t('Admitted {date}', { date: voucherDate(item.admittedAt) })}</Text>
-                  </View>
-                </View>;
-              })}
-            </View> : null}
-          </ScrollView>
-          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-            <Text variant="bodyMedium" fontWeight="700">
-              {currentFifoPreview?.isComplete
-                ? t('{count} FIFO Selected', { count: currentFifoPreview.items.length })
-                : currentFifoPreview ? t('Shortfall') : t('{count} selected', { count: 0 })}
-            </Text>
-            <Button title="Review" icon={ArrowRight} disabled={!fifoReady} onPress={() => { triggerHaptic('tap'); setError(null); setStep('review'); }} />
-          </View>
-        </> : <>
+        <>
           <FlatList
             data={workflow ? groups : []}
             keyExtractor={group => group.key}
@@ -584,7 +332,7 @@ export function TransportComposerScreen() {
             <Text variant="bodyMedium" fontWeight="700">{t('{count} selected', { count: selectedItems.length })}</Text>
             <Button title="Next" icon={ArrowRight} disabled={!selectedItems.length || !workflow} onPress={goPlaces} />
           </View>
-        </>}
+        </>
       </> : null}
 
       {step === 'places' ? <>
@@ -672,31 +420,16 @@ export function TransportComposerScreen() {
       {step === 'review' ? <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 160 + insets.bottom }]} keyboardShouldPersistTaps="handled">
           <View style={styles.reviewHero}>
-            <Text variant="caption" color="textSecondary">{workflow?.name}{isFifoMode && fifoProduct ? ` · ${fifoProduct.name}` : ''}</Text>
-            <Text variant="title">{t(KIND_TITLE[kind])}{isFifoMode ? ` · ${t('By Product (FIFO)')}` : ''}</Text>
+            <Text variant="caption" color="textSecondary">{workflow?.name}</Text>
+            <Text variant="title">{t(KIND_TITLE[kind])}</Text>
             <Text variant="bodyMedium" color="textSecondary">
               {t('{count} containers · {trips} trips', {
-                count: isFifoMode ? (currentFifoPreview?.items.length ?? 0) : selectedItems.length,
-                trips: isFifoMode ? (currentFifoPreview?.items.length ?? 0) : selectedItems.length,
+                count: selectedItems.length,
+                trips: selectedItems.length,
               })}
             </Text>
           </View>
-          {isFifoMode && currentFifoPreview ? currentFifoPreview.items.map(item => {
-            const shelf = locationName(item.detail.sourceStorageLocationId);
-            const levelText = item.detail.sourceLevelNo != null ? ` (${t('Level {level}', { level: item.detail.sourceLevelNo })})` : '';
-            return <View key={item.detail.containerId} style={styles.reviewRow}>
-              <View style={styles.moveIndex}><Text variant="caption" fontWeight="700" color={colors.primaryText}>{item.detail.sequenceNo}</Text></View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text variant="code" fontWeight="700">{item.barcode}</Text>
-                <View style={styles.routeLine}>
-                  <Text variant="bodyMedium" numberOfLines={1} style={{ flexShrink: 1 }}>{shelf}{levelText}</Text>
-                  <ArrowRight size={14} color={colors.textMuted} />
-                  <Text variant="bodyMedium" fontWeight="700" numberOfLines={1} style={{ flexShrink: 1 }}>{effectiveOutboundGate?.name}</Text>
-                </View>
-                <Text variant="caption" color="textMuted">{t('Admitted {date}', { date: voucherDate(item.admittedAt) })}</Text>
-              </View>
-            </View>;
-          }) : selectedItems.map((item, index) => {
+          {selectedItems.map((item, index) => {
             const movement = effectiveMovements[item.id];
             return <View key={item.id} style={styles.reviewRow}>
               <View style={styles.moveIndex}><Text variant="caption" fontWeight="700" color={colors.primaryText}>{index + 1}</Text></View>
@@ -739,7 +472,7 @@ export function TransportComposerScreen() {
           {error ? <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{error}</Text></View> : null}
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-          <Button title={startNow && canStartJobs ? 'Create And Start' : 'Create Request'} fullWidth loading={pending} disabled={pending || (isFifoMode && !fifoReady)} onPress={() => { void submit(); }} />
+          <Button title={startNow && canStartJobs ? 'Create And Start' : 'Create Request'} fullWidth loading={pending} disabled={pending} onPress={() => { void submit(); }} />
         </View>
       </KeyboardAvoidingView> : null}
     </>}
@@ -767,14 +500,6 @@ export function TransportComposerScreen() {
 
     {gatePickerOpen ? <PlacePickerSheet places={gates} suggested={gates} end="destination" bulk={true}
       map={data.map} onPick={place => { triggerHaptic('success'); setOutboundGate(place); setGatePickerOpen(false); }} onClose={() => setGatePickerOpen(false)} /> : null}
-
-    {fifoProductPicker ? <ReceivingProductPicker selectedProduct={fifoProduct} initialBarcode={fifoProductPicker.barcode}
-      onSelect={chosen => { setFifoProduct(chosen); setFifoProductPicker(null); setFifoError(null); setFifoNotice(null); }}
-      onClose={() => setFifoProductPicker(null)} /> : null}
-
-    <BarcodeScannerHUD visible={fifoScannerOpen} title="Scan product barcode" manualLabel="Product or supplier barcode"
-      placeholder="Enter Or Scan Product Barcode" onClose={() => setFifoScannerOpen(false)}
-      onScanResult={barcode => { setFifoScannerOpen(false); setFifoProductPicker({ barcode }); }} />
 
     <BarcodeScannerHUD visible={scanner} onClose={() => setScanner(false)} onScanResult={code => { void onScan(code); }} />
   </View>;

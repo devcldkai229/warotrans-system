@@ -11,6 +11,9 @@ import type {
 import { getActiveMapVersion, listEndpoints } from '@/shared/api/navigation'
 import {
   createStorageLocation,
+  getStorageLocation,
+  updateStorageLocation,
+  type StorageLocationDetail,
   listContainers,
   listInventory,
   listStorageLocations,
@@ -40,6 +43,53 @@ function toProduct(payload: ProductPayload): Product {
 
 function toCategory(payload: CategoryPayload): ProductCategory {
   return { ...payload, description: payload.description ?? undefined }
+}
+
+/** PUT /api/warehouse/product-categories/{id}: name and description; the code cannot change. */
+export async function updateCategory(category: ProductCategory, body: { name: string; description?: string }): Promise<ProductCategory> {
+  if (MOCK_MODE) return { ...category, ...body }
+  return toCategory(
+    await apiRequest<CategoryPayload>(`/api/warehouse/product-categories/${category.id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  )
+}
+
+/** DELETE /api/warehouse/product-categories/{id}. Rejects with `product_category_in_use` while products belong to it. */
+export async function deleteCategory(category: ProductCategory): Promise<void> {
+  if (MOCK_MODE) return
+  await apiRequest<void>(`/api/warehouse/product-categories/${category.id}`, { method: 'DELETE' })
+}
+
+/** Body of PUT /api/warehouse/products/{id}: everything but the SKU, which is printed on labels and vouchers. */
+export interface UpdateProductBody {
+  categoryId: string
+  name: string
+  supplierBarcode?: string
+  description?: string
+}
+
+/** PUT /api/warehouse/products/{id}. Rejects with `product_supplier_barcode_taken` (409) or `product_category_not_found`. */
+export async function updateProduct(product: Product, body: UpdateProductBody): Promise<Product> {
+  if (MOCK_MODE) return { ...product, ...body, updatedAt: new Date().toISOString() }
+  return toProduct(await apiRequest<ProductPayload>(`/api/warehouse/products/${product.id}`, { method: 'PUT', body: JSON.stringify(body) }))
+}
+
+/** Where a product's Containers are: stock per location and level, Containers per status, the newest Containers. */
+export interface ProductInventoryContext {
+  productId: string
+  sku: string
+  productName: string
+  totalContainers: number
+  containersByStatus: Record<string, number>
+  storageLocations: { storageLocationId: string; storageLocationCode: string; storageLocationName: string; levelNo: number; containerCount: number }[]
+  recentContainers: { id: string; barcode: string; status: string; currentStorageLocationId: string | null; currentLevelNo: number | null; createdAt: string }[]
+}
+
+/** GET /api/warehouse/products/{id}/inventory-context. */
+export async function getProductInventoryContext(product: Product): Promise<ProductInventoryContext> {
+  if (MOCK_MODE) {
+    return { productId: product.id, sku: product.sku, productName: product.name, totalContainers: 0, containersByStatus: {}, storageLocations: [], recentContainers: [] }
+  }
+  return apiRequest<ProductInventoryContext>(`/api/warehouse/products/${product.id}/inventory-context`)
 }
 
 /** GET /api/warehouse/product-categories. */
@@ -138,9 +188,12 @@ const contains = (value: string, needle: string) => value.toLowerCase().includes
 export async function listManagedContainers({
   search,
   status,
+  productId,
+  storageLocationId,
+  levelNo,
   skip = 0,
   take = 50,
-}: PageQuery & { status?: ContainerView['status'] } = {}): Promise<ContainerListing> {
+}: PageQuery & { status?: ContainerView['status']; productId?: string; storageLocationId?: string; levelNo?: number } = {}): Promise<ContainerListing> {
   if (MOCK_MODE) {
     const matches = CONTAINERS.filter(
       (item) =>
@@ -153,7 +206,17 @@ export async function listManagedContainers({
   const warehouse = await pickWarehouse()
   if (!warehouse) return { warehouseName: null, items: [], total: 0 }
 
-  const response = await listContainers({ warehouseId: warehouse.id, eligibleOnly: false, search, status, skip, take })
+  const response = await listContainers({
+    warehouseId: warehouse.id,
+    eligibleOnly: false,
+    search,
+    status,
+    productId,
+    storageLocationId,
+    levelNo,
+    skip,
+    take,
+  })
   return {
     warehouseName: warehouse.name,
     total: response.total,
@@ -300,6 +363,28 @@ export async function createLocation(
     }
   }
   return toLocationView(await createStorageLocation({ warehouseId: warehouse.id, endpointId: endpoint.id, ...values }))
+}
+
+/** A location with its stock, and whether its Endpoint is still on the published map. */
+export interface LocationDetail extends Omit<StorageLocationDetail, 'location'> {
+  location: StorageLocationView
+}
+
+/** GET /api/warehouse/storage-locations/{id}. */
+export async function getLocationDetail(location: StorageLocationView): Promise<LocationDetail> {
+  if (MOCK_MODE) {
+    return { location, endpointMapVersionId: null, onPublishedMap: true, heldContainers: 0, activeTransports: 0, stock: [] }
+  }
+  const detail = await getStorageLocation(location.id)
+  return { ...detail, location: toLocationView(detail.location) }
+}
+
+/** PUT /api/warehouse/storage-locations/{id}: name and map Endpoint; the code cannot change. */
+export async function updateLocation(location: StorageLocationView, body: { name: string; endpoint: FreeEndpoint }): Promise<StorageLocationView> {
+  if (MOCK_MODE) {
+    return { ...location, name: body.name, endpointId: body.endpoint.id, endpointCode: body.endpoint.code, endpointName: body.endpoint.name }
+  }
+  return toLocationView(await updateStorageLocation(location.id, { name: body.name, endpointId: body.endpoint.id }))
 }
 
 /** POST .../storage-locations/{id}/status. Rejects with `storage_location_in_use` while the location holds Containers. */

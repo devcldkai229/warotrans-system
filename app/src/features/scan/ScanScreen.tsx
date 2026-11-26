@@ -116,8 +116,8 @@ export function InspectionSheet({ task, container, onClose, onDone }: { task: Pi
     } catch (failure) { setError(getUserErrorMessage(failure, 'The inspection could not be saved.')); }
     finally { setPending(false); }
   };
-  return <BottomSheet onClose={onClose} accessibilityLabel="Inspection">
-    <View style={styles.sheet}>
+  return <BottomSheet onClose={onClose} accessibilityLabel="Inspection" autoHeight>
+    <ScrollView style={styles.inspectScroll} contentContainerStyle={styles.sheet} keyboardShouldPersistTaps="handled">
       <Text variant="title">Inspection</Text>
       <Text variant="caption" color="textSecondary">{container.barcode} · {task.jobNo}</Text>
       <View style={styles.choiceRow}>
@@ -130,7 +130,7 @@ export function InspectionSheet({ task, container, onClose, onDone }: { task: Pi
           <Text variant="bodyMedium" fontWeight="700" color={result === 'FAILED' ? '#ffffff' : colors.textPrimary}>Failed</Text>
         </Pressable>
       </View>
-      <Text variant="caption" color="textSecondary">Fail each bad container first. Passed closes the inspection for every container still on the robot.</Text>
+      <Text variant="caption" color="textSecondary">This result is for this container only. The job goes on once every container on the robot has one.</Text>
       {result === 'FAILED' ? <>
         <Text variant="bodyMedium" fontWeight="700">What is wrong? (one or more)</Text>
         <ProblemCodeChips problems={problemsFor('INSPECTION')} selected={defects} onChange={setDefects} multiple disabled={pending} />
@@ -138,6 +138,8 @@ export function InspectionSheet({ task, container, onClose, onDone }: { task: Pi
       </> : null}
       <TextInput style={styles.note} value={note} onChangeText={setNote} multiline placeholder={t(result === 'FAILED' ? 'What is wrong (required)' : 'Note (optional)')}
         placeholderTextColor={colors.textMuted} accessibilityLabel="Inspection note" />
+    </ScrollView>
+    <View style={styles.inspectFooter}>
       {error ? <Text variant="caption" color="dangerText" accessibilityRole="alert">{error}</Text> : null}
       <Button title="Save Inspection" fullWidth loading={pending} disabled={!result || pending} onPress={() => { void submit(); }} />
     </View>
@@ -156,5 +158,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   choice: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 18, borderRadius: radii.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface },
   choicePass: { backgroundColor: colors.success, borderColor: colors.success },
   choiceFail: { backgroundColor: colors.danger, borderColor: colors.danger },
+  inspectScroll: { flexGrow: 0, flexShrink: 1 },
+  inspectFooter: { gap: 8, paddingHorizontal: 20, paddingTop: 10 },
   note: { minHeight: 80, padding: 12, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, color: colors.textPrimary, textAlignVertical: 'top', backgroundColor: colors.surface },
 });

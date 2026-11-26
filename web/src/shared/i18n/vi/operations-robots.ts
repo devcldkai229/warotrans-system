@@ -47,6 +47,7 @@ export const vi_operations_robots: Record<string, string> = {
   'Zones': 'Vùng',
   'Lanes': 'Làn',
   'Traffic': 'Giao thông',
+  'Floor tiles (35 cm)': 'Lưới sàn (35 cm)',
   'Endpoints always shown': 'Luôn hiện endpoint',
   'lethal (wall / keep-out)': 'cấm (tường / vùng cấm)',
   'inscribed: robot centre may not enter': 'inscribed: tâm robot không được vào',

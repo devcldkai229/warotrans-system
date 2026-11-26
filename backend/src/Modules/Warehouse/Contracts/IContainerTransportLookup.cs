@@ -11,4 +11,10 @@ public interface IContainerTransportLookup
     Task<IReadOnlySet<Guid>> GetContainersInActiveTransportAsync(
         IReadOnlyCollection<Guid> containerIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Open Transport Request lines that pick up from, or deliver to, this location or its Endpoint.</summary>
+    Task<int> CountActiveTransportsAtLocationAsync(
+        Guid storageLocationId,
+        Guid endpointId,
+        CancellationToken cancellationToken = default);
 }

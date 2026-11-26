@@ -16,6 +16,8 @@ using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
+using WaroTrans.WorkflowExecution.Features.Shared;
+using WaroTrans.WorkflowExecution.Seeding;
 using WaroTrans.WorkflowExecution.Features.RobotCare;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -175,6 +177,114 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(JobStepStatus.WAITING, (await _db.JobSteps.SingleAsync(s => s.Id == waiting)).Status);
         var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
         Assert.Equal(JobContainerStatus.ASSIGNED, job.JobContainers.Single(c => c.ContainerId == C2).Status);
+    }
+
+    // ------------------------------------------------------------------ quality inspection, one container at a time
+
+    private static readonly Guid I = Guid.NewGuid();
+
+    /// <summary>The shipped INBOUND workflow with checkQuality: C1 and C2 from A, inspected at I, to D and E.</summary>
+    private async Task<Guid> ProvisionInboundWithInspectionAsync()
+    {
+        _db = CreateDb();
+        string? dir = null;
+        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null && dir is null; d = d.Parent)
+        {
+            var candidate = Path.Combine(d.FullName, "seed", "workflows");
+            if (Directory.Exists(candidate)) dir = candidate;
+        }
+
+        var file = Path.Combine(dir ?? throw new DirectoryNotFoundException("backend/seed/workflows"), "INBOUND.json");
+        var model = WorkflowMapping.ToDefinitionModel(WorkflowSeedJson.Read(file, await File.ReadAllTextAsync(file)));
+        model.Variables.Single(v => v.Key == "inboundEndpointId").ConfiguredValue = JsonSerializer.SerializeToElement(A);
+        model.Variables.Single(v => v.Key == "inspectionEndpointId").ConfiguredValue = JsonSerializer.SerializeToElement(I);
+        var workflow = await SeedPublishedAsync(_db, model);
+        _mapVersionId = Guid.NewGuid();
+        foreach (var (id, x) in new[] { (A, 1.0), (I, 5.0), (D, 9.0), (E, 9.5) })
+        {
+            _navigation.Poses[id] = new EndpointPoseSnapshot(id, _mapVersionId, $"EP-{x}", x, 2.0, 0.0, true);
+        }
+
+        _requests.Status = "QUEUED";
+        var snapshot = new TransportRequestExecutionSnapshot(
+            Guid.NewGuid(), Guid.NewGuid(), _mapVersionId, workflow.Id, 1,
+            new Dictionary<string, JsonElement> { ["checkQuality"] = JsonSerializer.SerializeToElement(true) },
+            [
+                new TransportRequestDetailSnapshot(Guid.NewGuid(), 1, C1, null, A, null, null, D, null),
+                new TransportRequestDetailSnapshot(Guid.NewGuid(), 2, C2, null, A, null, null, E, null)
+            ]);
+        var result = await new JobRuntimeProvisioner(_db, new FakeJobCodeGenerator())
+            .ProvisionAsync(snapshot, new CollectThenDeliverJobBatchPlanner().Plan(snapshot));
+        _fleet.AddRobot(_mapVersionId);
+        return result.Jobs.Single().JobId;
+    }
+
+    /// <summary>Runs the Job up to the waiting inspection (robot at A, both picked up, robot at the inspection point).</summary>
+    private async Task<Guid> AtInspectionAsync(Guid jobId)
+    {
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        var stepId = await CurrentStepIdAsync(jobId);
+        Assert.Equal("CONFIRM_QUALITY_INSPECTION", (await StepsAsync(jobId)).First(s => s.Status == JobStepStatus.WAITING).Key);
+        return stepId;
+    }
+
+    private async Task<JobStep> StepAsync(Guid stepId)
+    {
+        _db.ChangeTracker.Clear();
+        return await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+    }
+
+    [Fact]
+    public async Task Passing_one_container_keeps_the_inspection_waiting_for_the_other()
+    {
+        var jobId = await ProvisionInboundWithInspectionAsync();
+        var inspection = await AtInspectionAsync(jobId);
+
+        await Engine().ConfirmHumanStepAsync(inspection, C1, HumanConfirmationSource.StaffApp(_staff, "ok", inspectionResult: "PASSED"));
+
+        Assert.Equal(JobStepStatus.WAITING, (await StepAsync(inspection)).Status);
+
+        await Engine().ConfirmHumanStepAsync(inspection, C2, HumanConfirmationSource.StaffApp(_staff, "ok", inspectionResult: "PASSED"));
+
+        var done = await StepAsync(inspection);
+        Assert.Equal(JobStepStatus.COMPLETED, done.Status);
+        Assert.Equal("PASSED", done.OutputValues["inspectionResult"].GetString());
+        Assert.Equal(2, done.OutputValues["inspectionPassed"].GetArrayLength());
+    }
+
+    [Fact]
+    public async Task A_failed_and_a_passed_container_close_the_inspection_and_only_the_failed_one_leaves()
+    {
+        var jobId = await ProvisionInboundWithInspectionAsync();
+        var inspection = await AtInspectionAsync(jobId);
+
+        await Engine().ConfirmHumanStepAsync(inspection, C1, HumanConfirmationSource.StaffApp(_staff, "ok", inspectionResult: "PASSED"));
+        await Engine().ConfirmHumanStepAsync(inspection, C2,
+            HumanConfirmationSource.StaffApp(_staff, "wet", inspectionResult: "FAILED", defects: [ContainerProblemCodes.ContentsDamaged]));
+
+        var done = await StepAsync(inspection);
+        Assert.Equal(JobStepStatus.COMPLETED, done.Status);
+        Assert.Equal("PASSED", done.OutputValues["inspectionResult"].GetString());
+        Assert.Equal(1, done.OutputValues["inspectionFailures"].GetArrayLength());
+        Assert.Equal(1, done.OutputValues["inspectionPassed"].GetArrayLength());
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobContainerStatus.ONBOARD, job.JobContainers.Single(c => c.ContainerId == C1).Status);
+        Assert.Equal(JobContainerStatus.FAILED, job.JobContainers.Single(c => c.ContainerId == C2).Status);
+    }
+
+    [Fact]
+    public async Task Passed_without_a_container_still_passes_every_container_as_older_clients_send_it()
+    {
+        var jobId = await ProvisionInboundWithInspectionAsync();
+        var inspection = await AtInspectionAsync(jobId);
+
+        await Engine().ConfirmHumanStepAsync(inspection, null, HumanConfirmationSource.StaffApp(_staff, "all fine", inspectionResult: "PASSED"));
+
+        Assert.Equal(JobStepStatus.COMPLETED, (await StepAsync(inspection)).Status);
     }
 
     [Fact]

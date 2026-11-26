@@ -10,6 +10,7 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { createProduct, setProductStatus } from './api'
 import { AddButton, SectionHead } from './SectionHead'
+import { ProductDetailDialog } from './ProductDetailDialog'
 import { t } from '@/shared/i18n'
 /** Web-only limit: the API accepts up to 128 characters, the console keeps barcodes to 13 digits (EAN-13 length). */
 
@@ -39,6 +40,8 @@ export function ProductsSection({ products, setProducts, categories, loadState }
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [openedId, setOpenedId] = useState<string | null>(null)
+  const opened = openedId ? products.find((product) => product.id === openedId) : undefined
 
   const categoryName = (id: string) => categories.find((category) => category.id === id)?.name ?? '—'
 
@@ -152,7 +155,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
         </thead>
         <tbody>
           {visible.map((product) => (
-            <Tr key={product.id}>
+            <Tr key={product.id} onClick={() => setOpenedId(product.id)}>
               <Td className="font-mono text-xs">{product.sku}</Td>
               <Td tone="strong">{product.name}</Td>
               <Td tone="faint">{product.description ?? '—'}</Td>
@@ -166,7 +169,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
                 </StatusBadge>
               </Td>
               <Td>
-                <div className="flex justify-end">
+                <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                   <Can permission={PERMISSIONS.warehouseWrite}>
                     <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} disabled={busyId === product.id} onClick={() => toggle(product)}>
                       {product.isActive ? t('Deactivate') : t('Activate')}
@@ -189,6 +192,16 @@ export function ProductsSection({ products, setProducts, categories, loadState }
           ) : null}
         </tbody>
       </Table>
+
+      {opened ? (
+        <ProductDetailDialog
+          product={opened}
+          products={products}
+          categories={categories}
+          onSaved={(saved) => setProducts((current) => current.map((item) => (item.id === saved.id ? saved : item)))}
+          onClose={() => setOpenedId(null)}
+        />
+      ) : null}
 
       {draft ? (
         <Dialog title={t('Add product')} submitLabel={t('Create product')} busy={busy} onClose={() => setDraft(null)} onSubmit={save}>

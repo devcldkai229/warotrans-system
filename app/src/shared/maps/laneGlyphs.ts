@@ -42,18 +42,25 @@ export function offsetPolyline(points: DrawPoint[], offset: number): DrawPoint[]
   })
 }
 
+/** Length of a polyline (drawing units). */
+export function polylineLength(points: DrawPoint[]): number {
+  return points.slice(1).reduce((sum, b, i) => sum + Math.hypot(b.x - points[i].x, b.y - points[i].y), 0)
+}
+
 /**
- * Chevrons every `spacing` along the polyline (the first half a spacing in, one in the middle when the lane is
- * shorter than a spacing), `offset` to the right of the drawing direction; `reverse` points them back.
+ * Chevrons `spacing` apart along the polyline, `offset` to the right of the drawing direction; `reverse` points them
+ * back. They are spread evenly between the two ends and each keeps `size / 2` of room before an end, so an arrow of
+ * length `size` never sticks out of its lane; a lane too short for two gets one, in the middle.
  */
-export function chevronsAlong(points: DrawPoint[], spacing: number, offset = 0, reverse = false): Chevron[] {
+export function chevronsAlong(points: DrawPoint[], spacing: number, offset = 0, reverse = false, size = 0): Chevron[] {
   const line = offsetPolyline(points, offset)
   const lengths = line.slice(1).map((b, i) => Math.hypot(b.x - line[i].x, b.y - line[i].y))
   const total = lengths.reduce((s, l) => s + l, 0)
   if (total <= 0 || spacing <= 0) return []
-  const stations: number[] = []
-  if (total < spacing) stations.push(total / 2)
-  else for (let s = spacing / 2; s < total; s += spacing) stations.push(s)
+  const room = Math.max(0, total - size)
+  const count = Math.floor(room / spacing) + 1
+  const first = (total - (count - 1) * spacing) / 2
+  const stations = Array.from({ length: count }, (_, i) => first + i * spacing)
 
   const out: Chevron[] = []
   let segment = 0
@@ -96,25 +103,31 @@ export const ONE_WAY_SPACING = 0.92
 export const TWO_WAY_SIZE = 0.30
 export const TWO_WAY_SPACING = 0.88
 
+/** An arrow is never longer than this share of its lane, so a short lane still shows it whole. */
+export const MAX_ARROW_SHARE_OF_LENGTH = 0.6
+
 export function laneGlyphs(points: DrawPoint[], width: number, direction: 'ONE_WAY' | 'BIDIRECTIONAL'): LaneGlyphs {
   const half = width / 2
   const sides: [DrawPoint[], DrawPoint[]] = [offsetPolyline(points, -half), offsetPolyline(points, half)]
+  const length = polylineLength(points)
   if (direction === 'ONE_WAY') {
+    const size = Math.min(width * ONE_WAY_SIZE, length * MAX_ARROW_SHARE_OF_LENGTH)
     return {
-      chevrons: chevronsAlong(points, width * ONE_WAY_SPACING),
-      chevronSize: width * ONE_WAY_SIZE,
+      chevrons: chevronsAlong(points, width * ONE_WAY_SPACING, 0, false, size),
+      chevronSize: size,
       divider: null,
       sides,
     }
   }
   // Two-way: one arrow row per half lane, scaled to stay cleanly inside each half.
   const spacing = width * TWO_WAY_SPACING
+  const size = Math.min(width * TWO_WAY_SIZE, length * MAX_ARROW_SHARE_OF_LENGTH)
   return {
     chevrons: [
-      ...chevronsAlong(points, spacing, width / 4), // right half: drawing direction
-      ...chevronsAlong(points, spacing, -width / 4, true), // left half: back
+      ...chevronsAlong(points, spacing, width / 4, false, size), // right half: drawing direction
+      ...chevronsAlong(points, spacing, -width / 4, true, size), // left half: back
     ],
-    chevronSize: width * TWO_WAY_SIZE,
+    chevronSize: size,
     divider: points,
     sides,
   }

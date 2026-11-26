@@ -132,6 +132,11 @@ export function listContainers(params: {
   status?: string
   /** Only containers on a CONFIRMED voucher of this type, newest voucher first. */
   voucherType?: 'INBOUND' | 'OUTBOUND'
+  /** Only containers of this product. */
+  productId?: string
+  /** Only containers standing at, or counted in the stock of, this location (and `levelNo`). */
+  storageLocationId?: string
+  levelNo?: number
   skip?: number
   take?: number
 }) {
@@ -141,6 +146,9 @@ export function listContainers(params: {
   if (params.eligibleOnly !== undefined) query.set('eligibleOnly', String(params.eligibleOnly))
   if (params.status) query.set('status', params.status)
   if (params.voucherType) query.set('voucherType', params.voucherType)
+  if (params.productId) query.set('productId', params.productId)
+  if (params.storageLocationId) query.set('storageLocationId', params.storageLocationId)
+  if (params.levelNo !== undefined) query.set('levelNo', String(params.levelNo))
   if (params.skip) query.set('skip', String(params.skip))
   if (params.take !== undefined) query.set('take', String(params.take))
   return apiFetch<ListContainersResponse>(`/api/warehouse/containers?${query}`)
@@ -158,6 +166,39 @@ export function listInventory(params: { warehouseId: string; search?: string; sk
 export function createStorageLocation(body: { warehouseId: string; endpointId: string; code: string; name: string }) {
   return apiFetch<StorageLocationListItem>('/api/warehouse/storage-locations', {
     method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/** One product's balance at a location and level. */
+export interface StorageLocationStockItem {
+  productId: string
+  sku: string
+  productName: string
+  levelNo: number
+  containerCount: number
+}
+
+export interface StorageLocationDetail {
+  location: StorageLocationListItem
+  endpointMapVersionId: string | null
+  /** False when the Endpoint belongs to an older map version than the published one. */
+  onPublishedMap: boolean
+  /** Containers standing at the location now. */
+  heldContainers: number
+  /** Open Transport Request lines going to or from the location: its Endpoint cannot change meanwhile. */
+  activeTransports: number
+  stock: StorageLocationStockItem[]
+}
+
+export function getStorageLocation(id: string) {
+  return apiFetch<StorageLocationDetail>(`/api/warehouse/storage-locations/${id}`)
+}
+
+/** The code cannot change. Rejects with `endpoint_already_used`, `endpoint_not_on_published_map`, `endpoint_disabled` or `storage_location_in_transport`. */
+export function updateStorageLocation(id: string, body: { name: string; endpointId: string }) {
+  return apiFetch<StorageLocationListItem>(`/api/warehouse/storage-locations/${id}`, {
+    method: 'PUT',
     body: JSON.stringify(body),
   })
 }

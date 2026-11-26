@@ -29,5 +29,6 @@ export const CONTAINER_PROBLEMS: ContainerProblem[] = [
 
 /** What a person can report here: from outside at a pickup or drop-off, everything at the inspection. */
 export function problemsFor(scope: ContainerProblemScope): ContainerProblem[] {
-  return scope === 'INSPECTION' ? CONTAINER_PROBLEMS : CONTAINER_PROBLEMS.filter(problem => problem.scope === 'HANDOVER');
+  const outside = CONTAINER_PROBLEMS.filter(problem => problem.scope === 'HANDOVER');
+  return scope === 'INSPECTION' ? [...CONTAINER_PROBLEMS.filter(problem => problem.scope === 'INSPECTION'), ...outside] : outside;
 }
