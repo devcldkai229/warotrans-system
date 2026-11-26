@@ -37,7 +37,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ConnectionStrings__PostgreSQL": "Host=127.0.0.1;Port=5433;Database=warotrans;Username=warotrans;Password=warotrans",
         "Traffic__Mode": "Semantic",
-        "Traffic__SemanticMapDirectory": "E:/programming/my_project/warotrans/ros2_ws/src/warotrans_navigation/maps/map_one_v027",
+        "Traffic__SemanticMapDirectory": "E:/programming/my_project/warotrans/ros2_ws/src/warotrans_navigation/maps/map_one_v028",
         "Traffic__SemanticHorizonMeters": "20",
         "Traffic__StandingMarginMeters": "0.0",
         "Traffic__SemanticZoneMarginMeters": "0.05",
