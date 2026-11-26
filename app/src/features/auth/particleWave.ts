@@ -8,9 +8,8 @@ const COLUMN_COUNT = 42;
 const BUCKET_COUNT = 10;
 const MAX_OPACITY = 0.46;
 
-export const PARTICLE_WAVE_TOP = 0.42;
+const PARTICLE_WAVE_TOP = 0.42;
 export const PARTICLE_WAVE_STILL_TIME = 0.8;
-export const PARTICLE_PATH_SCALE = 100;
 export const PARTICLE_OPACITIES = Array.from({ length: BUCKET_COUNT }, (_, index) =>
   Number((((index + 0.5) / BUCKET_COUNT) * MAX_OPACITY).toFixed(3)),
 );
@@ -30,12 +29,10 @@ export function particleWaveColor(isDark: boolean) {
 }
 
 export function particleWaveTime(elapsedMs: number) {
-  'worklet';
   return (elapsedMs / 1000) * 0.58;
 }
 
 export function createParticleBuckets(): number[][] {
-  'worklet';
   return Array.from({ length: BUCKET_COUNT }, () => []);
 }
 
@@ -46,7 +43,6 @@ export function updateParticleBuckets(
   time: number,
   isDark: boolean,
 ) {
-  'worklet';
   for (const bucket of buckets) bucket.length = 0;
 
   const baseGain = isDark ? 0.36 : 0.40;
@@ -78,22 +74,4 @@ export function updateParticleBuckets(
       buckets[bucketIndex].push(x, y, radius);
     }
   }
-}
-
-export function buildParticlePaths(width: number, height: number, time: number, isDark: boolean) {
-  'worklet';
-  const buckets = createParticleBuckets();
-  updateParticleBuckets(buckets, width, height, time, isDark);
-
-  return buckets.map((coords) => {
-    let path = '';
-    for (let index = 0; index < coords.length; index += 3) {
-      const x = Math.round(coords[index] * PARTICLE_PATH_SCALE);
-      const y = Math.round(coords[index + 1] * PARTICLE_PATH_SCALE);
-      const r = Math.round(coords[index + 2] * PARTICLE_PATH_SCALE);
-      const diameter = r * 2;
-      path += `M${x + r} ${y}a${r} ${r} 0 1 0 ${-diameter} 0 ${r} ${r} 0 1 0 ${diameter} 0z`;
-    }
-    return path;
-  });
 }
