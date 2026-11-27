@@ -19,7 +19,7 @@ import { LoginParticleWave } from './LoginParticleWave';
 
 const ENTER_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const WAVE_EASE = Easing.inOut(Easing.sin);
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+const IS_WEB = Platform.OS === 'web';
 
 /**
  * Antigravity-inspired Login Backdrop with rolling 3D particle wave motion.
@@ -60,7 +60,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
       toValue: 1,
       duration: reducedMotion ? 150 : 450,
       easing: ENTER_EASE_OUT,
-      useNativeDriver: USE_NATIVE_DRIVER,
+      useNativeDriver: !IS_WEB,
     });
     enterAnim.start();
 
@@ -77,13 +77,13 @@ export const LoginBackdrop = memo(function LoginBackdrop({
           toValue: 1,
           duration: 6500,
           easing: WAVE_EASE,
-          useNativeDriver: USE_NATIVE_DRIVER,
+          useNativeDriver: !IS_WEB,
         }),
         Animated.timing(mistPhase, {
           toValue: 0,
           duration: 6500,
           easing: WAVE_EASE,
-          useNativeDriver: USE_NATIVE_DRIVER,
+          useNativeDriver: !IS_WEB,
         }),
       ]),
     );
@@ -269,7 +269,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
           </Svg>
         </Animated.View>
 
-        <LoginParticleWave isDark={isDark} reducedMotion={reducedMotion} />
+        <LoginParticleWave isDark={isDark} reducedMotion={IS_WEB && reducedMotion} />
       </Animated.View>
     </View>
   );

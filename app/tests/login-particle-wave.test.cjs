@@ -43,3 +43,36 @@ test('native SVG paths reproduce the canvas particles at the same size and time'
     }
   }
 });
+
+test('login particle waves always animate on mobile and respect reduced motion on web', () => {
+  const React = require('react');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const reactNativeWeb = require('react-native-web');
+
+  for (const platform of ['ios', 'android', 'web']) {
+    for (const systemReducedMotion of [true, false]) {
+      const load = createLoader({
+        react: { ...React, useState: () => [systemReducedMotion, () => {}] },
+        'react-native': { ...reactNativeWeb, Platform: { OS: platform } },
+        'react-native-svg': {
+          __esModule: true,
+          default: 'svg',
+          Defs: 'defs',
+          LinearGradient: 'linearGradient',
+          RadialGradient: 'radialGradient',
+          Rect: 'rect',
+          Stop: 'stop',
+        },
+        './LoginParticleWave': {
+          LoginParticleWave: ({ reducedMotion }) => React.createElement('canvas', {
+            'data-reduced-motion': reducedMotion,
+          }),
+        },
+      });
+      const { LoginBackdrop } = load('src/features/auth/LoginBackdrop.tsx');
+      const markup = renderToStaticMarkup(React.createElement(LoginBackdrop, { isDark: false }));
+      const expected = platform === 'web' && systemReducedMotion;
+      assert.ok(markup.includes(`data-reduced-motion="${expected}"`), `${platform}, system reduced motion ${systemReducedMotion}`);
+    }
+  }
+});
