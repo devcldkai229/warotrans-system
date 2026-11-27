@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { ArrowUpRight, Box, CheckCircle2, ClipboardCheck, FileText, MapPin, PackageCheck, ScanLine, Truck, XCircle } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Scanner } from '../../shared/scan/Scanner';
@@ -45,9 +45,9 @@ export function ScanScreen() {
   };
 
   return <View style={styles.screen}>
-    {!target ? <Scanner key={round} visible title="Scan QR Code" manualLabel="Code" placeholder="Or type a code"
+    {!target ? <Scanner key={round} visible title="Scan QR Code"
+      manualLabel="Code" placeholder="Enter code or barcode" busy={resolving}
       onClose={goBack} onScanResult={(raw, scanned) => { void onScan(raw, scanned); }} /> : null}
-    {resolving ? <View style={styles.resolving}><ActivityIndicator color="#fff" /><Text color="#ffffff">Looking up…</Text></View> : null}
     {target ? <ContainerCard container={target.container} tasks={target.tasks}
       onClose={goBack} onScanAgain={() => { setTarget(null); setRound(value => value + 1); }}
       onInspect={setInspect}

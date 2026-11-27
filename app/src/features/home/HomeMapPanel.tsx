@@ -26,6 +26,8 @@ interface Props {
   jobMapVersionId?: string;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
   onManualDrive?: (robotId: string) => void;
+  floatingSheetBottom?: number;
+  onEndpointSheetOpenChange?: (open: boolean) => void;
 }
 
 export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props) {
@@ -45,7 +47,8 @@ export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props
 
   return <View style={style}>
     {map && !error ? <OperationalMap map={map} fleet={props.fleet || []} updateMode={props.updateMode} selectedRobotId={props.selectedRobotId}
-      onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} jobContext={scopedJobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive} /> : <View style={[styles.state, { bottom: bottomInset }]}>
+      onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} jobContext={scopedJobContext} onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}
+      floatingSheetBottom={props.floatingSheetBottom} onEndpointSheetOpenChange={props.onEndpointSheetOpenChange} /> : <View style={[styles.state, { bottom: bottomInset }]}>
       {loading ? <><ActivityIndicator color={colors.primary} /><Text variant="body">Loading Warehouse Map…</Text></> : <>
         <View style={styles.icon}><MapPin size={22} color={colors.textSecondary} strokeWidth={1.9} /></View>
         <Text variant="headline" textAlign="center">{error ? 'Map Could Not Be Loaded' : warehouseId ? 'No Published Map' : 'Your Warehouse Map'}</Text>

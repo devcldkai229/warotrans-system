@@ -109,5 +109,5 @@ export function RobotChargingPanel({ robotId, robotCode, status, batteryPercent,
 }
 
 const styles = StyleSheet.create({
-  box: { gap: 6, marginTop: 12 },
+  box: { gap: 8 },
 });

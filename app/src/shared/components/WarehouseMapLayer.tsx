@@ -26,6 +26,8 @@ interface Props {
   jobContext?: MapJobContext;
   onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
   onManualDrive?: (robotId: string) => void;
+  floatingSheetBottom?: number;
+  onEndpointSheetOpenChange?: (open: boolean) => void;
 }
 
 /** Actual map raster and surveyed geometry. Robot poses use the map's origin, rotation and resolution. */
@@ -33,7 +35,8 @@ export function WarehouseMapLayer(props: Props) {
   return interactiveMapEnabled && props.map && hasMapCalibration(props.map) ? <MapViewport map={props.map} robots={props.robots}
     selectedRobot={props.selectedRobot} onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={props.contentInsets}
     showHeader={false} fullBleed={true} jobContext={props.jobContext}
-    onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}/> : <LegacyWarehouseMapLayer {...props}/>;
+    onLocalizeRobot={props.onLocalizeRobot} onManualDrive={props.onManualDrive}
+    floatingSheetBottom={props.floatingSheetBottom} onEndpointSheetOpenChange={props.onEndpointSheetOpenChange}/> : <LegacyWarehouseMapLayer {...props}/>;
 }
 
 function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, loading = false, contentInsets = { top: 0, bottom: 0 }, updateMode = 'polling' }: Props) {
