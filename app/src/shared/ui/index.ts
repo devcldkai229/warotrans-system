@@ -39,3 +39,6 @@ export { ReasonSheet } from './ReasonSheet';
 
 export { ToggleSwitch } from './ToggleSwitch';
 export type { ToggleSwitchProps } from './ToggleSwitch';
+
+export { BarcodeScanField } from './BarcodeScanField';
+export type { BarcodeScanFieldProps } from './BarcodeScanField';

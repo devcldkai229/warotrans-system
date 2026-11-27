@@ -25,6 +25,7 @@ export function stopStatus(stop: JobStop): string {
   if (statuses.some(status => status === 'EXECUTING')) return 'EXECUTING';
   if (statuses.some(status => status === 'PAUSED')) return 'PAUSED';
   if (statuses.length && statuses.every(status => status === 'COMPLETED' || status === 'SKIPPED')) return 'COMPLETED';
+  if (statuses.some(status => status === 'CANCELLED')) return 'CANCELLED';
   if (statuses.some(status => status === 'COMPLETED')) return 'EXECUTING';
   return 'PENDING';
 }

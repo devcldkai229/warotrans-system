@@ -8,7 +8,6 @@ import {
   LifeBuoy,
   MapPin,
   RefreshCw,
-  ScanLine,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
@@ -53,6 +52,7 @@ import type {
 } from '../../shared/types/contracts';
 import {
   Button,
+  BarcodeScanField,
   Card,
   EmptyState,
   StatusPill,
@@ -60,6 +60,7 @@ import {
   TextField,
 } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { humanizeEndpointCode, JOB_STATUS_PRESENTATION } from '../jobs/jobData';
 import {
   candidateReasonLabel,
   eligibleRecoveryEndpoints,
@@ -428,9 +429,10 @@ export function PayloadRecoveryScreen() {
     typeof params?.robot === 'string' ? params.robot : 'Unknown Robot',
   );
   const rescueRobotCode = robotCodeFor(recovery?.toRobotId, 'Not Assigned');
-  const destinationLabel =
+  const rawDestination =
     (typeof job?.contextValues?.destinationEndpointCode === 'string' && job.contextValues.destinationEndpointCode)
-    || '—';
+    || '';
+  const destinationLabel = humanizeEndpointCode(rawDestination, '—');
   const containerMeta = Array.isArray(job?.contextValues?.containerMeta)
     ? (job.contextValues.containerMeta as { containerId: string; code?: string; product?: string; location?: string }[])
     : [];
@@ -569,6 +571,44 @@ export function PayloadRecoveryScreen() {
           />
         ) : (
           <View style={styles.stack}>
+            <View style={styles.stepperRow}>
+              {[
+                {
+                  label: '1. Claim',
+                  active: phase === 'claim',
+                  done: phase !== 'claim' && phase !== 'claimed_other',
+                },
+                {
+                  label: '2. Rescue',
+                  active: phase === 'assign' || phase === 'en_route',
+                  done: phase === 'confirm' || phase === 'resolved',
+                },
+                {
+                  label: '3. Confirm',
+                  active: phase === 'confirm',
+                  done: phase === 'resolved',
+                },
+              ].map((stepItem) => (
+                <View
+                  key={stepItem.label}
+                  style={[
+                    styles.stepperPill,
+                    stepItem.done && styles.stepperPillDone,
+                    stepItem.active && styles.stepperPillActive,
+                  ]}
+                >
+                  <Text
+                    variant="caption"
+                    fontWeight={stepItem.active || stepItem.done ? '600' : '500'}
+                    color={stepItem.done ? 'successText' : stepItem.active ? 'primaryText' : 'textSecondary'}
+                    numberOfLines={1}
+                  >
+                    {stepItem.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
             {/* Incident Banner */}
             <Card padding="md" gap={10}>
               <View style={styles.rowBetween}>
@@ -684,7 +724,9 @@ export function PayloadRecoveryScreen() {
               <Card padding="md" gap={10}>
                 <Text variant="headline">Recovery Case Closed</Text>
                 <Text variant="body" color="textSecondary">
-                  This job is currently {job.status}. Open Job Details to inspect or continue execution.
+                  {t('This job is currently {status}. Open Job Details to inspect or continue execution.', {
+                    status: t(JOB_STATUS_PRESENTATION[job.status]?.label ?? job.status),
+                  })}
                 </Text>
                 {recovery.confirmedByRobotId ? (
                   <Text variant="caption" color="successText">
@@ -746,7 +788,7 @@ export function PayloadRecoveryScreen() {
                   ) : (
                     <>
                       <Text variant="caption" color="textSecondary">
-                        {t('Case v{version} claimed by you.', { version: recovery.version })}
+                        Claimed by you
                       </Text>
                       {canRelease ? (
                         <Button
@@ -785,31 +827,20 @@ export function PayloadRecoveryScreen() {
                     <Text variant="body" color="textSecondary">
                       Scan each container you take off. Keep it for the rescue robot, or take it off the Job: back to storage or quarantined.
                     </Text>
-                    <View style={styles.scanRow}>
-                      <View style={styles.flexText}>
-                        <TextField
-                          value={manualCode}
-                          onChangeText={setManualCode}
-                          placeholder={t('Scan or type container barcode')}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          editable={!busy}
-                          accessibilityLabel={t('Container Barcode')}
-                        />
-                      </View>
-                      <Button
-                        title="Verify"
-                        variant="outline"
-                        size="sm"
-                        disabled={!!busy || !manualCode.trim()}
-                        onPress={() => {
-                          triggerHaptic('tap');
-                          applyRecoveryScan(manualCode);
-                        }}
-                      />
-                    </View>
-                    <Button title="Open Scanner" variant="outline" size="sm" disabled={!!busy} onPress={() => setScannerOpen(true)} />
-                    {scanError ? <Text variant="caption" color="dangerText">{scanError}</Text> : null}
+                    <BarcodeScanField
+                      value={manualCode}
+                      onChangeText={(text) => {
+                        setManualCode(text);
+                        if (scanError) setScanError(null);
+                      }}
+                      onSubmit={() => {
+                        triggerHaptic('tap');
+                        applyRecoveryScan(manualCode);
+                      }}
+                      onOpenScanner={() => setScannerOpen(true)}
+                      error={scanError}
+                      disabled={!!busy}
+                    />
                     <Text variant="caption" color="textSecondary">
                       {t('{done} of {total} scanned', { done: scanProgress.done, total: scanProgress.total })}
                     </Text>
@@ -828,7 +859,10 @@ export function PayloadRecoveryScreen() {
                       />
                     ) : null}
                     {canResolveManually ? (
-                      <View style={{ gap: 8 }}>
+                      <View style={styles.secondaryDispositionGroup}>
+                        <Text variant="caption" color="textSecondary">
+                          Or remove cargo from this job
+                        </Text>
                         <Button
                           title="Return to Storage"
                           variant="outline"
@@ -956,11 +990,11 @@ export function PayloadRecoveryScreen() {
                                   pressed && styles.pressed,
                                 ]}
                               >
-                                <Text variant="label" color={selected ? 'primaryText' : 'textPrimary'} style={styles.monoText}>
-                                  {ep.code}
-                                </Text>
-                                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                                <Text variant="bodyMedium" fontWeight="600" color={selected ? 'primaryText' : 'textPrimary'} numberOfLines={1}>
                                   {ep.name}
+                                </Text>
+                                <Text variant="code" color="textSecondary" numberOfLines={1}>
+                                  {ep.code}
                                 </Text>
                               </Pressable>
                             );
@@ -1052,33 +1086,23 @@ export function PayloadRecoveryScreen() {
 
                     {recovery.robotArrived ? (
                       <>
-                        <View style={styles.scanRow}>
-                          <View style={styles.flexText}>
-                            <TextField
-                              value={manualCode}
-                              onChangeText={setManualCode}
-                              placeholder={t('Scan or type container barcode')}
-                              autoCapitalize="characters"
-                              autoCorrect={false}
-                              editable={!busy}
-                              accessibilityLabel={t('Container Barcode')}
-                            />
-                          </View>
-                          <Button
-                            title="Verify"
-                            variant="outline"
-                            size="sm"
-                            disabled={!!busy || !manualCode.trim()}
-                            onPress={() => {
-                              triggerHaptic('tap');
-                              applyRecoveryScan(manualCode);
-                            }}
-                          />
-                        </View>
-
-                        {scanError ? (
-                          <Text variant="caption" color="dangerText">{scanError}</Text>
-                        ) : null}
+                        <BarcodeScanField
+                          value={manualCode}
+                          onChangeText={(text) => {
+                            setManualCode(text);
+                            if (scanError) setScanError(null);
+                          }}
+                          onSubmit={() => {
+                            triggerHaptic('tap');
+                            applyRecoveryScan(manualCode);
+                          }}
+                          onOpenScanner={() => {
+                            triggerHaptic('tap');
+                            setScannerOpen(true);
+                          }}
+                          error={scanError}
+                          disabled={!!busy}
+                        />
 
                         <TextField
                           label="Transfer Note (Optional)"
@@ -1100,18 +1124,6 @@ export function PayloadRecoveryScreen() {
                         ) : null}
 
                         <View style={styles.actionRow}>
-                          <Button
-                            title={scannerOpen ? 'Scanning…' : 'Scan Container'}
-                            icon={ScanLine}
-                            variant="outline"
-                            size="md"
-                            disabled={!!busy}
-                            onPress={() => {
-                              triggerHaptic('tap');
-                              setScannerOpen(true);
-                            }}
-                            style={styles.flexBtn}
-                          />
                           {canArmButton ? (
                             <Button
                               title={t('Arm Rescue Robot Button ({done}/{total})', {
@@ -1218,6 +1230,37 @@ const createStyles = (colors: ThemeColors) =>
     },
     stack: {
       gap: 14,
+    },
+    stepperRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    stepperPill: {
+      flex: 1,
+      minHeight: 32,
+      paddingHorizontal: 8,
+      borderRadius: radii.pill,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepperPillActive: {
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primaryLight,
+    },
+    stepperPillDone: {
+      borderColor: colors.successBorder,
+      backgroundColor: colors.successBg,
+    },
+    secondaryDispositionGroup: {
+      gap: 8,
+      paddingTop: 10,
+      marginTop: 4,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
     },
     rowBetween: {
       flexDirection: 'row',

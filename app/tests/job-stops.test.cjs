@@ -32,3 +32,29 @@ test('each container keeps its own pick-up and delivery place', () => {
     'CTN-2': { from: 'EP-INBOUND', to: 'EP-SHELF-A-2' },
   });
 });
+
+test('stopStatus classifies cancelled stops as CANCELLED rather than PENDING', () => {
+  const cancelledStop = {
+    key: 'stop-cancel',
+    action: 'PICKUP',
+    endpointCode: 'EP-SHELF-C-1',
+    tasks: [],
+    steps: [
+      { step: step('s1', 'MOVE', 'PICKUP', 'CANCELLED') },
+      { step: step('s2', 'HUMAN_INTERACTION', 'PICKUP_CONFIRM', 'CANCELLED') },
+    ],
+  };
+  assert.equal(stopStatus(cancelledStop), 'CANCELLED');
+
+  const partialCancelledStop = {
+    key: 'stop-partial-cancel',
+    action: 'PICKUP',
+    endpointCode: 'EP-SHELF-C-1',
+    tasks: [],
+    steps: [
+      { step: step('s1', 'MOVE', 'PICKUP', 'COMPLETED') },
+      { step: step('s2', 'HUMAN_INTERACTION', 'PICKUP_CONFIRM', 'CANCELLED') },
+    ],
+  };
+  assert.equal(stopStatus(partialCancelledStop), 'CANCELLED');
+});

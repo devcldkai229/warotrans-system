@@ -1,25 +1,37 @@
+import { AlertTriangle, Bot, Check, ChevronRight, Lock, Route, ScanLine } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import {
   beginHandoverStop, claimHandoverStop, confirmHandoverStop, extendHandoverStop,
   getHandoverStopAction, getUserErrorMessage, isHandoverStopActionAllowed, releaseHandoverStop,
 } from '../../shared/api';
 import { t } from '../../shared/i18n';
+import { useLanguage } from '../../shared/i18n/LanguageContext';
 import { Scanner, type ScanFeedback } from '../../shared/scan/Scanner';
 import type { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import type { HandoverStopResponse, JobDetailResponse } from '../../shared/types/contracts';
-import { Button, Card, StatusPill, Text, TextField } from '../../shared/ui';
+import { BarcodeScanField, Button, Card, StatusPill, Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import {
   handoverStopOwnerState, handoverStopPhase, recordStopScan, stopScanProgress,
 } from './handoverData';
+import { formatDeadlineCountdown, formatJobClockTime, type JobContainerItem } from './jobData';
+
+export interface HandoverStopJobMeta {
+  workflowName?: string;
+  routeLabel?: string;
+  robotCode?: string;
+  productSummary?: string;
+  otherContainers?: JobContainerItem[];
+}
 
 interface HandoverStopCardProps {
   stop: HandoverStopResponse;
   placeName: string;
+  jobMeta?: HandoverStopJobMeta;
   accountId?: string | null;
   canOperate: boolean;
   showJobLink?: boolean;
@@ -30,12 +42,10 @@ interface HandoverStopCardProps {
   onRefresh: () => Promise<unknown>;
 }
 
-const formatClock = (value?: string | null) =>
-  value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
-
 export function HandoverStopCard({
   stop,
   placeName,
+  jobMeta,
   accountId,
   canOperate,
   showJobLink = false,
@@ -45,7 +55,8 @@ export function HandoverStopCard({
   onReportContainerProblem,
   onRefresh,
 }: HandoverStopCardProps) {
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
+  const { language } = useLanguage();
   const [busy, setBusy] = useState<'claim' | 'begin' | 'release' | 'extend' | 'confirm' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scannedByContainerId, setScannedByContainerId] = useState<Record<string, string>>({});
@@ -53,6 +64,17 @@ export function HandoverStopCard({
   const [manualCode, setManualCode] = useState('');
   const [scanError, setScanError] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [showOtherContainers, setShowOtherContainers] = useState(false);
+
+  const hasDeadline = Boolean(stop.beginDeadline || stop.workDeadline);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!hasDeadline) return;
+    setNowMs(Date.now());
+    const timer = setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [hasDeadline, stop.beginDeadline, stop.workDeadline]);
 
   useEffect(() => {
     setError(null);
@@ -64,6 +86,7 @@ export function HandoverStopCard({
     setManualCode('');
     setScanError(null);
     setScannerOpen(false);
+    setShowOtherContainers(false);
   }, [stop.id, stop.moveId]);
 
   const owner = handoverStopOwnerState(stop, accountId);
@@ -79,6 +102,7 @@ export function HandoverStopCard({
   const waitingForArrival = owner === 'mine' && !stop.beganAt && beginAction?.reason === 'handover_robot_not_ready';
   const blockedByZonePriority = owner === 'free' && !canClaim && claimAction?.reason === 'handover_work_zone_priority';
   const progress = stopScanProgress(stop, scannedByContainerId);
+  const isScanningPhase = owner === 'mine' && Boolean(stop.beganAt) && canOperate;
 
   const runAction = async (
     kind: 'claim' | 'begin' | 'release' | 'extend',
@@ -170,6 +194,46 @@ export function HandoverStopCard({
     .map(item => item.barcode || item.containerId)
     .join(', ');
 
+  const workCountdown = formatDeadlineCountdown(stop.workDeadline, nowMs, language);
+  const workClock = formatJobClockTime(stop.workDeadline);
+  const beginCountdown = formatDeadlineCountdown(stop.beginDeadline, nowMs, language);
+  const beginClock = formatJobClockTime(stop.beginDeadline);
+  const startedClock = formatJobClockTime(stop.beganAt);
+  const otherContainers = jobMeta?.otherContainers ?? [];
+
+  const titleBlock = (
+    <View style={styles.titleBlock}>
+      <View style={styles.titleMainRow}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text variant="headline" numberOfLines={2}>
+            {showJobLink ? `${stop.jobNo} · ${placeName}` : placeName}
+          </Text>
+          {jobMeta?.routeLabel || jobMeta?.robotCode ? (
+            <View style={styles.jobMetaInline}>
+              {jobMeta.routeLabel ? (
+                <View style={styles.jobMetaPiece}>
+                  <Route size={13} color={colors.textMuted} style={{ flexShrink: 0 }} />
+                  <Text variant="caption" color="textSecondary" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {jobMeta.routeLabel}
+                  </Text>
+                </View>
+              ) : null}
+              {jobMeta.robotCode ? (
+                <View style={styles.jobMetaPiece}>
+                  <Bot size={13} color={colors.textMuted} style={{ flexShrink: 0 }} />
+                  <Text variant="code" color="textSecondary">{jobMeta.robotCode}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+        {showJobLink && onOpenJob ? (
+          <ChevronRight size={18} color={colors.textMuted} style={{ flexShrink: 0 }} />
+        ) : null}
+      </View>
+    </View>
+  );
+
   return (
     <Card
       padding="md"
@@ -189,18 +253,35 @@ export function HandoverStopCard({
         />
       </View>
 
-      <Text variant="headline" numberOfLines={2}>
-        {showJobLink ? `${stop.jobNo} · ${placeName}` : placeName}
-      </Text>
+      {showJobLink && onOpenJob ? (
+        <Pressable
+          onPress={() => {
+            triggerHaptic('tap');
+            onOpenJob();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`${t('Open Job')} · ${stop.jobNo}`}
+          style={({ pressed }) => [pressed && { opacity: 0.72 }]}
+        >
+          {titleBlock}
+        </Pressable>
+      ) : titleBlock}
 
-      <View style={styles.metaBox}>
-        <Text variant="caption" color="textSecondary">
-          {t('Containers ({count})', { count: stop.containers.length })}
-        </Text>
-        <Text variant="body" color="textPrimary" style={styles.monoText}>
-          {containersList || '—'}
-        </Text>
-      </View>
+      {!isScanningPhase ? (
+        <View style={styles.metaBox}>
+          <Text variant="caption" color="textSecondary">
+            {t('Containers ({count})', { count: stop.containers.length })}
+          </Text>
+          <Text variant="body" color="textPrimary" style={styles.monoText}>
+            {containersList || '—'}
+          </Text>
+          {jobMeta?.productSummary ? (
+            <Text variant="caption" color="textSecondary" numberOfLines={1}>
+              {jobMeta.productSummary}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.statusGroup}>
         <Text
@@ -213,20 +294,62 @@ export function HandoverStopCard({
 
         {stop.beganAt ? (
           <>
-            <Text variant="caption" color="successText">
+            <Text variant="caption" color="successText" style={styles.tabularNums}>
               {t('Handover Started: {time} · Ownership locked until completion', {
-                time: formatClock(stop.beganAt),
+                time: startedClock ?? '—',
               })}
             </Text>
             {stop.workDeadline ? (
-              <Text variant="caption" color="warningText">
-                {t('Work Deadline: {time}', { time: formatClock(stop.workDeadline) })}
-              </Text>
+              <View style={styles.deadlineRow}>
+                <Text
+                  variant="caption"
+                  color={workCountdown?.urgent ? 'dangerText' : 'warningText'}
+                  fontWeight={workCountdown?.urgent ? '600' : '500'}
+                  style={[styles.deadlineText, styles.tabularNums]}
+                >
+                  {t('Work Deadline: {time}', {
+                    time: workCountdown
+                      ? `${workCountdown.text}${workClock ? ` · ${workClock}` : ''}`
+                      : (workClock ?? '—'),
+                  })}
+                </Text>
+                {canExtend ? (
+                  <Pressable
+                    onPress={() => {
+                      void runAction('extend', () =>
+                        extendHandoverStop(stop.jobId, stop.id, stop.moveId, stop.version),
+                      );
+                    }}
+                    disabled={!!busy}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Extend Time')}
+                    style={({ pressed }) => [
+                      styles.extendChip,
+                      pressed && styles.extendChipPressed,
+                      !!busy && styles.extendChipDisabled,
+                    ]}
+                  >
+                    <Text variant="caption" color="primaryText" fontWeight="600">
+                      {busy === 'extend' ? t('Extending…') : t('Extend')}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
           </>
         ) : stop.beginDeadline ? (
-          <Text variant="caption" color="warningText">
-            {t('Begin Deadline: {time}', { time: formatClock(stop.beginDeadline) })}
+          <Text
+            variant="caption"
+            color={beginCountdown?.urgent ? 'dangerText' : 'warningText'}
+            fontWeight={beginCountdown?.urgent ? '600' : '500'}
+            style={styles.tabularNums}
+          >
+            {t('Begin Deadline: {time}', {
+              time: beginCountdown
+                ? `${beginCountdown.text}${beginClock ? ` · ${beginClock}` : ''}`
+                : (beginClock ?? '—'),
+            })}
           </Text>
         ) : owner === 'mine' && !stop.robotReadyAt ? (
           <Text variant="caption" color="textSecondary">
@@ -237,7 +360,7 @@ export function HandoverStopCard({
         {blockedByZonePriority ? (
           <Text variant="caption" color="warningText">
             {stop.warehouseOpensAt
-              ? t('Reserved for work zone until {time}', { time: formatClock(stop.warehouseOpensAt) })
+              ? t('Reserved for work zone until {time}', { time: formatJobClockTime(stop.warehouseOpensAt) ?? '—' })
               : t('Reserved for Staff in this work zone')}
           </Text>
         ) : null}
@@ -249,7 +372,7 @@ export function HandoverStopCard({
         ) : null}
       </View>
 
-      {owner === 'mine' && stop.beganAt && canOperate ? (
+      {isScanningPhase ? (
         <View style={styles.confirmSection}>
           {confirmAction?.reason === 'handover_issue_blocking' ? (
             <View style={styles.blockingNotice}>
@@ -264,9 +387,16 @@ export function HandoverStopCard({
             const isScanned = Boolean(scannedByContainerId[item.containerId]);
             return (
               <View key={item.containerId} style={styles.manifestRow}>
-                <Text variant="body" color="textPrimary" style={styles.monoText}>
-                  {label}
-                </Text>
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text variant="body" color="textPrimary" style={styles.monoText}>
+                    {label}
+                  </Text>
+                  {stop.containers.length === 1 && jobMeta?.productSummary ? (
+                    <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                      {jobMeta.productSummary}
+                    </Text>
+                  ) : null}
+                </View>
                 <StatusPill
                   status={isScanned ? 'CONFIRMED' : 'WAITING'}
                   label={isScanned ? t('Scanned') : t('Scan Required')}
@@ -278,80 +408,115 @@ export function HandoverStopCard({
             );
           })}
 
-          <View style={styles.scanRow}>
-            <View style={styles.scanInputWrap}>
-              <TextField
-                value={manualCode}
-                onChangeText={setManualCode}
-                placeholder={t('Scan or type container barcode')}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                editable={!busy}
-                accessibilityLabel={t('Container Barcode')}
-              />
-            </View>
+          <BarcodeScanField
+            value={manualCode}
+            onChangeText={(text) => {
+              setManualCode(text);
+              if (scanError) setScanError(null);
+            }}
+            onSubmit={() => {
+              triggerHaptic('tap');
+              applyScan(manualCode);
+            }}
+            onOpenScanner={() => {
+              triggerHaptic('tap');
+              setScannerOpen(true);
+            }}
+            error={scanError}
+            disabled={!!busy}
+          />
+
+          {scanError && onReportContainerProblem ? (
             <Button
-              title="Verify"
+              title="Report Wrong Container"
               variant="outline"
               size="sm"
-              disabled={!!busy || !manualCode.trim()}
-              onPress={() => {
-                triggerHaptic('tap');
-                applyScan(manualCode);
-              }}
+              disabled={!!busy}
+              onPress={() =>
+                onReportContainerProblem('WRONG_CONTAINER', progress.missingIds[0] || stop.containers[0]?.containerId)
+              }
             />
-          </View>
-
-          {scanError ? (
-            <View style={styles.scanErrorGroup}>
-              <Text variant="caption" color="dangerText">{scanError}</Text>
-              {onReportContainerProblem ? (
-                <Button
-                  title="Report Wrong Container"
-                  variant="outline"
-                  size="sm"
-                  disabled={!!busy}
-                  onPress={() =>
-                    onReportContainerProblem('WRONG_CONTAINER', progress.missingIds[0] || stop.containers[0]?.containerId)
-                  }
-                />
-              ) : null}
-            </View>
           ) : null}
 
-          <View style={styles.actionsRow}>
+          {progress.complete ? (
             <Button
-              title={scannerOpen ? 'Scanning…' : 'Scan Container'}
-              variant="outline"
-              size="sm"
+              title={t('Confirm Handover ({done}/{total})', { done: progress.scanned, total: progress.total })}
+              variant="primary"
+              size="md"
+              fullWidth
+              icon={Check}
+              loading={busy === 'confirm'}
+              disabled={!!busy || !canConfirm}
+              onPress={() => {
+                void handleConfirmAll();
+              }}
+            />
+          ) : (
+            <Button
+              title={t('Scan Container ({done}/{total})', { done: progress.scanned, total: progress.total })}
+              variant="primary"
+              size="md"
+              fullWidth
+              icon={ScanLine}
               disabled={!!busy}
               onPress={() => {
                 triggerHaptic('tap');
                 setScannerOpen(true);
               }}
-              style={styles.actionBtn}
             />
-            <Button
-              title={t('Confirm All ({done}/{total})', { done: progress.scanned, total: progress.total })}
-              variant="primary"
-              size="sm"
-              loading={busy === 'confirm'}
-              disabled={!!busy || !canConfirm || !progress.complete}
-              onPress={() => {
-                void handleConfirmAll();
-              }}
-              style={styles.actionBtn}
-            />
-          </View>
+          )}
 
           {onReportContainerProblem && !scanError && progress.missingIds.length > 0 ? (
-            <Button
-              title="Report Missing Container"
-              variant="ghost"
-              size="sm"
-              disabled={!!busy}
+            <Pressable
               onPress={() => onReportContainerProblem('MISSING_CONTAINER', progress.missingIds[0])}
-            />
+              disabled={!!busy}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.missingLink, pressed && { opacity: 0.7 }]}
+            >
+              <AlertTriangle size={14} color={colors.dangerText} />
+              <Text variant="caption" color="dangerText" fontWeight="600">
+                Report Missing Container
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {otherContainers.length > 0 ? (
+        <View style={styles.otherSection}>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              setShowOtherContainers((prev) => !prev);
+            }}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showOtherContainers }}
+            style={styles.otherHeader}
+          >
+            <View style={styles.otherHeaderLeft}>
+              <Lock size={13} color={colors.textMuted} />
+              <Text variant="caption" color="textSecondary" fontWeight="600">
+                {otherContainers.length === 1
+                  ? t('1 other container remaining onboard')
+                  : t('{count} other containers remaining onboard', { count: otherContainers.length })}
+              </Text>
+            </View>
+            <Text variant="caption" color="primaryText" fontWeight="600">
+              {showOtherContainers ? t('Hide') : t('Show')}
+            </Text>
+          </Pressable>
+          {showOtherContainers ? (
+            <View style={styles.otherList}>
+              {otherContainers.map((item) => (
+                <View key={item.code} style={styles.otherRow}>
+                  <Text variant="code" color="textPrimary" style={{ flex: 1 }}>{item.code}</Text>
+                  <Text variant="caption" color="textSecondary" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {item.product !== 'Unknown Product' ? item.product : ''}
+                  </Text>
+                </View>
+              ))}
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -362,7 +527,7 @@ export function HandoverStopCard({
         </Text>
       ) : null}
 
-      {(canClaim || canBegin || canRelease || canExtend || (showJobLink && onOpenJob)) ? (
+      {(canClaim || canBegin || canRelease) ? (
         <View style={styles.actionsRow}>
           {canClaim ? (
             <Button
@@ -396,22 +561,6 @@ export function HandoverStopCard({
             />
           ) : null}
 
-          {canExtend ? (
-            <Button
-              title="Extend Time"
-              variant="outline"
-              size="sm"
-              loading={busy === 'extend'}
-              disabled={!!busy}
-              onPress={() => {
-                void runAction('extend', () =>
-                  extendHandoverStop(stop.jobId, stop.id, stop.moveId, stop.version),
-                );
-              }}
-              style={styles.actionBtn}
-            />
-          ) : null}
-
           {canRelease ? (
             <Button
               title="Release Turn"
@@ -423,20 +572,6 @@ export function HandoverStopCard({
                 void runAction('release', () =>
                   releaseHandoverStop(stop.jobId, stop.id, stop.moveId, stop.version),
                 );
-              }}
-              style={styles.actionBtn}
-            />
-          ) : null}
-
-          {showJobLink && onOpenJob ? (
-            <Button
-              title="Open Job"
-              variant="ghost"
-              size="sm"
-              disabled={!!busy}
-              onPress={() => {
-                triggerHaptic('tap');
-                onOpenJob();
               }}
               style={styles.actionBtn}
             />
@@ -468,8 +603,30 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'space-between',
       gap: 8,
     },
+    titleBlock: {
+      gap: 4,
+    },
+    titleMainRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    jobMetaInline: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    jobMetaPiece: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      flexShrink: 1,
+      minWidth: 0,
+    },
     metaBox: {
-      gap: 2,
+      gap: 3,
       padding: 10,
       borderRadius: radii.sm,
       backgroundColor: colors.surfaceSubtle,
@@ -478,13 +635,44 @@ const createStyles = (colors: ThemeColors) =>
       fontFamily: typography.fontMono,
       fontWeight: '600',
     },
+    tabularNums: {
+      fontVariant: ['tabular-nums'],
+    },
     statusGroup: {
       gap: 4,
     },
-    confirmSection: {
+    deadlineRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 8,
-      paddingTop: 6,
-      borderTopWidth: 1,
+      marginTop: 2,
+    },
+    deadlineText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    extendChip: {
+      minHeight: 32,
+      paddingHorizontal: 10,
+      borderRadius: radii.pill,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primaryLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    extendChipPressed: {
+      opacity: 0.78,
+    },
+    extendChipDisabled: {
+      opacity: 0.5,
+    },
+    confirmSection: {
+      gap: 10,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
     },
     blockingNotice: {
@@ -499,19 +687,46 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: 8,
-      paddingVertical: 4,
+      paddingVertical: 2,
     },
-    scanRow: {
+    missingLink: {
+      minHeight: 44,
       flexDirection: 'row',
-      alignItems: 'flex-end',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    otherSection: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      paddingTop: 8,
+      gap: 6,
+    },
+    otherHeader: {
+      minHeight: 32,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 8,
     },
-    scanInputWrap: {
+    otherHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
       flex: 1,
       minWidth: 0,
     },
-    scanErrorGroup: {
+    otherList: {
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: radii.sm,
+      padding: 8,
       gap: 6,
+    },
+    otherRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
     },
     actionsRow: {
       flexDirection: 'row',

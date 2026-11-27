@@ -5,9 +5,15 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 
 const {
   EMPTY_JOB,
+  extractJobCancelReason,
+  formatDeadlineCountdown,
   formatHistoryDateHeader,
   formatJobClockTime,
+  formatJobDuration,
+  formatPlaceDisplayName,
   groupHistoryJobs,
+  humanizeEndpointCode,
+  humanizeProblemCode,
 } = createLoader()('src/features/jobs/jobData.ts');
 
 test('formatJobClockTime returns local 24h HH:mm and null for missing or invalid timestamps', () => {
@@ -87,4 +93,61 @@ test('groupHistoryJobs sorts newest-first by completedAt/createdAtUtc and keeps 
       'JOB:job-no-ts',
     ],
   );
+});
+
+test('humanizeEndpointCode and formatPlaceDisplayName avoid leaking raw EP-* codes', () => {
+  assert.equal(humanizeEndpointCode('EP-SHELF-B-2'), 'Shelf B 2');
+  assert.equal(humanizeEndpointCode('EP-OUTBOUND'), 'Outbound');
+  assert.equal(humanizeEndpointCode('Shelf C 1'), 'Shelf C 1');
+  assert.equal(humanizeEndpointCode(undefined, 'Pickup'), 'Pickup');
+
+  const mockPlaces = {
+    name: (key, fallback = '—') => {
+      if (!key) return fallback;
+      if (key === 'EP-SHELF-A-1') return 'Shelf A 1';
+      return key;
+    },
+  };
+  assert.equal(formatPlaceDisplayName(mockPlaces, 'EP-SHELF-A-1'), 'Shelf A 1');
+  assert.equal(formatPlaceDisplayName(mockPlaces, 'EP-SHELF-B-2'), 'Shelf B 2');
+  assert.equal(formatPlaceDisplayName(mockPlaces, undefined, 'Drop-off'), 'Drop-off');
+});
+
+test('formatJobDuration, extractJobCancelReason, formatDeadlineCountdown, and humanizeProblemCode', () => {
+  assert.equal(formatJobDuration('2026-11-27T10:00:00Z', '2026-11-27T10:03:12Z', 'en'), '3m 12s');
+  assert.equal(formatJobDuration('2026-11-27T10:00:00Z', '2026-11-27T10:03:12Z', 'vi'), '3p 12g');
+  assert.equal(formatJobDuration('2026-11-27T10:00:00Z', '2026-11-27T10:00:42Z', 'en'), '42s');
+  assert.equal(formatJobDuration('2026-11-27T10:05:00Z', '2026-11-27T10:00:00Z', 'en'), null);
+
+  assert.equal(
+    extractJobCancelReason({
+      failureMessage: null,
+      tasks: [
+        { steps: [{ status: 'CANCELLED', errorMessage: 'Transport request cancelled: tạo nhầm' }] },
+      ],
+    }),
+    'Transport request cancelled: tạo nhầm',
+  );
+  assert.equal(
+    extractJobCancelReason({ failureMessage: 'Cancelled by supervisor', tasks: [] }),
+    'Cancelled by supervisor',
+  );
+
+  const nowMs = Date.parse('2026-11-27T10:00:00Z');
+  assert.deepEqual(
+    plain(formatDeadlineCountdown('2026-11-27T10:00:54Z', nowMs, 'en')),
+    { text: '00:54 left', urgent: false, expired: false },
+  );
+  assert.deepEqual(
+    plain(formatDeadlineCountdown('2026-11-27T10:00:20Z', nowMs, 'vi')),
+    { text: 'Còn 00:20', urgent: true, expired: false },
+  );
+  assert.deepEqual(
+    plain(formatDeadlineCountdown('2026-11-27T09:59:50Z', nowMs, 'vi')),
+    { text: 'Quá hạn', urgent: true, expired: true },
+  );
+
+  assert.equal(humanizeProblemCode('WRONG_CONTAINER'), 'Wrong Container');
+  assert.equal(humanizeProblemCode('MISSING_CONTAINER'), 'Missing Container');
+  assert.equal(humanizeProblemCode('CUSTOM_STOP_TIMEOUT'), 'Custom Stop Timeout');
 });

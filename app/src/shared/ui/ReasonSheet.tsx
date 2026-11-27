@@ -37,11 +37,11 @@ export function ReasonSheet({ title, message, confirmTitle, required = false, da
         <Text variant="headline">{title}</Text>
         {message ? <Text variant="body" color={colors.textSecondary}>{message}</Text> : null}
         <TextField label={required ? 'Reason' : 'Reason (Optional)'} value={reason} onChangeText={setReason}
-          placeholder="Why?" multiline maxLength={500} editable={!busy} />
+          placeholder="Enter a short reason…" multiline maxLength={500} editable={!busy} />
         {error ? <Text variant="body" color={colors.dangerText}>{error}</Text> : null}
         <Button title={confirmTitle} variant={danger ? 'danger' : 'primary'} onPress={submit} loading={busy}
           disabled={required && !reason.trim()} fullWidth />
-        <Button title="Close" variant="outline" onPress={onClose} disabled={busy} fullWidth />
+        <Button title="Close" variant="ghost" onPress={onClose} disabled={busy} fullWidth />
       </View>
     </BottomSheet>
   );

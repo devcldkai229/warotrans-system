@@ -8,10 +8,12 @@ import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import type { IssueReportResponse } from '../../shared/types/contracts';
-import { Button, Card, StatusPill, Text, TextField } from '../../shared/ui';
+import { BarcodeScanField, Button, Card, StatusPill, Text, TextField } from '../../shared/ui';
+import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { IssuePhotoSection } from '../safety/IssuePhotoSection';
 import { isBlockingHandoverIssue } from './handoverData';
+import { humanizeProblemCode } from './jobData';
 
 interface JobIssuesCardProps {
   issues: IssueReportResponse[];
@@ -37,10 +39,11 @@ export function JobIssuesCard({
   const [errorsById, setErrorsById] = useState<Record<string, string | null>>({});
 
   if (!issues.length) return null;
+  const activeIssue = issues.find(item => item.id === activeIssueId) ?? null;
 
   const openResolveForm = (issue: IssueReportResponse) => {
     triggerHaptic('tap');
-    setActiveIssueId(prev => (prev === issue.id ? null : issue.id));
+    setActiveIssueId(issue.id);
     setScannedBarcode('');
     setResolution('');
     setErrorsById(prev => ({ ...prev, [issue.id]: null }));
@@ -116,7 +119,6 @@ export function JobIssuesCard({
           issue.allowedTransitions.includes('RESOLVED') &&
           (canManageIssues || (canCreateIssue && Boolean(issue.problemCode)));
         const canClose = canManageIssues && issue.allowedTransitions.includes('CLOSED');
-        const isFormOpen = activeIssueId === issue.id;
         const busy = busyId === issue.id;
         const issueError = errorsById[issue.id];
 
@@ -126,12 +128,17 @@ export function JobIssuesCard({
               <Text variant="label" style={styles.monoText}>
                 {issue.code}
               </Text>
-              <StatusPill status={issue.status} size="sm" dot />
+              <View style={styles.pillGroup}>
+                {blocking ? (
+                  <StatusPill status="WAITING" label="Blocks Handover" tone="danger" size="sm" />
+                ) : null}
+                <StatusPill status={issue.status} size="sm" dot />
+              </View>
             </View>
 
             {issue.problemCode || issue.containerId ? (
               <Text variant="caption" color={blocking ? 'dangerText' : 'textSecondary'}>
-                {issue.problemCode ? `${issue.problemCode}${blocking ? ` · ${t('Blocks Handover')}` : ''}` : ''}
+                {issue.problemCode ? t(humanizeProblemCode(issue.problemCode)) : ''}
                 {issue.problemCode && issue.containerId ? ' · ' : ''}
                 {issue.containerId ? containerLabel(issue.containerId) : ''}
               </Text>
@@ -154,71 +161,13 @@ export function JobIssuesCard({
               onRefreshIssue={onIssueUpdated}
             />
 
-            {issueError ? (
+            {issueError && activeIssueId !== issue.id ? (
               <Text variant="caption" color="dangerText">
                 {issueError}
               </Text>
             ) : null}
 
-            {isFormOpen ? (
-              <View style={styles.resolveForm}>
-                {issue.problemCode ? (
-                  <View style={styles.scanRow}>
-                    <View style={styles.flex}>
-                      <TextField
-                        value={scannedBarcode}
-                        onChangeText={setScannedBarcode}
-                        label="Expected Container Barcode"
-                        placeholder={t('Scan or type container barcode')}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        editable={!busy}
-                      />
-                    </View>
-                    <Button
-                      title="Scan"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onPress={() => {
-                        triggerHaptic('tap');
-                        setScannerIssueId(issue.id);
-                      }}
-                    />
-                  </View>
-                ) : null}
-
-                <TextField
-                  value={resolution}
-                  onChangeText={setResolution}
-                  label="Resolution Note"
-                  placeholder={t('Describe how this container issue was corrected')}
-                  multiline
-                  editable={!busy}
-                />
-
-                <View style={styles.actionsRow}>
-                  <Button
-                    title="Confirm Resolution"
-                    variant="primary"
-                    size="sm"
-                    loading={busy}
-                    disabled={busy || !resolution.trim() || (Boolean(issue.problemCode) && !scannedBarcode.trim())}
-                    onPress={() => {
-                      void handleResolve(issue);
-                    }}
-                    style={styles.flexBtn}
-                  />
-                  <Button
-                    title="Cancel"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onPress={() => setActiveIssueId(null)}
-                  />
-                </View>
-              </View>
-            ) : (canResolve || canClose) ? (
+            {(canResolve || canClose) ? (
               <View style={styles.actionsRow}>
                 {canResolve ? (
                   <Button
@@ -248,6 +197,80 @@ export function JobIssuesCard({
           </View>
         );
       })}
+
+      {activeIssue ? (
+        <BottomSheet
+          autoHeight
+          onClose={() => {
+            if (!busyId) setActiveIssueId(null);
+          }}
+          accessibilityLabel="Verify and resolve issue"
+        >
+          <View style={styles.sheetBody}>
+            <View style={{ gap: 2 }}>
+              <Text variant="headline">Verify & Resolve</Text>
+              <Text variant="caption" color="textSecondary">
+                {activeIssue.code}
+                {activeIssue.containerId ? ` · ${containerLabel(activeIssue.containerId)}` : ''}
+              </Text>
+            </View>
+
+            {activeIssue.problemCode ? (
+              <BarcodeScanField
+                label="Expected Container Barcode"
+                value={scannedBarcode}
+                onChangeText={setScannedBarcode}
+                onSubmit={() => {}}
+                onOpenScanner={() => {
+                  triggerHaptic('tap');
+                  setScannerIssueId(activeIssue.id);
+                }}
+                showVerifyButton={false}
+                disabled={busyId === activeIssue.id}
+              />
+            ) : null}
+
+            <TextField
+              value={resolution}
+              onChangeText={setResolution}
+              label="Resolution Note"
+              placeholder="Describe how this container issue was corrected"
+              multiline
+              editable={busyId !== activeIssue.id}
+            />
+
+            {errorsById[activeIssue.id] ? (
+              <Text variant="caption" color="dangerText">
+                {errorsById[activeIssue.id]}
+              </Text>
+            ) : null}
+
+            <Button
+              title="Confirm Resolution"
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={busyId === activeIssue.id}
+              disabled={
+                busyId === activeIssue.id ||
+                !resolution.trim() ||
+                (Boolean(activeIssue.problemCode) && !scannedBarcode.trim())
+              }
+              onPress={() => {
+                void handleResolve(activeIssue);
+              }}
+            />
+            <Button
+              title="Cancel"
+              variant="ghost"
+              size="md"
+              fullWidth
+              disabled={busyId === activeIssue.id}
+              onPress={() => setActiveIssueId(null)}
+            />
+          </View>
+        </BottomSheet>
+      ) : null}
 
       <Scanner
         visible={Boolean(scannerIssueId)}
@@ -284,24 +307,19 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'space-between',
       gap: 8,
     },
+    pillGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
     monoText: {
       fontFamily: typography.fontMono,
       fontWeight: '700',
     },
-    resolveForm: {
-      gap: 10,
-      paddingTop: 8,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    scanRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      gap: 8,
-    },
-    flex: {
-      flex: 1,
-      minWidth: 0,
+    sheetBody: {
+      padding: 20,
+      gap: 12,
     },
     actionsRow: {
       flexDirection: 'row',

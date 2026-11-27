@@ -2,31 +2,21 @@ import { useAuth } from '../auth/authContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  BatteryCharging,
-  CheckCircle2,
-  Clock3,
-  Layers,
   Lock,
-  MapPin,
   Maximize2,
   MoreVertical,
-  Navigation,
   PauseCircle,
   RefreshCw,
-  SlidersHorizontal,
-  Truck,
-  UserMinus,
-  X,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { ThemeColors } from '../../shared/theme/colors';
@@ -36,21 +26,22 @@ import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
-import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { Button, Card, ProgressMeter, ReasonSheet, StatusPill, Text } from '../../shared/ui';
-import { AmrCargoBayVisualizer } from './AmrCargoBayVisualizer';
+import { Button, Card, EmptyState, ReasonSheet, StatusPill, Text } from '../../shared/ui';
 import { JobContainersCard, JobOverviewCard, JobStepsAccordion, ReportProblemCard } from './JobDetailParts';
 import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
 import { useQuery } from '@tanstack/react-query';
-import { JobTaskDetailSheet } from './JobTaskDetailSheet';
 import {
   AppJobItem,
   EMPTY_JOB,
+  extractJobCancelReason,
+  formatHistoryDateHeader,
+  formatJobClockTime,
+  formatPlaceDisplayName,
+  humanizeProblemCode,
   isStopStateInFlight,
   isTerminalJobStatus,
   isUncertainCommandError,
-  JOB_STATUS_PRESENTATION,
   mapJobDetailToAppJobItem,
   stopStatePresentation,
   submitIssueAndOptionalPause,
@@ -63,7 +54,6 @@ import { JobIssuesCard } from './JobIssuesCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal, type IssueSubmitInput } from '../monitoring/IssueReportingModal';
 import {
-  cancelRobotCommand,
   getJobAction,
   getJobDetail,
   getRobot,
@@ -80,6 +70,7 @@ import {
   requestPayloadRecovery,
 } from '../../shared/api';
 import { localizeServerMessage, t } from '../../shared/i18n';
+import { useLanguage } from '../../shared/i18n/LanguageContext';
 import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { InspectionSheet } from '../scan/ScanScreen';
@@ -89,6 +80,8 @@ export function JobDetailScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, goBack, params } = useNavigation();
   const topInset = useTopInset();
+  const insets = useSafeAreaInsets();
+  const { language } = useLanguage();
   const { session } = useAuth();
   const [isLoadingJob, setIsLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
@@ -112,16 +105,11 @@ export function JobDetailScreen() {
   const [showMenu, setShowMenu] = useState(false);
   const [showFullJobNo, setShowFullJobNo] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showOtherContainers, setShowOtherContainers] = useState(false);
-  const [showNudgeControls, setShowNudgeControls] = useState(false);
   const [isStartingJob, setIsStartingJob] = useState(false);
   const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
   const [pauseNotice, setPauseNotice] = useState<string | null>(null);
-  const [bottomConsoleHeight, setBottomConsoleHeight] = useState(160);
-
-  /** Shared safety hold context */
-  const { isHolding, toggleHold } = useSafetyHold();
+  const [bottomConsoleHeight, setBottomConsoleHeight] = useState(110);
 
   const jobId = params?.jobId || '';
   const [job, setJob] = useState<AppJobItem>(EMPTY_JOB);
@@ -142,7 +130,7 @@ export function JobDetailScreen() {
   useEffect(() => {
     let isMounted = true;
     setIsLoadingJob(true); setJobError(null); setJobRefreshError(null); setJob(EMPTY_JOB);
-    setSelectedTaskId(null); setShowFullJobNo(false); setVerificationStepId(null);
+    setShowFullJobNo(false); setVerificationStepId(null);
     setPauseSheetOpen(false); setPauseNotice(null);
     setIsVerifyOpen(isInitialVerify); setIsIssueOpen(isInitialIssue);
     if (!jobId) { setJobError('No job was selected.'); setIsLoadingJob(false); return; }
@@ -228,11 +216,10 @@ export function JobDetailScreen() {
   const isWaiting = Boolean(job.hasWaitingHandover);
   const isQueuedOrCreated = job.status === 'CREATED' || job.status === 'QUEUED';
   const isEnRoute = job.status === 'RUNNING' && !isWaiting;
-  const isCompleted = job.status === 'COMPLETED';
-  const selectedRobotUuid = job.assignedRobotId;
-  const assignedRobotLabel = job.assignedRobotId && (!job.robot || job.robot === 'Unassigned')
-    ? job.assignedRobotId : job.robot || 'Awaiting Robot Assignment';
-  const selectedTask = job.tasks.find(task => task.id === selectedTaskId);
+  const isTerminal = isTerminalJobStatus(job.status);
+  const hasAssignedRobot = Boolean(job.assignedRobotId || (job.robot && job.robot !== 'Unassigned'));
+  const canShowMap = job.status !== 'CANCELLED' || hasAssignedRobot;
+  const cancelReason = job.status === 'CANCELLED' ? extractJobCancelReason(job) : null;
   const verificationTask = job.tasks.find(task => task.steps.some(step => step.id === verificationStepId));
   const verificationStep = verificationTask?.steps.find(step => step.id === verificationStepId);
   const verificationContainerId = verificationStep?.resolvedInputs?.containerId || verificationTask?.contextValues?.containerId;
@@ -401,14 +388,30 @@ export function JobDetailScreen() {
     return outcome;
   };
 
-  if (isLoadingJob || jobError || !job.id) return <View style={styles.root}>
-    <SubScreenHeader title="Job Details" onBack={goBack} />
-    <View style={{ padding: 24, gap: 16 }}>
-      <Text variant="headline">{isLoadingJob ? 'Loading Job…' : 'Job Unavailable'}</Text>
-      {jobError && <Text variant="body" color={colors.danger}>{jobError}</Text>}
-      <Button title="Back To Jobs" onPress={() => navigate('jobs')} />
-    </View>
-  </View>;
+  if (isLoadingJob || jobError || !job.id) {
+    return (
+      <View style={styles.root}>
+        <SubScreenHeader title="Job Details" onBack={goBack} />
+        <View style={styles.emptyCenter}>
+          <EmptyState
+            tone={jobError ? 'danger' : 'neutral'}
+            icon={jobError ? AlertTriangle : undefined}
+            title={isLoadingJob ? 'Loading Job…' : 'Job Unavailable'}
+            message={jobError ?? undefined}
+            actionTitle={isLoadingJob ? undefined : 'Back to Jobs'}
+            actionVariant="secondary"
+            onAction={isLoadingJob ? undefined : () => navigate('jobs')}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  const isActivelyScanningHandover = Boolean(
+    job.status === 'RUNNING' && activeStop && activeStop.beganAt && activeStop.claimedBy === session?.id,
+  );
+  const showBottomConsole = !isTerminal && !isActivelyScanningHandover;
+  const hasOnboardCargo = (job.containers ?? []).some(container => container.status === 'ONBOARD');
 
   return (
     <View style={styles.root}>
@@ -435,10 +438,10 @@ export function JobDetailScreen() {
             <Text variant="headline" style={styles.jobIdText} numberOfLines={showFullJobNo ? undefined : 1} ellipsizeMode="middle">
               {job.jobNo || job.id}
             </Text>
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              {job.workflowName}
+            </Text>
           </Pressable>
-          <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-            {job.workflowName}
-          </Text>
         </View>
 
         <Pressable
@@ -456,44 +459,50 @@ export function JobDetailScreen() {
         <>
           <Pressable style={styles.menuDismiss} onPress={() => setShowMenu(false)} />
           <View style={[styles.menuDropdown, { top: headerHeight + 4 }]}>
-            <Pressable
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                navigate('live_map', { jobId: job.id, robotId: job.robot });
-              }}
-            >
-              <Maximize2 size={16} color={colors.primary} />
-              <Text variant="body" style={styles.menuItemText}>
-                View on map
-              </Text>
-            </Pressable>
+            {canShowMap ? (
+              <Pressable
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  navigate('live_map', { jobId: job.id, robotId: job.robot });
+                }}
+              >
+                <Maximize2 size={16} color={colors.primaryText} />
+                <Text variant="body" style={styles.menuItemText}>
+                  View on map
+                </Text>
+              </Pressable>
+            ) : null}
 
-            {canPause ? <Pressable
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                setPauseSheetOpen(true);
-              }}
-            >
-              <PauseCircle size={16} color={colors.warningText} />
-              <Text variant="body" color={colors.warningText} style={styles.menuItemText}>
-                Pause Job
-              </Text>
-            </Pressable> : null}
+            {canPause ? (
+              <Pressable
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  setPauseSheetOpen(true);
+                }}
+              >
+                <PauseCircle size={16} color={colors.warningText} />
+                <Text variant="body" color={colors.warningText} style={styles.menuItemText}>
+                  Pause Job
+                </Text>
+              </Pressable>
+            ) : null}
 
-            {!isTerminalJobStatus(job.status) ? <Pressable
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                setIsIssueOpen(true);
-              }}
-            >
-              <AlertTriangle size={16} color={colors.danger} />
-              <Text variant="body" color={colors.danger} style={styles.menuItemText}>
-                Report a problem
-              </Text>
-            </Pressable> : null}
+            {!isTerminal ? (
+              <Pressable
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  setIsIssueOpen(true);
+                }}
+              >
+                <AlertTriangle size={16} color={colors.dangerText} />
+                <Text variant="body" color={colors.dangerText} style={styles.menuItemText}>
+                  Report an Issue
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </>
       )}
@@ -501,7 +510,10 @@ export function JobDetailScreen() {
       {/* Main Content Body */}
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: dockReservedSpace(bottomConsoleHeight) }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: showBottomConsole ? dockReservedSpace(bottomConsoleHeight) : Math.max(insets.bottom, 24) },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -518,15 +530,19 @@ export function JobDetailScreen() {
           speed={liveSpeed}
           battery={liveBattery}
           charging={robotQuery.data?.status === 'CHARGING'}
+          language={language}
+          cancelReason={cancelReason}
           onOpenMap={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
         />
 
         {(job.status === 'PAUSED' || Boolean(pauseNotice)) && (() => {
           const stopState = stopStateQuery.data;
           const stopMeta = stopStatePresentation(stopState?.state);
-          const pauseTime = job.operatorPause?.pausedAt
-            ? new Date(job.operatorPause.pausedAt).toLocaleString()
+          const pauseDate = job.operatorPause?.pausedAt
+            ? formatHistoryDateHeader(job.operatorPause.pausedAt, new Date(), language)
             : null;
+          const pauseClock = formatJobClockTime(job.operatorPause?.pausedAt ?? undefined);
+          const pauseTime = pauseDate && pauseClock ? `${pauseDate} · ${pauseClock}` : pauseClock;
           return (
             <Card padding="md" gap={10}>
               <View style={styles.cardHeaderRow}>
@@ -541,7 +557,7 @@ export function JobDetailScreen() {
               </View>
               {job.operatorPause ? (
                 <View style={{ gap: 4 }}>
-                  <Text variant="caption" color={colors.textSecondary}>
+                  <Text variant="caption" color={colors.textSecondary} style={styles.tabularNums}>
                     {job.operatorPause.pausedBy === session?.id ? t('Paused by you') : t('Paused by another operator')}
                     {pauseTime ? ` · ${pauseTime}` : ''}
                   </Text>
@@ -551,7 +567,7 @@ export function JobDetailScreen() {
                 </View>
               ) : job.status === 'PAUSED' ? (
                 <Text variant="body" color={colors.textSecondary}>
-                  {job.failureMessage || job.failureCode || t('Execution paused by system or workflow policy.')}
+                  {job.failureMessage || humanizeProblemCode(job.failureCode) || t('Execution paused by system or workflow policy.')}
                 </Text>
               ) : null}
               {pauseNotice ? (
@@ -592,12 +608,12 @@ export function JobDetailScreen() {
                     <>
                       {stopState.state !== 'STOPPED_VERIFIED' ? (
                         <Text variant="caption" color={colors.warningText}>
-                          Job PAUSED does not prove the robot has physically stopped.
+                          Robot motion stop is not yet verified. Keep clear until verified.
                         </Text>
                       ) : null}
                       {stopState.errorCode ? (
                         <Text variant="caption" color={colors.dangerText}>
-                          {t('Stop error: {code}', { code: stopState.errorCode })}
+                          {humanizeProblemCode(stopState.errorCode)}
                         </Text>
                       ) : null}
                       {(isStopStateInFlight(stopState.state) || stopState.state === 'UNKNOWN' || stopState.state === 'REJECTED') ? (
@@ -615,12 +631,59 @@ export function JobDetailScreen() {
                   )}
                 </View>
               ) : null}
+
+              {job.status === 'PAUSED' && canOperateRecovery && hasOnboardCargo ? (
+                <Button
+                  title="Request Payload Recovery"
+                  variant="danger"
+                  size="md"
+                  fullWidth
+                  icon={AlertTriangle}
+                  iconPosition="right"
+                  loading={isRequestingRecovery}
+                  disabled={isRequestingRecovery}
+                  onPress={handleRequestRecovery}
+                  accessibilityLabel="Request payload recovery: the robot cannot go on with its cargo"
+                />
+              ) : null}
             </Card>
           );
         })()}
 
-        {/* Primary Handover Focus Card (When waiting at station) */}
-        {isWaiting && primaryTarget && (
+        {job.status === 'RUNNING' && activeStop ? (
+          <HandoverStopCard
+            stop={activeStop}
+            placeName={formatPlaceDisplayName(places, activeStop.endpointId, activeStop.endpointId)}
+            jobMeta={{
+              productSummary: primaryTarget?.product && primaryTarget.product !== 'Unknown Product' ? primaryTarget.product : undefined,
+              otherContainers,
+            }}
+            accountId={session?.id}
+            canOperate={canOperate}
+            onUpdated={() => {
+              void refetchStops();
+              void refreshJob().catch(() => {});
+            }}
+            onConfirmedJob={(detail) => {
+              if (activeJobId.current !== job.id) return;
+              jobReader.invalidate();
+              setJob(mapJobDetailToAppJobItem(detail, session?.id));
+              void refetchStops();
+              if (canReadIssues) void refetchIssues();
+              void refreshJob().catch(() => {});
+              toast.success('Handover stop confirmed.');
+            }}
+            onReportContainerProblem={(category, containerId) => {
+              setIssueModalCategory(category);
+              setIssueModalContainerId(containerId);
+              setIsIssueOpen(true);
+            }}
+            onRefresh={refetchStops}
+          />
+        ) : null}
+
+        {/* Legacy Focus Card only when grouped HandoverStopCard is absent */}
+        {isWaiting && primaryTarget && !activeStop && allowLegacyStepHandover && (
           <Card padding="md" gap={12} style={styles.focusCard}>
             <View style={styles.focusHeader}>
               <View style={styles.focusTargetPill}>
@@ -650,12 +713,11 @@ export function JobDetailScreen() {
                   At:
                 </Text>
                 <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '700' }}>
-                  {places.name(activeTask?.endpointCode, places.name(job.destinationEndpointCode))}
+                  {formatPlaceDisplayName(places, activeTask?.endpointCode, formatPlaceDisplayName(places, job.destinationEndpointCode))}
                 </Text>
               </View>
             </View>
 
-            {/* Other containers onboard accordion */}
             {otherContainers.length > 0 && (
               <View style={styles.otherContainersSection}>
                 <Pressable
@@ -670,11 +732,13 @@ export function JobDetailScreen() {
                   <View style={styles.otherContainersLeft}>
                     <Lock size={13} color={colors.textMuted} />
                     <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                      {otherContainers.length} Other {otherContainers.length === 1 ? 'Tote' : 'Totes'} Remaining Onboard
+                      {otherContainers.length === 1
+                        ? t('1 other container remaining onboard')
+                        : t('{count} other containers remaining onboard', { count: otherContainers.length })}
                     </Text>
                   </View>
                   <Text variant="caption" color={colors.primary} style={{ fontWeight: '600' }}>
-                    {showOtherContainers ? 'Hide ▲' : 'Show ▼'}
+                    {showOtherContainers ? t('Hide') : t('Show')}
                   </Text>
                 </Pressable>
 
@@ -692,7 +756,7 @@ export function JobDetailScreen() {
                         </View>
                         <View style={styles.keepTag}>
                           <Lock size={10} color={colors.textMuted} style={{ marginRight: 3 }} />
-                          <Text variant="caption" color={colors.textMuted} style={{ fontSize: 11, fontWeight: '600' }}>
+                          <Text variant="caption" color={colors.textMuted} style={{ fontWeight: '600' }}>
                             Keep
                           </Text>
                         </View>
@@ -704,34 +768,6 @@ export function JobDetailScreen() {
             )}
           </Card>
         )}
-
-        {job.status === 'RUNNING' && activeStop ? (
-          <HandoverStopCard
-            stop={activeStop}
-            placeName={places.name(activeStop.endpointId, activeStop.endpointId)}
-            accountId={session?.id}
-            canOperate={canOperate}
-            onUpdated={() => {
-              void refetchStops();
-              void refreshJob().catch(() => {});
-            }}
-            onConfirmedJob={(detail) => {
-              if (activeJobId.current !== job.id) return;
-              jobReader.invalidate();
-              setJob(mapJobDetailToAppJobItem(detail, session?.id));
-              void refetchStops();
-              if (canReadIssues) void refetchIssues();
-              void refreshJob().catch(() => {});
-              toast.success('Handover stop confirmed.');
-            }}
-            onReportContainerProblem={(category, containerId) => {
-              setIssueModalCategory(category);
-              setIssueModalContainerId(containerId);
-              setIsIssueOpen(true);
-            }}
-            onRefresh={refetchStops}
-          />
-        ) : null}
 
         {waitingForHandoverOffer ? (
           <Card padding="md" gap={8}>
@@ -800,50 +836,52 @@ export function JobDetailScreen() {
         <JobContainersCard
           containers={job.containers}
           places={places}
-          from={places.name(job.sourceEndpointCode, 'Pick-up')}
-          to={places.name(job.destinationEndpointCode, 'Drop-off')}
+          from={formatPlaceDisplayName(places, job.sourceEndpointCode, 'Pick-up')}
+          to={formatPlaceDisplayName(places, job.destinationEndpointCode, 'Drop-off')}
           tasks={job.tasks}
+          jobStatus={job.status}
         />
 
-        <JobStepsAccordion key={job.id} tasks={job.tasks} places={places} activeStepId={job.activeStepId} />
+        <JobStepsAccordion
+          key={job.id}
+          tasks={job.tasks}
+          places={places}
+          activeStepId={job.activeStepId}
+          suppressedErrorMessage={cancelReason}
+        />
 
-        {!isTerminalJobStatus(job.status) ? <ReportProblemCard onPress={() => setIsIssueOpen(true)} /> : null}
+        {!isTerminal ? <ReportProblemCard onPress={() => setIsIssueOpen(true)} /> : null}
       </ScrollView>
 
-      {/* Sticky Bottom Action Console */}
-      <View style={styles.bottomConsole} onLayout={(event) => setBottomConsoleHeight(event.nativeEvent.layout.height)}>
-        {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
-        {isQueuedOrCreated && <Text variant="caption" color={!canStart && startAction?.reason ? colors.warningText : colors.textSecondary}>
-          {!canStart && startAction?.reason
-            ? actionReasonText(startAction.reason)
-            : t('The system assigns an available robot when you start this Job.')}
-        </Text>}
-        {(job.status === 'PAUSED' || job.status === 'REASSIGNING') && !canResume && resumeAction?.reason ? (
-          <Text variant="caption" color={colors.warningText}>{actionReasonText(resumeAction.reason)}</Text>
-        ) : null}
-        {canPause && (isWaiting || isEnRoute) ? (
-          <Button
-            title="Pause Job"
-            variant="outline"
-            size="md"
-            fullWidth
-            icon={PauseCircle}
-            onPress={() => setPauseSheetOpen(true)}
-          />
-        ) : null}
-        <View style={styles.consoleCtaRow}>
+      {/* Sticky Bottom Action Console (hidden on terminal states & active handover scan) */}
+      {showBottomConsole ? (
+        <View
+          style={[styles.bottomConsole, { paddingBottom: Math.max(insets.bottom, 16) }]}
+          onLayout={(event) => setBottomConsoleHeight(event.nativeEvent.layout.height)}
+        >
           {isQueuedOrCreated ? (
-            <Button
-              title="Start Job"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={isStartingJob}
-              disabled={!canStart || isStartingJob}
-              onPress={handleStartJob}
-            />
-          ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
-            <View style={{ gap: 8 }}>
+            <Text variant="caption" color={!canStart && startAction?.reason ? colors.warningText : colors.textSecondary}>
+              {!canStart && startAction?.reason
+                ? actionReasonText(startAction.reason)
+                : t('The system assigns an available robot when you start this Job.')}
+            </Text>
+          ) : null}
+          {(job.status === 'PAUSED' || job.status === 'REASSIGNING') && !canResume && resumeAction?.reason ? (
+            <Text variant="caption" color={colors.warningText}>{actionReasonText(resumeAction.reason)}</Text>
+          ) : null}
+
+          <View style={styles.consoleCtaRow}>
+            {isQueuedOrCreated ? (
+              <Button
+                title="Start Job"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={isStartingJob}
+                disabled={!canStart || isStartingJob}
+                onPress={handleStartJob}
+              />
+            ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
               <Button
                 title="Resume Job"
                 variant="primary"
@@ -854,107 +892,84 @@ export function JobDetailScreen() {
                 onPress={handleResumeJob}
                 icon={RefreshCw}
               />
-              {job.status === 'PAUSED' && canOperateRecovery
-                && (job.containers ?? []).some(container => container.status === 'ONBOARD') ? (
+            ) : job.status === 'RECOVERY_REQUIRED' ? (
+              <Button
+                title="Initiate Cargo Rescue"
+                variant="danger"
+                size="lg"
+                fullWidth
+                icon={AlertTriangle}
+                iconPosition="right"
+                onPress={() =>
+                  navigate('payload_recovery', {
+                    jobId: job.id,
+                    robot: job.robot,
+                    container: targetContainer,
+                  })
+                }
+                accessibilityLabel="Initiate emergency cargo rescue"
+              />
+            ) : inspectionStep ? (
+              <View style={{ gap: 8 }}>
+                {inspectable.length ? inspectable.map(container => (
+                  <Button
+                    key={container.containerId}
+                    title={t('Inspect {code}', { code: container.code })}
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onPress={() => { triggerHaptic('tap'); setInspecting({ id: container.containerId!, barcode: container.code }); }}
+                  />
+                )) : <Text variant="caption" color="textSecondary">{t('Every container on board has been inspected.')}</Text>}
+              </View>
+            ) : isWaiting && allowLegacyStepHandover ? (
+              <View style={styles.consoleSplitRow}>
+                {canPause ? (
+                  <Button
+                    title="Pause"
+                    variant="outline"
+                    size="md"
+                    icon={PauseCircle}
+                    onPress={() => setPauseSheetOpen(true)}
+                  />
+                ) : null}
                 <Button
-                  title="Request Payload Recovery"
-                  variant="danger"
-                  size="lg"
-                  fullWidth
-                  icon={AlertTriangle}
-                  iconPosition="right"
-                  loading={isRequestingRecovery}
-                  disabled={isRequestingRecovery}
-                  onPress={handleRequestRecovery}
-                  accessibilityLabel="Request payload recovery: the robot cannot go on with its cargo"
-                />
-              ) : null}
-            </View>
-          ) : job.status === 'RECOVERY_REQUIRED' ? (
-            <Button
-              title="Initiate Cargo Rescue"
-              variant="danger"
-              size="lg"
-              fullWidth
-              icon={AlertTriangle}
-              iconPosition="right"
-              onPress={() =>
-                navigate('payload_recovery', {
-                  jobId: job.id,
-                  robot: job.robot,
-                  container: targetContainer,
-                })
-              }
-              accessibilityLabel="Initiate emergency cargo rescue"
-            />
-          ) : inspectionStep ? (
-            <View style={{ gap: 8 }}>
-              {inspectable.length ? inspectable.map(container => (
-                <Button
-                  key={container.containerId}
-                  title={t('Inspect {code}', { code: container.code })}
+                  title="Verify Handover"
                   variant="primary"
-                  size="lg"
-                  fullWidth
-                  onPress={() => { triggerHaptic('tap'); setInspecting({ id: container.containerId!, barcode: container.code }); }}
+                  size="md"
+                  icon={ArrowRight}
+                  iconPosition="right"
+                  onPress={() => handleOpenVerify(targetContainer)}
+                  accessibilityLabel="Verify handover payload"
+                  style={styles.consolePrimaryFlex}
                 />
-              )) : <Text variant="caption" color="textSecondary">{t('Every container on board has been inspected.')}</Text>}
-            </View>
-          ) : isWaiting && allowLegacyStepHandover ? (
-            <Button
-              title="Verify Handover"
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={ArrowRight}
-              iconPosition="right"
-              onPress={() => handleOpenVerify(targetContainer)}
-              accessibilityLabel="Verify handover payload"
-            />
-          ) : isEnRoute ? (
-            <Button
-              title="Track on Map"
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={Maximize2}
-              iconPosition="right"
-              onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
-              accessibilityLabel="View live AMR tracking"
-            />
-          ) : isCompleted ? (
-            <Button
-              title="Back to Jobs"
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={ArrowLeft}
-              iconPosition="left"
-              onPress={goBack}
-              accessibilityLabel="Back to jobs"
-            />
-          ) : (
-            <Button
-              title="View Live Map"
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={Maximize2}
-              iconPosition="right"
-              onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
-              accessibilityLabel="View map"
-            />
-          )}
+              </View>
+            ) : (
+              <View style={styles.consoleSplitRow}>
+                {canPause && (isWaiting || isEnRoute) ? (
+                  <Button
+                    title="Pause"
+                    variant="outline"
+                    size="md"
+                    icon={PauseCircle}
+                    onPress={() => setPauseSheetOpen(true)}
+                  />
+                ) : null}
+                <Button
+                  title="Track on Map"
+                  variant="primary"
+                  size="md"
+                  icon={Maximize2}
+                  iconPosition="right"
+                  onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
+                  accessibilityLabel="View live AMR tracking"
+                  style={styles.consolePrimaryFlex}
+                />
+              </View>
+            )}
+          </View>
         </View>
-      </View>
-
-      {selectedTask && <JobTaskDetailSheet
-        key={selectedTask.id}
-        task={selectedTask}
-        jobNo={job.jobNo || job.id}
-        jobStatus={job.status}
-        onClose={() => setSelectedTaskId(null)}
-      />}
+      ) : null}
 
       {inspecting && inspectionStep ? <InspectionSheet task={{ stepId: inspectionStep.id, jobNo: job.jobNo || job.id }} container={inspecting}
         onClose={() => setInspecting(null)} onDone={() => { setInspecting(null); jobReader.invalidate(); void refreshJob().catch(() => {}); }} /> : null}
@@ -968,8 +983,8 @@ export function JobDetailScreen() {
         step={verificationStep}
         jobStatus={job.status}
         robotCode={job.robot}
-        location={verificationTask?.endpointCode || 'Unknown Location'}
-        targetShelf={verificationTask?.endpointCode || 'Unknown Destination'}
+        location={formatPlaceDisplayName(places, verificationTask?.endpointCode, 'Unknown Location')}
+        targetShelf={formatPlaceDisplayName(places, verificationTask?.endpointCode, 'Unknown Destination')}
         initialMismatch={isMismatch}
         onClose={() => setIsVerifyOpen(false)}
         onSuccess={handleVerifySuccess}
@@ -1024,22 +1039,23 @@ export function JobDetailScreen() {
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   refreshWarning: { padding: 12, gap: 8, backgroundColor: colors.warningBg, borderRadius: radii.md },
   stopStateBox: { padding: 12, gap: 8, backgroundColor: colors.surfaceSubtle, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
-  robotSelectorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  robotSelectorChip: {
-    minHeight: 44, paddingHorizontal: 16, borderRadius: radii.pill,
-    justifyContent: 'center', borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  robotSelectorChipSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   root: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  emptyCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 40,
+  },
+  tabularNums: {
+    fontVariant: ['tabular-nums'],
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 10,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -1060,33 +1076,16 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flex: 1,
     minWidth: 0,
     paddingHorizontal: 8,
+  },
+  headerTitleTarget: {
+    minHeight: 44,
+    justifyContent: 'center',
     gap: 2,
   },
-  headerTitleTarget: { minHeight: 44, justifyContent: 'center' },
   jobIdText: {
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
     flexShrink: 1,
-  },
-  robotPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-    minWidth: 0,
-    gap: 6,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  robotPillText: {
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-  robotContextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
   },
   menuDismiss: {
     ...StyleSheet.absoluteFill,
@@ -1108,6 +1107,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: radii.sm,
@@ -1120,94 +1120,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 160,
     gap: 14,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  holdBannerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.warning,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-  },
-  holdBannerText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  locationBlock: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    padding: 12,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  currentStopText: {
-    fontWeight: '700',
-  },
-  telemetryStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  telemetryItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  telemetryDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: colors.border,
-  },
-  telemetryLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
-  },
-  telemetryValueBold: {
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  telemetryValueMono: {
-    fontWeight: '700',
-    fontSize: 12,
-    fontFamily: typography.fontMono,
-  },
-  enRouteProgressBlock: {
-    gap: 6,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  nudgeBox: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    padding: 10,
-    gap: 8,
-  },
-  nudgeBoxHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  nudgeButtonsRow: {
-    flexDirection: 'row',
     gap: 8,
   },
   focusCard: {
@@ -1228,7 +1146,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   focusTargetPillText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: 12,
   },
   focusBody: {
     gap: 2,
@@ -1240,9 +1158,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   },
   focusBarcode: {
     fontWeight: '800',
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: typography.fontMono,
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   boldQty: {
     fontWeight: '700',
@@ -1268,6 +1186,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 32,
   },
   otherContainersLeft: {
     flexDirection: 'row',
@@ -1290,8 +1209,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1306,46 +1225,18 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderTopColor: colors.border,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
     gap: 10,
     ...shadows.lg,
   },
-  consoleUtilityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  utilityBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 38,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  utilityBtnActive: {
-    backgroundColor: colors.warning,
-    borderColor: colors.warning,
-  },
-  utilityBtnSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  utilityBtnDanger: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 38,
-    borderRadius: radii.md,
-    backgroundColor: colors.dangerBg,
-    borderWidth: 1,
-    borderColor: colors.dangerBorder,
-  },
   consoleCtaRow: {
     width: '100%',
+  },
+  consoleSplitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  consolePrimaryFlex: {
+    flex: 1,
   },
 });

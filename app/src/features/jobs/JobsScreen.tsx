@@ -43,6 +43,7 @@ import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
 import type { PlaceDirectory } from '../../shared/places/placeDirectory';
 import {
   AppJobItem,
+  formatPlaceDisplayName,
   groupHistoryJobs,
   HistoryListRow,
   isTerminalJobStatus,
@@ -55,7 +56,7 @@ type JobListRow = HistoryListRow | { type: 'job'; key: string; job: AppJobItem }
 
 const SCOPES: ReadonlyArray<{ label: string; value: JobScope }> = [
   { label: 'My Tasks', value: 'mine' },
-  { label: 'Fleet Queue', value: 'fleet' },
+  { label: 'All', value: 'fleet' },
   { label: 'History', value: 'history' },
 ];
 
@@ -198,12 +199,18 @@ export function JobsScreen() {
   });
   const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => {
     const job = mapJobDetailToAppJobItem(detail, session?.id);
-    // Places read by name (a shelf's storage location name, else the endpoint's own name), never by endpoint code.
-    const sourceName = places.name(job.sourceEndpointCode, 'Pickup');
-    const destinationName = places.name(job.destinationEndpointCode, 'Drop-off');
+    // Places read by name (a shelf's storage location name, else the endpoint's own name), never raw endpoint codes.
+    const sourceName = formatPlaceDisplayName(places, job.sourceEndpointCode, 'Pickup');
+    const destinationName = formatPlaceDisplayName(places, job.destinationEndpointCode, 'Drop-off');
     const route = `${sourceName} ➔ ${destinationName}`;
-    return { ...job, sourceName, destinationName, route, routeText: route, target: destinationName };
+    const currentStop = job.currentStop ? formatPlaceDisplayName(places, job.currentStop, '') : '';
+    return { ...job, sourceName, destinationName, currentStop, route, routeText: route, target: destinationName };
   }), [jobsQuery.data, session?.id, places]);
+
+  const jobsById = useMemo(
+    () => new Map(jobsList.map((job) => [job.id, job])),
+    [jobsList],
+  );
   const { refetch } = jobsQuery;
   const { refetch: refetchStops } = stopsQuery;
   useEffect(() => {
@@ -313,24 +320,27 @@ export function JobsScreen() {
     [scope, historyFilter, visible]
   );
 
-  const listRows = useMemo<JobListRow[]>(
-    () =>
-      scope === 'history'
-        ? groupHistoryJobs(filteredVisible, new Date(), language)
-        : filteredVisible.map((job) => ({ type: 'job', key: job.id, job })),
-    [scope, filteredVisible, language]
-  );
+  const listRows = useMemo<JobListRow[]>(() => {
+    if (scope === 'history') {
+      return groupHistoryJobs(filteredVisible, new Date(), language);
+    }
+    const stopJobIds = new Set(visibleStops.map((stop) => stop.jobId));
+    return filteredVisible
+      .filter((job) => !stopJobIds.has(job.id))
+      .map((job) => ({ type: 'job', key: job.id, job }));
+  }, [scope, filteredVisible, visibleStops, language]);
 
   const options = useMemo(
     () =>
       SCOPES.map((entry) => ({
         ...entry,
+        label: entry.value === 'fleet' && language === 'vi' ? 'Toàn kho' : entry.label,
         badge:
           entry.value === 'history' || jobsQuery.data === undefined
             ? undefined
             : counts[entry.value],
       })),
-    [counts, jobsQuery.data]
+    [counts, jobsQuery.data, language]
   );
 
   const hasAnyInScope = unfilteredCounts[scope] > 0;
@@ -561,26 +571,34 @@ export function JobsScreen() {
                       ? t('My Claimed Handovers ({count})', { count: visibleStops.length })
                       : t('Open Handover Offers ({count})', { count: visibleStops.length })}
                   </Text>
-                  {visibleStops.map((stop) => (
-                    <HandoverStopCard
-                      key={`${stop.jobId}:${stop.id}:${stop.moveId}`}
-                      stop={stop}
-                      placeName={places.name(stop.endpointId, stop.endpointId)}
-                      accountId={session?.id}
-                      canOperate={canOperate}
-                      showJobLink
-                      onOpenJob={() => navigate('job_detail', { jobId: stop.jobId })}
-                      onUpdated={() => {
-                        void refetchStops();
-                        void refetch();
-                      }}
-                      onConfirmedJob={() => {
-                        void refetchStops();
-                        void refetch();
-                      }}
-                      onRefresh={refetchStops}
-                    />
-                  ))}
+                  {visibleStops.map((stop) => {
+                    const stopJob = jobsById.get(stop.jobId);
+                    return (
+                      <HandoverStopCard
+                        key={`${stop.jobId}:${stop.id}:${stop.moveId}`}
+                        stop={stop}
+                        placeName={formatPlaceDisplayName(places, stop.endpointId, stop.endpointId)}
+                        jobMeta={stopJob ? {
+                          workflowName: stopJob.workflowName,
+                          routeLabel: stopJob.route,
+                          robotCode: stopJob.robot !== 'Unassigned' ? stopJob.robot : undefined,
+                        } : undefined}
+                        accountId={session?.id}
+                        canOperate={canOperate}
+                        showJobLink
+                        onOpenJob={() => navigate('job_detail', { jobId: stop.jobId })}
+                        onUpdated={() => {
+                          void refetchStops();
+                          void refetch();
+                        }}
+                        onConfirmedJob={() => {
+                          void refetchStops();
+                          void refetch();
+                        }}
+                        onRefresh={refetchStops}
+                      />
+                    );
+                  })}
                 </View>
               ) : null}
             </View>
@@ -733,8 +751,8 @@ function ListEmpty({
         <EmptyState
           icon={ClipboardCheck}
           title="No Claimed Tasks"
-          message="Claim an open handover or waiting job from the fleet queue to begin."
-          actionTitle={t('Browse Fleet Queue ({count})', { count: fleetAvailableCount })}
+          message="Claim an open handover or waiting job from All Jobs to begin."
+          actionTitle={t('Browse All Jobs ({count})', { count: fleetAvailableCount })}
           actionVariant="secondary"
           actionIcon={ArrowRight}
           actionIconPosition="right"
@@ -747,7 +765,7 @@ function ListEmpty({
       <EmptyState
         icon={ClipboardCheck}
         title="No Claimed Tasks"
-        message="The fleet queue is also clear. Scan a container or pull down to refresh."
+        message="No open jobs across the warehouse either. Scan a container or pull down to refresh."
         actionTitle="Scan Container"
         actionVariant="secondary"
         actionIcon={ScanLine}
@@ -761,7 +779,7 @@ function ListEmpty({
     return (
       <EmptyState
         icon={Radio}
-        title="Fleet Queue Clear"
+        title="All Jobs Clear"
         message="New dispatches from WES will appear here automatically."
         statusIndicator={
           isConnected

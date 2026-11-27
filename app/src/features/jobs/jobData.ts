@@ -19,7 +19,7 @@ export interface AppJobItem extends JobSummary {
   failureMessage?: string | null;
   activeTaskId?: string; assignedStaffId?: string; activeStepId?: string; activeStepOperation?: string;
   hasWaitingHandover?: boolean; assignedRobotId?: string; target: string; route: string; robot: string; isMine: boolean;
-  sourceName?: string; destinationName?: string;
+  sourceName?: string; destinationName?: string; startedAt?: string;
   battery: string; speed: string; distanceRemaining?: string; progressPercent?: number; completedAt?: string;
   duration?: string; operator?: string; currentStop: string; stopsCount: number; routeText: string;
   payloadSummary: string; containers: JobContainerItem[]; stopsList: JobStopItem[];
@@ -44,6 +44,116 @@ export function jobTaskFocus(task: AppJobTaskItem): JobStepResponse | undefined 
 }
 export function isTerminalJobStatus(status: JobStatus) { return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status); }
 
+export function humanizeEndpointCode(code: string | null | undefined, fallback = '—'): string {
+  if (!code || !code.trim()) return fallback;
+  const trimmed = code.trim();
+  if (!/^EP-/i.test(trimmed)) return trimmed;
+  const tokens = trimmed
+    .replace(/^EP-/i, '')
+    .split(/[-_\s]+/)
+    .filter(Boolean);
+  if (!tokens.length) return fallback;
+  return tokens
+    .map((token) => {
+      if (/^[A-Za-z]{2,}$/.test(token)) {
+        return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+      }
+      return token.toUpperCase();
+    })
+    .join(' ');
+}
+
+export function formatPlaceDisplayName(
+  places: { name(key: string | null | undefined, fallback?: string): string },
+  code: string | null | undefined,
+  fallback = '—',
+): string {
+  if (!code || !code.trim()) return fallback;
+  const resolved = places.name(code, '');
+  if (resolved && resolved !== code) {
+    return /^EP-/i.test(resolved.trim()) ? humanizeEndpointCode(resolved, fallback) : resolved;
+  }
+  return humanizeEndpointCode(resolved || code, fallback);
+}
+
+export function formatJobDuration(
+  startIso?: string,
+  endIso?: string,
+  language: 'en' | 'vi' = 'en',
+): string | null {
+  if (!startIso || !endIso) return null;
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  const totalSec = Math.round((end - start) / 1000);
+  if (totalSec < 60) {
+    return language === 'vi' ? `${totalSec}g` : `${totalSec}s`;
+  }
+  if (totalSec < 3600) {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return language === 'vi' ? (s ? `${m}p ${s}g` : `${m}p`) : (s ? `${m}m ${s}s` : `${m}m`);
+  }
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  return language === 'vi' ? (m ? `${h}g ${m}p` : `${h}g`) : (m ? `${h}h ${m}m` : `${h}h`);
+}
+
+export function extractJobCancelReason(
+  job: Pick<AppJobItem, 'failureMessage' | 'tasks'>,
+): string | null {
+  if (job.failureMessage?.trim()) return job.failureMessage.trim();
+  for (const task of job.tasks) {
+    for (const step of task.steps) {
+      if (step.status === 'CANCELLED' && step.errorMessage?.trim()) {
+        return step.errorMessage.trim();
+      }
+    }
+  }
+  return null;
+}
+
+export function formatDeadlineCountdown(
+  deadlineIso: string | null | undefined,
+  nowMs: number,
+  language: 'en' | 'vi' = 'en',
+): { text: string; urgent: boolean; expired: boolean } | null {
+  if (!deadlineIso) return null;
+  const deadlineMs = Date.parse(deadlineIso);
+  if (!Number.isFinite(deadlineMs)) return null;
+  const remainingSec = Math.ceil((deadlineMs - nowMs) / 1000);
+  if (remainingSec <= 0) {
+    return {
+      text: language === 'vi' ? 'Quá hạn' : 'Expired',
+      urgent: true,
+      expired: true,
+    };
+  }
+  const mm = String(Math.floor(remainingSec / 60)).padStart(2, '0');
+  const ss = String(remainingSec % 60).padStart(2, '0');
+  return {
+    text: language === 'vi' ? `Còn ${mm}:${ss}` : `${mm}:${ss} left`,
+    urgent: remainingSec <= 30,
+    expired: false,
+  };
+}
+
+const PROBLEM_CODE_LABELS: Record<string, string> = {
+  WRONG_CONTAINER: 'Wrong Container',
+  MISSING_CONTAINER: 'Missing Container',
+  CONTAINER_DAMAGED: 'Container Damaged',
+  BARCODE_UNREADABLE: 'Barcode Unreadable',
+  UNSAFE_LOAD: 'Unsafe Load',
+  SHELF_BLOCKED: 'Shelf Blocked',
+  AMR_PATH_BLOCKED: 'AMR Path Blocked',
+};
+
+export function humanizeProblemCode(code: string | null | undefined): string {
+  if (!code || !code.trim()) return '—';
+  const normalized = code.trim().toUpperCase();
+  return PROBLEM_CODE_LABELS[normalized] ?? readableKey(code);
+}
+
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 const VI_MONTHS = [
   'Thg 1', 'Thg 2', 'Thg 3', 'Thg 4', 'Thg 5', 'Thg 6',
@@ -66,7 +176,7 @@ export function jobHistoryTimestamp(job: Pick<AppJobItem, 'completedAt' | 'creat
   return null;
 }
 
-export function formatJobClockTime(iso: string | undefined): string | null {
+export function formatJobClockTime(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const parsed = Date.parse(iso);
   if (!Number.isFinite(parsed)) return null;
@@ -248,6 +358,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
     assignedRobotCode: robot, sourceEndpointCode: source, destinationEndpointCode: destination,
     activeStepTitle: detail.failureMessage || allSteps.find(({ step }) => step.id === context.activeStepId)?.step.operationCode || 'Job Progress',
     containerCount: detail.containers.length, slots, steps, tasks, createdAtUtc: detail.createdAt,
+    startedAt: detail.startedAt || undefined,
     target: destination, route: `${source} ➔ ${destination}`, robot,
     isMine: Boolean(!isTerminalJobStatus(detail.status) && (claimedByMe || (currentStaffId && assignedStaffId === currentStaffId))),
     battery: typeof context.batteryPercent === 'number' ? `${Math.round(context.batteryPercent)}%` : '—',

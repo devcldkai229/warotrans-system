@@ -1,29 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AlertTriangle,
-  Camera,
   Check,
   PackageCheck,
   RefreshCw,
   Timer,
   X,
-  ScanLine,
 } from 'lucide-react-native';
 import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
-import { Button, Card, Text, TextField } from '../../shared/ui';
-import { translateText } from '../../shared/i18n';
+import { BarcodeScanField, Button, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { ApiError, confirmHandover, failJobContainer, getContainerByBarcode } from '../../shared/api';
@@ -82,8 +78,9 @@ export function VerifyModal({
   onRefreshJob,
 }: VerifyModalProps) {
   const { styles, colors } = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const [verificationError, setVerificationError] = useState<string | null>(null);
-  const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
+  const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput);
   const [mismatch, setMismatch] = useState(initialMismatch);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,7 +95,7 @@ export function VerifyModal({
     submissionPending.current = false;
     if (visible) {
       setVerificationError(null);
-      setBarcodeInput(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
+      setBarcodeInput(initialBarcodeInput);
       setMismatch(initialMismatch);
       setIsSubmitting(false);
     }
@@ -179,7 +176,7 @@ export function VerifyModal({
             /* Normal Verification Flow */
             <ScrollView
               style={styles.sheetScroll}
-              contentContainerStyle={styles.sheetContent}
+              contentContainerStyle={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, 24) }]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
@@ -255,44 +252,23 @@ export function VerifyModal({
               </View>
 
               {/* Barcode Scan & Input Console */}
-              {status.canConfirm && <View style={styles.scanSection}>
-                {verificationError && <Text variant="body" color={colors.danger}>{verificationError}</Text>}
-                <Text variant="label" style={styles.sectionLabel}>
-                  Scan or Enter Barcode
-                </Text>
-
-                <View style={styles.inputRow}>
-                  <View style={styles.inputWrapper}>
-                    <TextField
-                      value={barcodeInput}
-                      onChangeText={(val) => {
-                        setBarcodeInput(val);
-                        if (mismatch) setMismatch(false);
-                      }}
-                      placeholder={`e.g. ${targetContainer}`}
-                      placeholderTextColor={colors.textMuted}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      onSubmitEditing={() => handleVerify()}
-                      containerStyle={styles.inputField}
-                    />
-                  </View>
-
-                  <Pressable
-                    onPress={() => setIsScannerOpen(true)}
-                    style={({ pressed }) => [
-                      styles.cameraBtn,
-                      pressed && styles.btnPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Scan with Camera"
-                  >
-                    <Camera size={20} color="#ffffff" />
-                  </Pressable>
-                </View>
-
-              </View>}
+              {status.canConfirm && (
+                <BarcodeScanField
+                  label="Scan or Enter Barcode"
+                  value={barcodeInput}
+                  onChangeText={(val) => {
+                    setBarcodeInput(val);
+                    if (mismatch) setMismatch(false);
+                    if (verificationError) setVerificationError(null);
+                  }}
+                  onSubmit={() => handleVerify()}
+                  onOpenScanner={() => setIsScannerOpen(true)}
+                  placeholder={`e.g. ${targetContainer}`}
+                  showVerifyButton={false}
+                  error={verificationError}
+                  disabled={isSubmitting}
+                />
+              )}
 
               {!status.canConfirm && verificationError && !status.completed ? <Text variant="body" color={colors.danger}>{verificationError}</Text> : null}
 
@@ -324,11 +300,10 @@ export function VerifyModal({
                   <View style={{ gap: 8 }}>
                     <Text variant="bodyMedium" fontWeight="700">What is wrong?</Text>
                     <ProblemCodeChips problems={problemsFor('HANDOVER')} selected={failCode} onChange={setFailCode} disabled={isSubmitting} />
-                    <TextInput
-                      placeholder={translateText('Why can this container not go on?')}
+                    <TextField
+                      placeholder="Why can this container not go on?"
                       value={failReason}
                       onChangeText={setFailReason}
-                      style={styles.failReasonInput}
                     />
                     <Button
                       title={isSubmitting ? 'Reporting...' : 'Report container failed'}
@@ -355,7 +330,7 @@ export function VerifyModal({
             </ScrollView>
           ) : (
             /* Barcode Mismatch Alert Screen */
-            <View style={styles.mismatchContainer}>
+            <View style={[styles.mismatchContainer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
               <View style={styles.mismatchHeader}>
                 <View style={styles.mismatchIconWell}>
                   <AlertTriangle size={24} color={colors.danger} />
@@ -374,7 +349,7 @@ export function VerifyModal({
               <View style={styles.comparisonGrid}>
                 <View style={styles.comparisonCol}>
                   <Text variant="caption" color={colors.textMuted} style={styles.comparisonLabel}>
-                    EXPECTED CONTAINER
+                    Expected Container
                   </Text>
                   <Text variant="title" style={styles.comparisonExpected}>
                     {targetContainer}
@@ -386,10 +361,10 @@ export function VerifyModal({
 
                 <View style={[styles.comparisonCol, styles.comparisonColRight]}>
                   <Text variant="caption" color={colors.danger} style={styles.comparisonLabel}>
-                    SCANNED BARCODE
+                    Scanned Barcode
                   </Text>
                   <Text variant="title" color={colors.danger} style={styles.comparisonScanned}>
-                    {barcodeInput || 'BOX-999'}
+                    {barcodeInput || '—'}
                   </Text>
                   <Text variant="caption" color={colors.danger} numberOfLines={1}>
                     Incorrect / Misplaced Tote
@@ -437,14 +412,6 @@ export function VerifyModal({
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  failReasonInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-    color: colors.textPrimary,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
@@ -471,7 +438,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sheetContent: {
     padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     gap: 16,
   },
   headerRow: {
@@ -501,20 +467,17 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 2,
     borderRadius: radii.pill,
   },
-  timerBadgeUrgent: {
-    backgroundColor: colors.dangerBg,
-  },
   timerText: {
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: 12,
   },
   sheetTitle: {
     fontWeight: '700',
     marginTop: 2,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -544,7 +507,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   targetBadgeText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: 12,
   },
   shelfText: {
     fontWeight: '600',
@@ -562,61 +525,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  scanSection: {
-    gap: 8,
-  },
-  sectionLabel: {
-    fontWeight: '600',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  inputWrapper: {
-    flex: 1,
-  },
-  inputField: {
-    backgroundColor: colors.surface,
-  },
-  cameraBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.md,
-    backgroundColor: colors.darkAction,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  btnPressed: {
-    opacity: 0.85,
-  },
-  quickChipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  quickChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.sm,
-    backgroundColor: colors.primaryLight,
-  },
-  quickChipMismatch: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.sm,
-    backgroundColor: colors.dangerBg,
-  },
-  quickChipText: {
-    fontWeight: '600',
-    fontSize: 11,
-  },
   actionRow: {
     flexDirection: 'row',
     gap: 12,
@@ -630,7 +538,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   mismatchContainer: {
     padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     gap: 20,
   },
   mismatchHeader: {
@@ -668,9 +575,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.dangerBg,
   },
   comparisonLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '600',
   },
   comparisonExpected: {
     fontWeight: '700',

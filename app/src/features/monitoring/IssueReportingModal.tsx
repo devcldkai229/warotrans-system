@@ -5,11 +5,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
-import { t, translateText } from '../../shared/i18n';
-import { RawText as Text } from '../../shared/ui/Text';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { t } from '../../shared/i18n';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -21,13 +20,12 @@ import {
   ShieldAlert,
   Warehouse,
 } from 'lucide-react-native';
-import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
+import { Button, Card, StatusPill, Text, TextField } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import type { IssueStatus } from '../../shared/types/contracts';
 import type { IssueAndPauseOutcome, IssueReceipt } from '../jobs/jobData';
@@ -76,18 +74,21 @@ const CATEGORIES: {
   id: IncidentCategory;
   title: string;
   desc: string;
+  blocksHandover?: boolean;
   icon: 'triangle' | 'scan' | 'warehouse' | 'box' | 'octagon';
 }[] = [
   {
     id: 'WRONG_CONTAINER',
-    title: 'Wrong container at stop · Blocks Confirm',
+    title: 'Wrong container at stop',
     desc: 'Scanned or onboard tote does not match the handover manifest',
+    blocksHandover: true,
     icon: 'triangle',
   },
   {
     id: 'MISSING_CONTAINER',
-    title: 'Missing container at stop · Blocks Confirm',
+    title: 'Missing container at stop',
     desc: 'Expected tote cannot be found at pickup or on robot bay',
+    blocksHandover: true,
     icon: 'box',
   },
   {
@@ -136,6 +137,7 @@ export function IssueReportingModal({
   canPause = false,
 }: IssueReportingModalProps) {
   const { styles, colors } = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const [selectedCat, setSelectedCat] = useState<IncidentCategory>(initialCategory ?? 'CONTAINER_DAMAGED');
   const [selectedContainerId, setSelectedContainerId] = useState<string | undefined>(
     initialContainerId ?? containers[0]?.containerId,
@@ -211,10 +213,12 @@ export function IssueReportingModal({
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           {/* Safety Warning */}
           <View style={styles.safetyBox}>
-            <ShieldAlert size={20} color={colors.danger} style={{ marginTop: 2 }} />
+            <ShieldAlert size={20} color={colors.dangerText} style={{ marginTop: 2, flexShrink: 0 }} />
             <View style={styles.safetyTextWrap}>
-              <Text style={styles.safetyBold}>Safety protocol active</Text>
-              <Text style={styles.safetyDesc}>
+              <Text variant="bodyMedium" fontWeight="700" color="dangerText">
+                Safety protocol active
+              </Text>
+              <Text variant="caption" color="textSecondary" style={{ marginTop: 2 }}>
                 Report the issue to your supervisor. Submitting a report does not confirm that the robot has stopped.
               </Text>
             </View>
@@ -222,10 +226,10 @@ export function IssueReportingModal({
 
           {createdIssue && (
             <View style={styles.partialBox}>
-              <Text style={styles.partialTitle}>
+              <Text variant="bodyMedium" fontWeight="700" color="warningText">
                 {t('Issue {code} recorded', { code: createdIssue.code })}
               </Text>
-              <Text style={styles.partialDesc}>
+              <Text variant="caption" color="warningText">
                 {pauseUncertain
                   ? t('The pause result could not be confirmed. Refresh the job to verify whether it paused before retrying.')
                   : t('The ticket is saved. Retry pausing only, without creating another ticket.')}
@@ -235,7 +239,7 @@ export function IssueReportingModal({
 
           {/* 1. Category Picker */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Incident category</Text>
+            <Text variant="label" color="textPrimary" fontWeight="600">Incident category</Text>
             <View style={{ gap: 8 }}>
               {CATEGORIES.map((c) => {
                 const isSelected = selectedCat === c.id;
@@ -273,14 +277,22 @@ export function IssueReportingModal({
                         <AlertOctagon size={16} color={isSelected ? '#ffffff' : colors.textSecondary} />
                       )}
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.catTitle,
-                          isSelected && styles.catTitleSelected,
-                        ]}
-                      >
-                        {c.title}
+                    <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                      <View style={styles.catTitleRow}>
+                        <Text
+                          variant="bodyMedium"
+                          fontWeight={isSelected ? '700' : '600'}
+                          color="textPrimary"
+                          style={{ flexShrink: 1 }}
+                        >
+                          {c.title}
+                        </Text>
+                        {c.blocksHandover ? (
+                          <StatusPill status="WAITING" label="Blocks Handover" tone="warning" size="sm" />
+                        ) : null}
+                      </View>
+                      <Text variant="caption" color="textSecondary">
+                        {c.desc}
                       </Text>
                     </View>
                     {isSelected && (
@@ -296,7 +308,7 @@ export function IssueReportingModal({
 
           {CONTAINER_CATEGORIES.has(selectedCat) && containers.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Affected Container</Text>
+              <Text variant="label" color="textPrimary" fontWeight="600">Affected Container</Text>
               <View style={styles.containerChipRow}>
                 {containers.map((item) => {
                   const chosen = selectedContainerId === item.containerId;
@@ -312,7 +324,11 @@ export function IssueReportingModal({
                       accessibilityRole="button"
                       accessibilityState={{ selected: chosen, disabled: formLocked }}
                     >
-                      <Text style={[styles.containerChipText, chosen && styles.containerChipTextSelected]}>
+                      <Text
+                        variant="code"
+                        fontWeight="600"
+                        color={chosen ? 'primaryText' : 'textPrimary'}
+                      >
                         {item.code}
                       </Text>
                     </Pressable>
@@ -320,21 +336,27 @@ export function IssueReportingModal({
                 })}
               </View>
               {(selectedCat === 'WRONG_CONTAINER' || selectedCat === 'MISSING_CONTAINER') && (
-                <Text style={styles.blockingHint}>
+                <Text variant="caption" color="warningText">
                   Wrong or missing container issues block handover confirmation until verified with the expected container barcode.
                 </Text>
               )}
             </View>
           )}
 
-          {/* Photo Evidence */}
-          <View style={styles.evidenceCard}>
-            <View style={styles.evidenceHeader}>
-              <Text style={styles.sectionLabel}>Photo evidence</Text>
-              <View style={styles.evidenceBadge}>
-                <Text style={styles.evidenceBadgeText}>Optional</Text>
-              </View>
-            </View>
+          {/* 3. Operator Notes */}
+          <Card padding="md" gap={10}>
+            <TextField
+              label="Operator description"
+              accessibilityLabel="Operator description"
+              value={notes}
+              onChangeText={setNotes}
+              editable={!formLocked}
+              maxLength={500}
+              placeholder="e.g. Left corner cracked, 2 units dislodged onto lane 2..."
+              multiline
+              numberOfLines={3}
+            />
+
             {createdIssue && typeof createdIssue.version === 'number' ? (
               <IssuePhotoSection
                 issue={{
@@ -351,60 +373,47 @@ export function IssueReportingModal({
                 onRefreshIssue={onRefreshJob}
               />
             ) : (
-              <View style={styles.evidenceUnavailable}>
-                <Camera size={16} color={colors.textMuted} />
-                <Text style={styles.evidenceUnavailableText}>
-                  Attach up to 4 JPEG or PNG photos (max 2 MiB each) right after creating the ticket from Reported Issues on this Job.
+              <View style={styles.photoHintRow}>
+                <Camera size={15} color={colors.textMuted} style={{ flexShrink: 0 }} />
+                <Text variant="caption" color="textSecondary" style={{ flex: 1 }}>
+                  Photos can be attached under Reported Issues after submitting.
                 </Text>
               </View>
             )}
-          </View>
-
-          {/* 3. Operator Notes */}
-          <View style={styles.notesCard}>
-            <Text style={styles.sectionLabel}>Operator description</Text>
-            <TextInput
-              accessibilityLabel={translateText('Operator description')}
-              value={notes}
-              onChangeText={setNotes}
-              editable={!formLocked}
-              maxLength={500}
-              placeholder={translateText('e.g. Left corner cracked, 2 units dislodged onto lane 2...')}
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={3}
-              style={[styles.notesInput, formLocked && styles.locked]}
-            />
-          </View>
+          </Card>
         </ScrollView>
 
         {!mobileCapabilities.reportIssue && (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>Reporting is unavailable on this backend. Contact the supervisor directly.</Text>
+            <Text variant="label" color="dangerText">
+              Reporting is unavailable on this backend. Contact the supervisor directly.
+            </Text>
           </View>
         )}
         {submitError && (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorText} accessibilityRole="alert">{submitError}</Text>
+            <Text variant="label" color="dangerText" accessibilityRole="alert">
+              {submitError}
+            </Text>
           </View>
         )}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           {createdIssue ? (
             <View style={styles.footerStack}>
               {canPause && (
                 <Button
-                  label="Retry Pause Only"
-                  icon={<PauseCircle size={18} color="#ffffff" />}
+                  title="Retry Pause Only"
+                  icon={PauseCircle}
                   onPress={() => { void handleAction(true); }}
                   disabled={Boolean(isSubmitting)}
                   loading={isSubmitting === 'pause'}
                   variant="danger"
                   size="lg"
-                  style={{ width: '100%' }}
+                  fullWidth
                 />
               )}
               <Button
-                label="Refresh & Close"
+                title="Refresh & Close"
                 onPress={() => {
                   void onRefreshJob?.();
                   onClose();
@@ -412,32 +421,32 @@ export function IssueReportingModal({
                 disabled={Boolean(isSubmitting)}
                 variant="outline"
                 size="md"
-                style={{ width: '100%' }}
+                fullWidth
               />
             </View>
           ) : (
             <View style={styles.footerStack}>
               {canPause && (
                 <Button
-                  label="Submit & Pause Job"
-                  icon={<PauseCircle size={18} color="#ffffff" />}
+                  title="Submit & Pause Job"
+                  icon={PauseCircle}
                   onPress={() => { void handleAction(true); }}
                   disabled={Boolean(isSubmitting) || !mobileCapabilities.reportIssue}
                   loading={isSubmitting === 'pause'}
                   variant="danger"
                   size="lg"
-                  style={{ width: '100%' }}
+                  fullWidth
                 />
               )}
               <Button
-                label="Submit Report"
-                icon={<AlertTriangle size={18} color={canPause ? colors.textPrimary : '#ffffff'} />}
+                title="Submit Report"
+                icon={AlertTriangle}
                 onPress={() => { void handleAction(false); }}
                 disabled={Boolean(isSubmitting) || !mobileCapabilities.reportIssue}
                 loading={isSubmitting === 'report'}
                 variant={canPause ? 'outline' : 'primary'}
                 size="lg"
-                style={{ width: '100%' }}
+                fullWidth
               />
             </View>
           )}
@@ -447,7 +456,7 @@ export function IssueReportingModal({
   );
 }
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
     backgroundColor: colors.background,
@@ -471,18 +480,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     padding: 14,
     gap: 4,
   },
-  partialTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.warningText,
-    fontFamily: typography.fontSans,
-  },
-  partialDesc: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.warningText,
-    fontFamily: typography.fontSans,
-  },
   safetyBox: {
     flexDirection: 'row',
     gap: 12,
@@ -491,32 +488,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderWidth: 1,
     borderColor: colors.dangerBorder,
     padding: 14,
-    ...shadows.panel,
   },
   safetyTextWrap: {
     flex: 1,
   },
-  safetyBold: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.dangerText,
-    fontFamily: typography.fontSans,
-  },
-  safetyDesc: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
   section: {
     gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
   },
   catCard: {
     flexDirection: 'row',
@@ -527,34 +504,30 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    minHeight: 48,
-    ...shadows.panel,
+    paddingVertical: 10,
+    minHeight: 52,
   },
   catCardSelected: {
     borderColor: colors.darkAction,
     borderWidth: 1.5,
   },
   catIconWrap: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   catIconWrapSelected: {
     backgroundColor: colors.darkAction,
   },
-  catTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  catTitleSelected: {
-    fontWeight: '700',
-    color: colors.textPrimary,
+  catTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   containerChipRow: {
     flexDirection: 'row',
@@ -574,202 +547,20 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderColor: colors.primary,
     backgroundColor: colors.primaryLight,
   },
-  containerChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: typography.fontMono,
-    color: colors.textPrimary,
-  },
-  containerChipTextSelected: {
-    color: colors.primaryText,
-  },
-  blockingHint: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.warningText,
-    fontFamily: typography.fontSans,
-  },
   checkBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: colors.darkAction,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  evidenceCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    ...shadows.panel,
-    gap: 10,
-  },
-  evidenceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  evidenceBadge: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  evidenceBadgeAttached: {
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
-    borderColor: 'rgba(22, 163, 74, 0.25)',
-  },
-  evidenceBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  evidenceBadgeTextAttached: {
-    color: '#16a34a',
-    fontWeight: '700',
-  },
-  cameraBox: {
-    backgroundColor: '#0f172a',
-    borderRadius: radii.md,
-    padding: 14,
-    minHeight: 180,
-    justifyContent: 'space-between',
-  },
-  camTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  camRecText: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: typography.fontMono,
-  },
-  camDeviceText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontFamily: typography.fontMono,
-  },
-  camReticle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
-  camReticleText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    fontWeight: '500',
-    fontFamily: typography.fontSans,
-  },
-  camActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  shutterBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.darkAction,
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewCard: {
+  photoHintRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-  },
-  previewIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewFilename: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  previewMeta: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
-  retakeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  retakeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  deletePhotoBtn: {
-    padding: 6,
-  },
-  notesCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    ...shadows.panel,
     gap: 8,
-  },
-  notesInput: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    fontSize: 14,
-    color: colors.textPrimary,
-    minHeight: 80,
-    textAlignVertical: 'top',
-    fontFamily: typography.fontSans,
-  },
-  evidenceUnavailable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-  },
-  evidenceUnavailableText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
+    paddingTop: 4,
   },
   errorBanner: {
     paddingHorizontal: 16,
@@ -778,14 +569,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     borderTopWidth: 1,
     borderTopColor: colors.dangerBorder,
   },
-  errorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.dangerText,
-    fontFamily: typography.fontSans,
-  },
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
