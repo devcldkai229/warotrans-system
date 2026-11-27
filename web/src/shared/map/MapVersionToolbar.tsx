@@ -30,16 +30,17 @@ export function MapVersionToolbar({
 }: MapVersionToolbarProps) {
   return (
     <div
+      data-map-ui
       className={cx(
-        'absolute top-3 left-1/2 z-5 -translate-x-1/2 flex flex-wrap items-center gap-2 rounded-full bg-surface/95 py-1.5 pr-2 pl-3 text-xs text-ink-2 shadow-float',
+        'absolute top-3 left-1/2 z-5 -translate-x-1/2 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-full border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] py-1.5 pr-2 pl-3 text-xs text-ink-2 shadow-float backdrop-blur-md',
         className,
       )}
     >
       {showWarehouse ? (
-        <label className="flex items-center gap-1.5">
+        <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           <span className="text-muted">{t('WH')}</span>
           <select
-            className={cx(controlClass(), 'h-7 min-w-28 border-0 bg-transparent py-0 text-xs shadow-none')}
+            className={cx(controlClass(), 'h-7 min-w-24 border-0 bg-transparent py-0 text-xs shadow-none')}
             value={warehouseId}
             onChange={(e) => onWarehouseChange(e.target.value)}
             aria-label={t('Warehouse')}
@@ -53,10 +54,10 @@ export function MapVersionToolbar({
           </select>
         </label>
       ) : null}
-      <label className="flex items-center gap-1.5">
+      <label className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
         <span className="text-muted">{t('Map')}</span>
         <select
-          className={cx(controlClass(), 'h-7 min-w-40 border-0 bg-transparent py-0 text-xs shadow-none')}
+          className={cx(controlClass(), 'h-7 min-w-36 max-w-60 truncate border-0 bg-transparent py-0 text-xs shadow-none')}
           value={mapVersionId}
           onChange={(e) => onMapVersionChange(e.target.value)}
           aria-label={t('Map version')}

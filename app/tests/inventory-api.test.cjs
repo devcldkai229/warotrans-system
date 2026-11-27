@@ -62,6 +62,13 @@ test('barcode detail lookup trims and encodes the code without inventing an endp
   assert.equal(result.currentEndpointId, null);
 });
 
+test('barcode detail lookup preserves currentEndpointId when returned by backend', async () => {
+  const detail = { id: 'container', barcode: 'BOX-2', currentStorageLocationId: null, currentEndpointId: 'ep-inbound-1', currentLevelNo: null };
+  const api = loadWarehouse(async () => detail);
+  const result = await api.getContainerByBarcode('BOX-2');
+  assert.equal(result.currentEndpointId, 'ep-inbound-1');
+});
+
 test('barcode detail errors remain errors even after a successful container list', async () => {
   const error = new Error('Registry unavailable');
   const api = loadWarehouse(async path => {

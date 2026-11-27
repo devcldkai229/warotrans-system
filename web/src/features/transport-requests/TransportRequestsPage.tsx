@@ -587,7 +587,7 @@ export function TransportRequestsPage() {
         ) : null}
 
         {composing ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-float">{t('Preview only — final robot route is planned after submission.')}{composerMap?.pickHint ? (
+          <div className="pointer-events-none absolute bottom-12 left-3 z-10 max-w-sm rounded-xl border border-[var(--otto-hud-border)] bg-[var(--otto-hud-bg)] px-3 py-2 text-[11px] text-muted shadow-float backdrop-blur-md">{t('Preview only — final robot route is planned after submission.')}{composerMap?.pickHint ? (
               <p className="mt-1 font-medium text-ink">{composerMap.pickHint}</p>
             ) : null}
           </div>

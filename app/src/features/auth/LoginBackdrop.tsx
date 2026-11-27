@@ -25,6 +25,7 @@ interface ParticleDot {
 
 const ENTER_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const WAVE_EASE = Easing.inOut(Easing.sin);
+const IS_WEB = Platform.OS === 'web';
 
 const BUCKET_COUNT = 10;
 const WEB_COLS = 42;
@@ -91,6 +92,18 @@ const WebParticleWave = memo(function WebParticleWave({
     const rgb = isDark ? '125, 211, 252' : '43, 92, 196';
     const baseGain = isDark ? 0.36 : 0.40;
     const buckets: number[][] = Array.from({ length: BUCKET_COUNT }, () => []);
+    const bucketColors = buckets.map((_, index) => {
+      const alpha = ((index + 0.5) / BUCKET_COUNT) * 0.46;
+      return `rgba(${rgb}, ${alpha.toFixed(3)})`;
+    });
+    const rows = Array.from({ length: WEB_ROWS }, (_, row) => {
+      const v = row / (WEB_ROWS - 1);
+      return { v, topFade: Math.min(1, v / 0.22) };
+    });
+    const columns = Array.from({ length: WEB_COLS }, (_, col) => {
+      const u = (col / (WEB_COLS - 1)) * 2 - 1;
+      return { u, sideFade: Math.max(0, 1 - Math.pow(Math.abs(u), 2.3)) };
+    }).filter(({ sideFade }) => sideFade > 0.01);
 
     let cssWidth = 0;
     let cssHeight = 0;
@@ -126,16 +139,10 @@ const WebParticleWave = memo(function WebParticleWave({
       const ampWave = Math.min(cssHeight * 0.056, 44);
       const ampHill = Math.min(cssHeight * 0.068, 54);
 
-      for (let row = 0; row < WEB_ROWS; row++) {
-        const v = row / (WEB_ROWS - 1);
-        const topFade = Math.min(1, v / 0.22);
+      for (const { v, topFade } of rows) {
         const spanX = cssWidth * 0.54 * (0.84 + v * 0.34);
 
-        for (let col = 0; col < WEB_COLS; col++) {
-          const u = (col / (WEB_COLS - 1)) * 2 - 1;
-          const sideFade = Math.max(0, 1 - Math.pow(Math.abs(u), 2.3));
-          if (sideFade <= 0.01) continue;
-
+        for (const { u, sideFade } of columns) {
           const w1 = Math.sin(u * 2.8 - tSec * 1.35 + v * 2.3);
           const w2 = Math.cos(u * 1.7 + tSec * 0.85 - v * 3.0) * 0.62;
           const w3 = Math.sin((u * 1.4 - v * 2.1) * 2.6 - tSec * 1.05) * 0.25;
@@ -167,8 +174,7 @@ const WebParticleWave = memo(function WebParticleWave({
       for (let b = 0; b < BUCKET_COUNT; b++) {
         const coords = buckets[b];
         if (coords.length === 0) continue;
-        const alpha = ((b + 0.5) / BUCKET_COUNT) * 0.46;
-        ctx.fillStyle = `rgba(${rgb}, ${alpha.toFixed(3)})`;
+        ctx.fillStyle = bucketColors[b];
         ctx.beginPath();
         for (let i = 0; i < coords.length; i += 3) {
           const cx = coords[i];
@@ -249,7 +255,6 @@ const WebParticleWave = memo(function WebParticleWave({
 
   return React.createElement('canvas' as unknown as React.ElementType, {
     ref: canvasRef,
-    'aria-hidden': true,
     style: {
       position: 'absolute',
       inset: 0,
@@ -271,9 +276,9 @@ const NativeWaveRows = memo(function NativeWaveRows({
   isDark: boolean;
   reducedMotion: boolean;
 }) {
-  const rowPhases = useRef(
+  const [rowPhases] = useState(() =>
     NATIVE_WAVE_ROWS.map(() => new Animated.Value(0.5)),
-  ).current;
+  );
 
   useEffect(() => {
     if (reducedMotion) {
@@ -344,8 +349,6 @@ const NativeWaveRows = memo(function NativeWaveRows({
               height="100%"
               viewBox="0 0 400 800"
               preserveAspectRatio="xMidYMax slice"
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
             >
               {rowDots.map((dot, idx) => (
                 <Circle
@@ -378,8 +381,8 @@ export const LoginBackdrop = memo(function LoginBackdrop({
 }) {
   const [reducedMotion, setReducedMotion] = useState(false);
 
-  const enterOpacity = useRef(new Animated.Value(0)).current;
-  const mistPhase = useRef(new Animated.Value(0)).current;
+  const [enterOpacity] = useState(() => new Animated.Value(0));
+  const [mistPhase] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     let active = true;
@@ -404,7 +407,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
       toValue: 1,
       duration: reducedMotion ? 150 : 450,
       easing: ENTER_EASE_OUT,
-      useNativeDriver: true,
+      useNativeDriver: !IS_WEB,
     });
     enterAnim.start();
 
@@ -421,13 +424,15 @@ export const LoginBackdrop = memo(function LoginBackdrop({
           toValue: 1,
           duration: 6500,
           easing: WAVE_EASE,
-          useNativeDriver: true,
+          useNativeDriver: !IS_WEB,
+          isInteraction: false,
         }),
         Animated.timing(mistPhase, {
           toValue: 0,
           duration: 6500,
           easing: WAVE_EASE,
-          useNativeDriver: true,
+          useNativeDriver: !IS_WEB,
+          isInteraction: false,
         }),
       ]),
     );
@@ -469,7 +474,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
   const baseColor = isDark ? '#0f1218' : '#ffffff';
 
   return (
-    <View pointerEvents="none" style={styles.root}>
+    <View aria-hidden pointerEvents="none" style={styles.root}>
       {/* Static base canvas + bottom horizon wash */}
       <Svg
         width="100%"
@@ -477,8 +482,6 @@ export const LoginBackdrop = memo(function LoginBackdrop({
         viewBox="0 0 400 800"
         preserveAspectRatio="xMidYMax slice"
         style={StyleSheet.absoluteFill}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
       >
         <Defs>
           <LinearGradient
@@ -525,8 +528,6 @@ export const LoginBackdrop = memo(function LoginBackdrop({
             height="100%"
             viewBox="0 0 400 800"
             preserveAspectRatio="xMidYMax slice"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
           >
             <Defs>
               <RadialGradient
@@ -617,7 +618,7 @@ export const LoginBackdrop = memo(function LoginBackdrop({
           </Svg>
         </Animated.View>
 
-        {Platform.OS === 'web' ? (
+        {IS_WEB ? (
           <WebParticleWave isDark={isDark} reducedMotion={reducedMotion} />
         ) : (
           <NativeWaveRows isDark={isDark} reducedMotion={reducedMotion} />

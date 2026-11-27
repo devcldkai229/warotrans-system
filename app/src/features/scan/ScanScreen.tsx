@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { ArrowUpRight, Box, CheckCircle2, ClipboardCheck, FileText, MapPin, PackageCheck, ScanLine, Truck, XCircle } from 'lucide-react-native';
+import { CheckCircle2, ClipboardCheck, FileText, MapPin, Maximize2, Package, PackageCheck, ScanLine, Truck, XCircle, Box } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Scanner } from '../../shared/scan/Scanner';
 import { resolveScan, type ContainerTask, type ScanTarget } from '../../shared/scan/scanRouter';
 import { createScanApi } from '../../shared/scan/scanApi';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
-import { Button, Text } from '../../shared/ui';
+import { Button, StatusPill, Text } from '../../shared/ui';
 import type { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
@@ -18,6 +18,7 @@ import { t } from '../../shared/i18n';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { problemsFor } from '../../shared/containerProblems';
 import { ProblemCodeChips } from '../../shared/components/ProblemCodeChips';
+import { formatContainerLocation } from '../inventory/containerDetailData';
 
 const api = createScanApi();
 
@@ -52,42 +53,49 @@ export function ScanScreen() {
       onClose={goBack} onScanAgain={() => { setTarget(null); setRound(value => value + 1); }}
       onInspect={setInspect}
       onOpenJob={task => navigate('job_detail', { jobId: task.jobId, modal: 'verify' })}
-      onMove={() => navigate('transport_create', { workflow: 'INTERNAL_RELOCATION', containers: [target.container.barcode] })}
-      onOpenVoucher={() => target.container.voucher && navigate('stock_voucher_detail', { voucherId: target.container.voucher.id })} /> : null}
+      onViewDetails={() => {
+        triggerHaptic('tap');
+        navigate('container_detail', { containerId: target.container.id, barcode: target.container.barcode });
+      }} /> : null}
     {inspect && target ? <InspectionSheet task={inspect} container={target.container} onClose={() => setInspect(null)}
       onDone={() => { setInspect(null); setTarget(null); setRound(value => value + 1); }} /> : null}
   </View>;
 }
 
-function ContainerCard({ container, tasks, onClose, onScanAgain, onInspect, onOpenJob, onMove, onOpenVoucher }: {
+function ContainerCard({ container, tasks, onClose, onScanAgain, onInspect, onOpenJob, onViewDetails }: {
   container: ContainerListItem; tasks: ContainerTask[]; onClose: () => void; onScanAgain: () => void;
-  onInspect: (task: ContainerTask) => void; onOpenJob: (task: ContainerTask) => void; onMove: () => void; onOpenVoucher: () => void;
+  onInspect: (task: ContainerTask) => void; onOpenJob: (task: ContainerTask) => void; onViewDetails: () => void;
 }) {
   const { styles, colors } = useThemedStyles(createStyles);
   const places = usePlaceDirectory();
-  const shelf = container.currentStorageLocationCode ? places.locations.find(location => location.code === container.currentStorageLocationCode)?.name ?? container.currentStorageLocationCode : null;
-  const where = shelf ? `${shelf}${container.currentLevelNo ? ` · ${t('Level {level}', { level: container.currentLevelNo })}` : ''}`
-    : container.currentEndpointId ? places.name(container.currentEndpointId) : t('Not on a shelf');
-  const movable = container.status === 'STORED' && !!container.currentStorageLocationId && !container.inActiveTransport;
-  return <BottomSheet onClose={onClose} accessibilityLabel="Scanned container">
+  const location = formatContainerLocation(container, places);
+  return <BottomSheet onClose={onClose} accessibilityLabel="Scanned container" autoHeight>
     <ScrollView contentContainerStyle={styles.sheet}>
       <View style={styles.head}>
         <View style={styles.headIcon}><Box size={22} color={colors.primaryText} /></View>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text variant="title" style={{ fontFamily: 'monospace' }} numberOfLines={1}>{container.barcode}</Text>
           <Text variant="caption" color="textSecondary" numberOfLines={1}>{container.productName} · {container.productSku}</Text>
         </View>
-        <View style={styles.statusPill}><Text variant="caption" fontWeight="700">{container.status}</Text></View>
+        <StatusPill status={container.status} size="sm" />
       </View>
-      <View style={styles.infoRow}><MapPin size={16} color={colors.textSecondary} /><Text variant="bodyMedium" style={{ flex: 1 }}>{where}</Text></View>
+      <View style={styles.infoRow}><MapPin size={16} color={colors.textSecondary} /><Text variant="bodyMedium" style={{ flex: 1 }}>{location.primary}</Text></View>
+      {container.contentsQuantity != null ? (
+        <View style={styles.infoRow}>
+          <Package size={16} color={colors.textSecondary} />
+          <Text variant="bodyMedium" style={{ flex: 1 }}>{t('Qty {quantity}', { quantity: container.contentsQuantity })}</Text>
+        </View>
+      ) : null}
       {container.voucher ? <View style={styles.infoRow}><FileText size={16} color={colors.textSecondary} /><Text variant="bodyMedium" style={{ flex: 1 }}>{container.voucher.code}</Text></View> : null}
+
+      <View style={styles.detailActionRow}>
+        <Button title="View Details" icon={Maximize2} variant="outline" size="sm" onPress={onViewDetails} />
+      </View>
 
       {tasks.map(task => task.operation === 'INSPECTION_CONFIRM'
         ? <Button key={task.stepId} title={t('Inspect ({job})', { job: task.jobNo })} icon={ClipboardCheck} fullWidth onPress={() => onInspect(task)} />
         : <Button key={task.stepId} title={task.operation === 'PICKUP_CONFIRM' ? t('Confirm loading ({job})', { job: task.jobNo }) : t('Confirm unloading ({job})', { job: task.jobNo })}
             icon={task.operation === 'PICKUP_CONFIRM' ? Truck : PackageCheck} fullWidth onPress={() => onOpenJob(task)} />)}
-      {movable ? <Button title="Move To Another Shelf" icon={ArrowUpRight} variant="outline" fullWidth onPress={onMove} /> : null}
-      {container.voucher ? <Button title="Open Voucher" icon={FileText} variant="outline" fullWidth onPress={onOpenVoucher} /> : null}
       {!tasks.length ? <Text variant="caption" color="textSecondary">No job is waiting for this container right now.</Text> : null}
       <Button title="Scan Another Code" icon={ScanLine} variant="ghost" fullWidth onPress={onScanAgain} />
     </ScrollView>
@@ -152,7 +160,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   sheet: { paddingHorizontal: 20, paddingBottom: 28, gap: 12 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headIcon: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.surfaceMuted },
+  detailActionRow: { flexDirection: 'row', alignItems: 'center' },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
   choiceRow: { flexDirection: 'row', gap: 10 },
   choice: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 18, borderRadius: radii.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface },
