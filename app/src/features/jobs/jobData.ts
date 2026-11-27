@@ -19,6 +19,7 @@ export interface AppJobItem extends JobSummary {
   failureMessage?: string | null;
   activeTaskId?: string; assignedStaffId?: string; activeStepId?: string; activeStepOperation?: string;
   hasWaitingHandover?: boolean; assignedRobotId?: string; target: string; route: string; robot: string; isMine: boolean;
+  sourceName?: string; destinationName?: string;
   battery: string; speed: string; distanceRemaining?: string; progressPercent?: number; completedAt?: string;
   duration?: string; operator?: string; currentStop: string; stopsCount: number; routeText: string;
   payloadSummary: string; containers: JobContainerItem[]; stopsList: JobStopItem[];
@@ -42,6 +43,118 @@ export function jobTaskFocus(task: AppJobTaskItem): JobStepResponse | undefined 
     || task.steps.find(step => step.status === 'PENDING');
 }
 export function isTerminalJobStatus(status: JobStatus) { return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status); }
+
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+const VI_MONTHS = [
+  'Thg 1', 'Thg 2', 'Thg 3', 'Thg 4', 'Thg 5', 'Thg 6',
+  'Thg 7', 'Thg 8', 'Thg 9', 'Thg 10', 'Thg 11', 'Thg 12',
+] as const;
+
+export type HistoryListRow =
+  | { type: 'date'; key: string; label: string }
+  | { type: 'job'; key: string; job: AppJobItem };
+
+export function jobHistoryTimestamp(job: Pick<AppJobItem, 'completedAt' | 'createdAtUtc'>): number | null {
+  if (job.completedAt) {
+    const completed = Date.parse(job.completedAt);
+    if (Number.isFinite(completed)) return completed;
+  }
+  if (job.createdAtUtc) {
+    const created = Date.parse(job.createdAtUtc);
+    if (Number.isFinite(created)) return created;
+  }
+  return null;
+}
+
+export function formatJobClockTime(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return null;
+  const date = new Date(parsed);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function localDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function formatHistoryDateHeader(
+  iso: string | undefined,
+  now: Date = new Date(),
+  language: 'en' | 'vi' = 'en',
+): string {
+  const parsed = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(parsed)) {
+    return language === 'vi' ? 'Trước đó' : 'Earlier';
+  }
+  const date = new Date(parsed);
+  const day = date.getDate();
+  const monthIdx = date.getMonth();
+  const year = date.getFullYear();
+  const monthLabel = language === 'vi' ? VI_MONTHS[monthIdx] : EN_MONTHS[monthIdx];
+
+  const todayKey = localDayKey(now);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yesterdayKey = localDayKey(yesterday);
+  const targetKey = localDayKey(date);
+
+  if (targetKey === todayKey) {
+    return language === 'vi' ? `Hôm nay · ${day} ${monthLabel}` : `Today · ${day} ${monthLabel}`;
+  }
+  if (targetKey === yesterdayKey) {
+    return language === 'vi' ? `Hôm qua · ${day} ${monthLabel}` : `Yesterday · ${day} ${monthLabel}`;
+  }
+  if (year === now.getFullYear()) {
+    return `${day} ${monthLabel}`;
+  }
+  return language === 'vi' ? `${day} ${monthLabel}, ${year}` : `${day} ${monthLabel} ${year}`;
+}
+
+export function groupHistoryJobs(
+  jobs: AppJobItem[],
+  now: Date = new Date(),
+  language: 'en' | 'vi' = 'en',
+): HistoryListRow[] {
+  const sorted = [...jobs].sort((a, b) => {
+    const ta = jobHistoryTimestamp(a);
+    const tb = jobHistoryTimestamp(b);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    return tb - ta;
+  });
+
+  const rows: HistoryListRow[] = [];
+  let lastDayKey: string | null = null;
+
+  for (const job of sorted) {
+    const ts = jobHistoryTimestamp(job);
+    const rawIso = ts !== null ? new Date(ts).toISOString() : undefined;
+    const dayKey = ts !== null ? localDayKey(new Date(ts)) : 'unknown';
+
+    if (dayKey !== lastDayKey) {
+      lastDayKey = dayKey;
+      rows.push({
+        type: 'date',
+        key: `date-${dayKey}`,
+        label: formatHistoryDateHeader(rawIso, now, language),
+      });
+    }
+
+    rows.push({
+      type: 'job',
+      key: job.id,
+      job,
+    });
+  }
+
+  return rows;
+}
 export interface JobStatusPresentation { label: string; tone: SemanticTone }
 export const JOB_STATUS_PRESENTATION: Record<JobStatus, JobStatusPresentation> = {
   CREATED: { label: 'Created', tone: 'neutral' }, QUEUED: { label: 'Queued', tone: 'neutral' },

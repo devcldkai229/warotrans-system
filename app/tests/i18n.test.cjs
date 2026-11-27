@@ -87,6 +87,11 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(t('Unallocated'), 'Chưa phân bổ vị trí');
   assert.equal(t('No online robots on this map'), 'Chưa có robot trực tuyến trên bản đồ này');
   assert.equal(t('{count} robots online', { count: 2 }), '2 robot trực tuyến');
+  assert.equal(t('My Tasks'), 'Của tôi');
+  assert.equal(t('Fleet Queue'), 'Hàng chờ');
+  assert.equal(t('Browse Fleet Queue ({count})', { count: 4 }), 'Xem hàng chờ (4)');
+  assert.equal(t('WES connected · Standing by'), 'Đã kết nối WES · Đang trực');
+  assert.equal(t('Reconnecting to WES…'), 'Đang kết nối lại WES…');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(

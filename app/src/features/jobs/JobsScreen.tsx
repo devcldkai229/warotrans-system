@@ -1,7 +1,19 @@
-import { Check, ChevronDown, Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ClipboardCheck,
+  Filter,
+  History,
+  MapPin,
+  Radio,
+  ScanLine,
+  Search,
+  SearchX,
+} from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ThemeColors } from '../../shared/theme/colors';
@@ -20,6 +32,7 @@ import {
 } from '../../shared/api';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { t } from '../../shared/i18n';
+import { useLanguage } from '../../shared/i18n/LanguageContext';
 import type { HandoverStopResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { HandoverStopCard } from './HandoverStopCard';
@@ -28,9 +41,17 @@ import { JobCard } from './JobCard';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
 import type { PlaceDirectory } from '../../shared/places/placeDirectory';
-import { AppJobItem, isTerminalJobStatus, mapJobDetailToAppJobItem } from './jobData';
+import {
+  AppJobItem,
+  groupHistoryJobs,
+  HistoryListRow,
+  isTerminalJobStatus,
+  mapJobDetailToAppJobItem,
+} from './jobData';
 
 type JobScope = 'mine' | 'fleet' | 'history';
+type HistoryStatusFilter = 'ALL' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
+type JobListRow = HistoryListRow | { type: 'job'; key: string; job: AppJobItem };
 
 const SCOPES: ReadonlyArray<{ label: string; value: JobScope }> = [
   { label: 'My Tasks', value: 'mine' },
@@ -132,24 +153,6 @@ function inScope(job: AppJobItem, scope: JobScope, myStopJobIds: Set<string>): b
   return scope === 'fleet' ? true : (job.isMine || myStopJobIds.has(job.id));
 }
 
-const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
-  mine: {
-    title: 'No Claimed Tasks',
-    message:
-      'Claim an open handover offer or waiting task from Fleet Queue to see it here.',
-  },
-  fleet: {
-    title: 'The fleet queue is clear',
-    message:
-      'No jobs are waiting for a robot right now. New requests from WES land here as soon as they are dispatched.',
-  },
-  history: {
-    title: 'Nothing in history yet',
-    message:
-      'Finished, failed and cancelled jobs stay here, so you can check a putaway against its target after the fact.',
-  },
-};
-
 /**
  * Jobs — the execution centre.
  *
@@ -160,11 +163,13 @@ export function JobsScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, params, dockHeight, setActiveJobCount } = useNavigation();
   const { session } = useAuth();
+  const { language } = useLanguage();
   const client = useQueryClient();
-  const { lastJobUpdate, lastHandoverStopsChange } = useRealtime();
+  const { isConnected, lastJobUpdate, lastHandoverStopsChange } = useRealtime();
   const deepLinkedScope = scopeFromParams(params?.view);
   const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'fleet');
   const [query, setQuery] = useState('');
+  const [historyFilter, setHistoryFilter] = useState<HistoryStatusFilter>('ALL');
   const [areaId, setAreaId] = useState<string | null>(null);
   const [areaPickerOpen, setAreaPickerOpen] = useState(false);
   const [workZonePickerOpen, setWorkZonePickerOpen] = useState(false);
@@ -194,8 +199,10 @@ export function JobsScreen() {
   const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => {
     const job = mapJobDetailToAppJobItem(detail, session?.id);
     // Places read by name (a shelf's storage location name, else the endpoint's own name), never by endpoint code.
-    const route = `${places.name(job.sourceEndpointCode, 'Pickup')} ➔ ${places.name(job.destinationEndpointCode, 'Drop-off')}`;
-    return { ...job, route, routeText: route, target: places.name(job.destinationEndpointCode, job.target) };
+    const sourceName = places.name(job.sourceEndpointCode, 'Pickup');
+    const destinationName = places.name(job.destinationEndpointCode, 'Drop-off');
+    const route = `${sourceName} ➔ ${destinationName}`;
+    return { ...job, sourceName, destinationName, route, routeText: route, target: destinationName };
   }), [jobsQuery.data, session?.id, places]);
   const { refetch } = jobsQuery;
   const { refetch: refetchStops } = stopsQuery;
@@ -244,6 +251,29 @@ export function JobsScreen() {
     } as Record<JobScope, number>;
   }, [jobsList, query, areaId, places, myStopJobIds]);
 
+  const unfilteredCounts = useMemo(() => {
+    const stops = stopsQuery.data ?? [];
+    const mineJobs = jobsList.filter((job) => inScope(job, 'mine', myStopJobIds));
+    const fleetJobs = jobsList.filter((job) => inScope(job, 'fleet', myStopJobIds));
+    const historyJobs = jobsList.filter((job) => inScope(job, 'history', myStopJobIds));
+
+    const mineJobIds = new Set(mineJobs.map((j) => j.id));
+    const fleetJobIds = new Set(fleetJobs.map((j) => j.id));
+    const extraMineStops = canOperate
+      ? stops.filter((s) => handoverStopOwnerState(s, session?.id) === 'mine' && !mineJobIds.has(s.jobId)).length
+      : 0;
+    const extraFleetStops = canOperate
+      ? stops.filter((s) => !fleetJobIds.has(s.jobId)).length
+      : 0;
+
+    return {
+      mine: mineJobs.length + extraMineStops,
+      fleet: fleetJobs.length + extraFleetStops,
+      history: historyJobs.length,
+      historyFailed: historyJobs.filter((j) => j.status === 'FAILED').length,
+    };
+  }, [jobsList, myStopJobIds, stopsQuery.data, canOperate, session?.id]);
+
   useEffect(() => {
     const myActive = jobsList.filter(
       (j) => !isTerminalJobStatus(j.status) && (j.isMine || myStopJobIds.has(j.id)),
@@ -275,15 +305,38 @@ export function JobsScreen() {
     [jobsList, scope, myStopJobIds, query, areaId, places]
   );
 
+  const filteredVisible = useMemo(
+    () =>
+      scope !== 'history' || historyFilter === 'ALL'
+        ? visible
+        : visible.filter((job) => job.status === historyFilter),
+    [scope, historyFilter, visible]
+  );
+
+  const listRows = useMemo<JobListRow[]>(
+    () =>
+      scope === 'history'
+        ? groupHistoryJobs(filteredVisible, new Date(), language)
+        : filteredVisible.map((job) => ({ type: 'job', key: job.id, job })),
+    [scope, filteredVisible, language]
+  );
+
   const options = useMemo(
     () =>
-      SCOPES.map((entry) =>
-        entry.value === 'history' || jobsQuery.data === undefined
-          ? entry
-          : { ...entry, label: `${entry.label} (${counts[entry.value]})` }
-      ),
+      SCOPES.map((entry) => ({
+        ...entry,
+        badge:
+          entry.value === 'history' || jobsQuery.data === undefined
+            ? undefined
+            : counts[entry.value],
+      })),
     [counts, jobsQuery.data]
   );
+
+  const hasAnyInScope = unfilteredCounts[scope] > 0;
+  const showSearch = hasAnyInScope || query.trim().length > 0;
+  const showHistoryFilters = scope === 'history' && unfilteredCounts.history > 0;
+  const isEmptyList = jobsQuery.data === undefined || (listRows.length === 0 && visibleStops.length === 0);
 
   const handleScopeChange = (next: JobScope) => {
     triggerHaptic('tap');
@@ -332,18 +385,66 @@ export function JobsScreen() {
           style={styles.scopeControl}
         />
 
-        <TextField
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search by Job ID, Container, or Rack..."
-          placeholderTextColor={colors.textMuted}
-          leftIcon={<Search size={18} color={colors.textMuted} />}
-          showClearButton
-          autoCorrect={false}
-          autoCapitalize="none"
-          returnKeyType="search"
-          accessibilityLabel="Search jobs"
-        />
+        {showSearch ? (
+          <TextField
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search by Job ID, container, or rack…"
+            placeholderTextColor={colors.textMuted}
+            leftIcon={<Search size={18} color={colors.textMuted} />}
+            showClearButton
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            accessibilityLabel="Search jobs"
+          />
+        ) : null}
+
+        {showHistoryFilters ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.historyFiltersRow}
+          >
+            {(
+              [
+                { value: 'ALL', label: 'All' },
+                { value: 'COMPLETED', label: 'Completed' },
+                { value: 'CANCELLED', label: 'Cancelled' },
+                ...(unfilteredCounts.historyFailed > 0 || historyFilter === 'FAILED'
+                  ? [{ value: 'FAILED' as const, label: 'Failed' }]
+                  : []),
+              ] as const
+            ).map((chip) => {
+              const active = historyFilter === chip.value;
+              return (
+                <Pressable
+                  key={chip.value}
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    setHistoryFilter(chip.value);
+                  }}
+                  hitSlop={{ top: 5, bottom: 5 }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  style={({ pressed }) => [
+                    styles.historyChip,
+                    active && styles.historyChipActive,
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Text
+                    variant="caption"
+                    color={active ? '#ffffff' : colors.textSecondary}
+                    fontWeight={active ? '600' : '500'}
+                  >
+                    {chip.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {places.areas.length ? (
           <Pressable
@@ -390,16 +491,35 @@ export function JobsScreen() {
       </View>
 
       <FlatList
-        data={visible}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <JobCard
-            job={item}
-            onPress={() => openJob(item)}
-          />
-        )}
-        ItemSeparatorComponent={ListSeparator}
-        contentContainerStyle={[styles.listContent, { paddingBottom: bottomInset }]}
+        data={listRows}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item, index }) => {
+          if (item.type === 'date') {
+            return (
+              <View style={[styles.dateHeaderWrap, index > 0 && styles.dateHeaderSpaced]}>
+                <Text variant="caption" color="textSecondary" style={styles.dateHeaderText}>
+                  {item.label}
+                </Text>
+              </View>
+            );
+          }
+
+          const prevIsJob = index > 0 && listRows[index - 1]?.type === 'job';
+          return (
+            <View style={prevIsJob ? styles.jobRowSpaced : undefined}>
+              <JobCard
+                job={item.job}
+                variant={scope === 'history' ? 'history' : 'active'}
+                onPress={() => openJob(item.job)}
+              />
+            </View>
+          );
+        }}
+        contentContainerStyle={[
+          styles.listContent,
+          isEmptyList && styles.listContentEmpty,
+          { paddingBottom: bottomInset },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -466,20 +586,35 @@ export function JobsScreen() {
             </View>
           ) : undefined
         }
-        ListEmptyComponent={jobsQuery.data === undefined ? <EmptyState compact
-          title={jobsQuery.error ? 'Jobs Unavailable' : jobsQuery.fetchStatus === 'paused' ? 'Waiting For Connection' : 'Loading Jobs…'}
-          message={jobsQuery.error ? jobsQuery.error.message : 'The queue has not loaded yet.'}
-          actionTitle={jobsQuery.error ? 'Retry' : undefined} onAction={() => { void refetch(); }} /> :
-          visibleStops.length > 0 ? undefined :
-          <ListEmpty
-            scope={scope}
-            hasQuery={query.trim().length > 0}
-            zone={area?.name}
-            onClear={() => setQuery('')}
-            onClearZone={() => setAreaId(null)}
-            onShowFleet={() => handleScopeChange('fleet')}
-          />
-        }
+        ListEmptyComponent={jobsQuery.data === undefined ? (
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              title={jobsQuery.error ? 'Jobs Unavailable' : jobsQuery.fetchStatus === 'paused' ? 'Waiting For Connection' : 'Loading Jobs…'}
+              message={jobsQuery.error ? jobsQuery.error.message : 'The queue has not loaded yet.'}
+              actionTitle={jobsQuery.error ? 'Retry' : undefined}
+              onAction={() => { void refetch(); }}
+            />
+          </View>
+        ) : visibleStops.length > 0 ? undefined : (
+          <View style={styles.emptyWrap}>
+            <ListEmpty
+              scope={scope}
+              hasQuery={query.trim().length > 0}
+              zone={area?.name}
+              historyFilter={historyFilter}
+              fleetAvailableCount={unfilteredCounts.fleet}
+              isConnected={isConnected}
+              onClear={() => setQuery('')}
+              onClearZone={() => setAreaId(null)}
+              onClearHistoryFilter={() => setHistoryFilter('ALL')}
+              onShowFleet={() => handleScopeChange('fleet')}
+              onScan={() => {
+                triggerHaptic('tap');
+                navigate('scanner');
+              }}
+            />
+          </View>
+        )}
       />
       {areaPickerOpen ? <BottomSheet onClose={() => setAreaPickerOpen(false)} accessibilityLabel="Choose an area">
         <View style={styles.areaSheet}>
@@ -522,41 +657,46 @@ export function JobsScreen() {
   );
 }
 
-function ListSeparator() {
-  const { styles } = useThemedStyles(createStyles);
-  return <View style={styles.separator} />;
-}
-
 /**
- * Three empty states, not one: "your filter found nothing" and "nothing is
- * routed through your zone" are both dead ends the operator can undo with one
- * tap, while "there is genuinely no work" is information — so the last one
- * points at the fleet queue instead of offering a button that would do nothing.
+ * State-aware empty states: filter dead-ends get one-tap resets, "My Tasks"
+ * checks whether the fleet queue actually has work before offering a jump
+ * there (and falls back to scanning when the whole floor is clear), and
+ * "Fleet Queue" surfaces real WES realtime connectivity.
  */
 function ListEmpty({
   scope,
   hasQuery,
   zone,
+  historyFilter,
+  fleetAvailableCount,
+  isConnected,
   onClear,
   onClearZone,
+  onClearHistoryFilter,
   onShowFleet,
+  onScan,
 }: {
   scope: JobScope;
   hasQuery: boolean;
   zone?: string;
+  historyFilter: HistoryStatusFilter;
+  fleetAvailableCount: number;
+  isConnected: boolean;
   onClear: () => void;
   onClearZone: () => void;
+  onClearHistoryFilter: () => void;
   onShowFleet: () => void;
+  onScan: () => void;
 }) {
   if (hasQuery) {
     return (
       <EmptyState
         icon={SearchX}
-        title="No jobs match that search"
-        message="Job numbers, container codes and rack labels are all searchable. Check the spelling, or clear the box to see the full queue."
-        actionTitle="Clear search"
+        title="No Matching Jobs"
+        message="Check the Job ID, container, or rack spelling, or clear the search."
+        actionTitle="Clear Search"
+        actionVariant="secondary"
         onAction={onClear}
-        compact
       />
     );
   }
@@ -565,23 +705,78 @@ function ListEmpty({
     return (
       <EmptyState
         icon={Filter}
-        title={`Nothing routed through ${zone}`}
-        message="No open job names this zone as a source or destination. Clear the zone filter to see the whole queue."
-        actionTitle="Show all zones"
+        title={t('Nothing Routed Through {zone}', { zone })}
+        message="No jobs in this view start or end in that area."
+        actionTitle="Show All Zones"
+        actionVariant="secondary"
         onAction={onClearZone}
-        compact
+      />
+    );
+  }
+
+  if (scope === 'history' && historyFilter !== 'ALL') {
+    return (
+      <EmptyState
+        icon={Filter}
+        title="No Matching History"
+        message="No past jobs match this status filter."
+        actionTitle="Show All History"
+        actionVariant="secondary"
+        onAction={onClearHistoryFilter}
+      />
+    );
+  }
+
+  if (scope === 'mine') {
+    if (fleetAvailableCount > 0) {
+      return (
+        <EmptyState
+          icon={ClipboardCheck}
+          title="No Claimed Tasks"
+          message="Claim an open handover or waiting job from the fleet queue to begin."
+          actionTitle={t('Browse Fleet Queue ({count})', { count: fleetAvailableCount })}
+          actionVariant="secondary"
+          actionIcon={ArrowRight}
+          actionIconPosition="right"
+          onAction={onShowFleet}
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        icon={ClipboardCheck}
+        title="No Claimed Tasks"
+        message="The fleet queue is also clear. Scan a container or pull down to refresh."
+        actionTitle="Scan Container"
+        actionVariant="secondary"
+        actionIcon={ScanLine}
+        actionIconPosition="left"
+        onAction={onScan}
+      />
+    );
+  }
+
+  if (scope === 'fleet') {
+    return (
+      <EmptyState
+        icon={Radio}
+        title="Fleet Queue Clear"
+        message="New dispatches from WES will appear here automatically."
+        statusIndicator={
+          isConnected
+            ? { label: 'WES connected · Standing by', tone: 'success' }
+            : { label: 'Reconnecting to WES…', tone: 'warning' }
+        }
       />
     );
   }
 
   return (
     <EmptyState
-      icon={Inbox}
-      title={EMPTY_COPY[scope].title}
-      message={EMPTY_COPY[scope].message}
-      actionTitle={scope === 'mine' ? 'View fleet queue' : undefined}
-      onAction={scope === 'mine' ? onShowFleet : undefined}
-      compact
+      icon={History}
+      title="No Job History Yet"
+      message="Completed, failed, and cancelled jobs will be logged here."
     />
   );
 }
@@ -643,6 +838,47 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
   },
+  listContentEmpty: {
+    flexGrow: 1,
+  },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 40,
+  },
+  historyFiltersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 2,
+  },
+  historyChip: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyChipActive: {
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
+  },
+  dateHeaderWrap: {
+    paddingTop: 2,
+    paddingBottom: 8,
+  },
+  dateHeaderSpaced: {
+    marginTop: 16,
+  },
+  dateHeaderText: {
+    fontWeight: '600',
+  },
+  jobRowSpaced: {
+    marginTop: 12,
+  },
   listHeaderGroup: {
     gap: 12,
     marginBottom: 12,
@@ -652,8 +888,5 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   stopsSectionTitle: {
     fontWeight: '700',
-  },
-  separator: {
-    height: 12,
   },
 });

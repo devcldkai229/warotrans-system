@@ -3,7 +3,7 @@ import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { SemanticTone, ThemeColors } from '../theme/colors';
 import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
-import { useThemeColors } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import {
   ContainerStatus,
   JobContainerStatus,
@@ -154,9 +154,9 @@ export function StatusPill({
   dot = false,
   style,
 }: StatusPillProps) {
-  const colors = useThemeColors();
+  const { colors, isDark } = useTheme();
   const resolvedTone = tone ?? statusTone(status);
-  const palette = getTonePalette(colors)[resolvedTone];
+  const palette = getTonePalette(colors, isDark)[resolvedTone];
   const isSm = size === 'sm';
 
   return (
@@ -187,10 +187,14 @@ export function StatusPill({
 
 function getTonePalette(
   colors: ThemeColors,
+  isDark: boolean,
 ): Record<SemanticTone, { container: ViewStyle; text: string; dot: string }> {
   return {
     neutral: {
-      container: { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+      container: {
+        backgroundColor: colors.surfaceSubtle,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(33, 34, 38, 0.14)',
+      },
       text: colors.textSecondary,
       dot: colors.textMuted,
     },

@@ -112,11 +112,12 @@ export function AppHeader({
               triggerHaptic('tap');
               setIsAccountOpen(true);
             }}
+            hitSlop={4}
             accessibilityRole="button"
             accessibilityLabel={`Account menu for ${operatorName}`}
             style={({ pressed }) => [styles.avatar, pressed && styles.avatarPressed]}
           >
-            <Text variant="label" color="#ffffff" style={styles.avatarText}>
+            <Text variant="label" color={colors.textPrimary} style={styles.avatarText}>
               {avatarInitials}
             </Text>
           </Pressable>
@@ -215,15 +216,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       lineHeight: 12,
     },
     avatar: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       marginLeft: 6,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: isDark ? colors.darkAction : '#121317',
-      borderWidth: isDark ? 1 : 0,
-      borderColor: colors.darkActionBorder,
+      backgroundColor: isDark ? colors.darkAction : colors.surfaceMuted,
+      borderWidth: 1,
+      borderColor: isDark ? colors.darkActionBorder : colors.border,
     },
     avatarPressed: {
       opacity: 0.85,
@@ -231,7 +232,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     avatarText: {
       fontWeight: '700',
-      fontSize: 14,
-      color: '#ffffff',
+      fontSize: 13,
+      color: colors.textPrimary,
     },
   });

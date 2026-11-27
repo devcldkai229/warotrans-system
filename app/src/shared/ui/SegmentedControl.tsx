@@ -9,6 +9,7 @@ import { Text } from './Text';
 export interface SegmentedControlOption<TValue extends string = string> {
   label: string;
   value: TValue;
+  badge?: number;
 }
 
 export interface SegmentedControlProps<TValue extends string = string> {
@@ -51,13 +52,15 @@ export function SegmentedControl<TValue extends string = string>({
     >
       {options.map((option) => {
         const isActive = option.value === value;
+        const showBadge = option.badge !== undefined && option.badge > 0;
+        const baseLabel = translateText(option.label);
         return (
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
-            accessibilityLabel={translateText(option.label)}
+            accessibilityLabel={showBadge ? `${baseLabel} (${option.badge})` : baseLabel}
             /**
              * `hitSlop` only exists for `sm`, where the caller has squeezed the
              * control into a filter strip. `md` is already at the 44pt floor.
@@ -77,6 +80,17 @@ export function SegmentedControl<TValue extends string = string>({
             >
               {option.label}
             </Text>
+            {showBadge ? (
+              <View style={[styles.badge, isActive ? styles.badgeActive : styles.badgeInactive]}>
+                <Text
+                  variant="caption"
+                  color={isActive ? colors.textPrimary : colors.textSecondary}
+                  style={styles.badgeText}
+                >
+                  {option.badge}
+                </Text>
+              </View>
+            ) : null}
           </Pressable>
         );
       })}
@@ -84,21 +98,22 @@ export function SegmentedControl<TValue extends string = string>({
   );
 }
 
-const createStyles = (_colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
     track: {
       flexDirection: 'row',
       alignSelf: 'stretch',
       backgroundColor: isDark ? 'rgba(118, 118, 128, 0.24)' : 'rgba(118, 118, 128, 0.11)',
-      borderRadius: 10,
       borderCurve: 'continuous',
       gap: 2,
     },
     trackSm: {
+      borderRadius: 11,
       padding: 3,
     },
     trackMd: {
       minHeight: 48,
+      borderRadius: 12,
       padding: 4,
     },
     segment: {
@@ -106,6 +121,7 @@ const createStyles = (_colors: ThemeColors, _shadows: ThemeShadows, isDark: bool
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 5,
       minHeight: 44,
       minWidth: 0,
       paddingHorizontal: 8,
@@ -131,5 +147,26 @@ const createStyles = (_colors: ThemeColors, _shadows: ThemeShadows, isDark: bool
     },
     labelActive: {
       fontWeight: '600',
+    },
+    badge: {
+      minWidth: 20,
+      height: 20,
+      paddingHorizontal: 5,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    badgeActive: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    badgeInactive: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.08)',
+    },
+    badgeText: {
+      fontSize: 12,
+      lineHeight: 14,
+      fontWeight: '600',
+      fontVariant: ['tabular-nums'],
     },
   });

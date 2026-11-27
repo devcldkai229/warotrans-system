@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { ArrowRight, Boxes, Truck } from 'lucide-react-native';
+import { ArrowRight, Bot, ChevronRight, Package, Route } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
+import { t } from '../../shared/i18n';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
@@ -9,7 +10,7 @@ import { typography } from '../../shared/theme/typography';
 import { JobStatus } from '../../shared/types/contracts';
 import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
 import type { ButtonVariant, MeterTone } from '../../shared/ui';
-import { AppJobItem, JOB_STATUS_PRESENTATION } from './jobData';
+import { AppJobItem, formatJobClockTime, JOB_STATUS_PRESENTATION } from './jobData';
 
 /**
  * Meter fill per lifecycle state, so a card's progress tells the same story as
@@ -64,6 +65,8 @@ interface JobCardProps {
   onPress: () => void;
   /** Optional quick action to claim / accept an unassigned task from the queue. */
   onAccept?: () => void;
+  /** `'history'` renders a compact, full-card tappable log entry without progress chrome. */
+  variant?: 'active' | 'history';
 }
 
 /**
@@ -92,7 +95,7 @@ function workflowTag(workflowName: string): string {
  * Lifecycle is read from the backend `JobStatus` alone — one axis, one table per
  * concern, no second "kind" field to drift out of sync with it.
  */
-export function JobCard({ job, onPress, onAccept }: JobCardProps) {
+export function JobCard({ job, onPress, onAccept, variant = 'active' }: JobCardProps) {
   const { styles, colors } = useThemedStyles(createStyles);
   const effectiveStatus = job.status;
   const status = JOB_STATUS_PRESENTATION[effectiveStatus];
@@ -103,6 +106,79 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
   const extraCount = (job.containers?.length ?? 0) > 1 ? job.containers!.length - 1 : 0;
   const containerCode = extraCount > 0 ? `${primaryCode} (+${extraCount})` : primaryCode;
   const isUnstarted = effectiveStatus === 'CREATED' || effectiveStatus === 'QUEUED';
+  const routeParts = job.route.split(' ➔ ');
+  const sourceLabel = job.sourceName || routeParts[0] || job.sourceEndpointCode || 'Pickup';
+  const destinationLabel = job.destinationName || routeParts[1] || job.destinationEndpointCode || 'Drop-off';
+  const hasAssignedRobot = Boolean(job.robot && job.robot !== 'Unassigned');
+
+  if (variant === 'history') {
+    const timeLabel = formatJobClockTime(job.completedAt ?? job.createdAtUtc);
+    const workflowLabel = t(workflowTag(job.workflowName));
+
+    return (
+      <Card
+        padding="md"
+        gap={10}
+        onPress={onPress}
+        accessibilityLabel={`${t(status.label)} · ${job.jobNo || job.id}`}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text variant="bodyMedium" style={[styles.jobId, styles.tabularNums]} numberOfLines={1}>
+              {job.jobNo || job.id}
+            </Text>
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              {timeLabel ? `${workflowLabel} · ${timeLabel}` : workflowLabel}
+            </Text>
+          </View>
+          <StatusPill
+            status={effectiveStatus}
+            label={status.label}
+            tone={status.tone}
+            size="sm"
+            dot
+          />
+        </View>
+
+        <View style={styles.historyRouteRow}>
+          <View style={styles.historyRouteTrack}>
+            <Route size={14} color={colors.textMuted} style={styles.insetIcon} />
+            <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={styles.routeEndpoint}>
+              {sourceLabel}
+            </Text>
+            <ArrowRight size={13} color={colors.textMuted} style={styles.insetIcon} />
+            <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={styles.routeEndpoint}>
+              {destinationLabel}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} style={styles.insetIcon} />
+        </View>
+
+        {effectiveStatus === 'FAILED' && job.failureMessage ? (
+          <Text variant="caption" color={colors.dangerText} numberOfLines={1}>
+            {job.failureMessage}
+          </Text>
+        ) : null}
+
+        <View style={styles.historyMetaRow}>
+          <View style={styles.metaItemLeft}>
+            <Package size={14} color={colors.textMuted} style={styles.insetIcon} />
+            <Text variant="code" color={colors.textPrimary} numberOfLines={1} style={styles.metaCode}>
+              {containerCode}
+            </Text>
+          </View>
+          {hasAssignedRobot ? (
+            <View style={styles.robotTag}>
+              <Bot size={14} color={colors.textMuted} style={styles.insetIcon} />
+              <Text variant="code" color={colors.textSecondary} style={styles.robotCode}>
+                {job.robot}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </Card>
+    );
+  }
 
   return (
     <Card
@@ -117,7 +193,7 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
       >
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text variant="bodyMedium" style={styles.jobId} numberOfLines={1}>
+            <Text variant="bodyMedium" style={[styles.jobId, styles.tabularNums]} numberOfLines={1}>
               {job.jobNo || job.id}
             </Text>
             <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
@@ -135,29 +211,33 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
 
         <View style={styles.inset}>
           <View style={styles.insetRow}>
-            <Truck size={15} color={colors.textMuted} style={styles.insetIcon} />
-            <Text variant="caption" color={colors.textSecondary}>
-              Route
-            </Text>
-            <Text variant="body" numberOfLines={1} style={[styles.insetValue, styles.routeValue]}>
-              {job.route}
-            </Text>
+            <Route size={15} color={colors.textMuted} style={styles.insetIcon} />
+            <View style={styles.routeInline}>
+              <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={styles.routeEndpoint}>
+                {sourceLabel}
+              </Text>
+              <ArrowRight size={13} color={colors.textMuted} style={styles.insetIcon} />
+              <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={styles.routeEndpoint}>
+                {destinationLabel}
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.insetRow}>
-            <Boxes size={15} color={colors.textMuted} style={styles.insetIcon} />
-            <Text variant="caption" color={colors.textSecondary}>
-              Details
-            </Text>
-            <Text variant="body" numberOfLines={1} style={styles.insetValue}>
-              <Text style={styles.boldMono}>{containerCode}</Text>
-              {job.robot ? (
-                <>
-                  <Text style={styles.dotSeparator}> · </Text>
-                  <Text style={styles.boldRobot}>{job.robot}</Text>
-                </>
-              ) : null}
-            </Text>
+          <View style={styles.insetMetaRow}>
+            <View style={styles.metaItemLeft}>
+              <Package size={15} color={colors.textMuted} style={styles.insetIcon} />
+              <Text variant="code" color={colors.textPrimary} numberOfLines={1} style={styles.metaCode}>
+                {containerCode}
+              </Text>
+            </View>
+            {hasAssignedRobot ? (
+              <View style={styles.robotTag}>
+                <Bot size={14} color={colors.textMuted} style={styles.insetIcon} />
+                <Text variant="code" color={colors.textSecondary} style={styles.robotCode}>
+                  {job.robot}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -168,9 +248,11 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
               tone={METER_BY_STATUS[job.status]}
               accessibilityLabel={`${job.id} progress ${job.progressPercent ?? 0} percent`}
             />
-            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-              {job.currentStop}
-            </Text>
+            {job.currentStop.trim() ? (
+              <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                {job.currentStop}
+              </Text>
+            ) : null}
           </View>
         )}
       </Pressable>
@@ -218,6 +300,57 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   jobId: {
     fontWeight: '700',
   },
+  tabularNums: {
+    fontVariant: ['tabular-nums'],
+  },
+  historyRouteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  historyRouteTrack: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  routeEndpoint: {
+    flexShrink: 1,
+    fontWeight: '600',
+  },
+  historyMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+  },
+  metaItemLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaCode: {
+    flexShrink: 1,
+    fontWeight: '600',
+    fontFamily: typography.fontMono,
+  },
+  robotTag: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  robotCode: {
+    fontWeight: '600',
+    fontFamily: typography.fontMono,
+  },
   inset: {
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.md,
@@ -229,30 +362,21 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  insetIcon: {
-    flexShrink: 0,
-  },
-  insetValue: {
+  routeInline: {
     flex: 1,
     minWidth: 0,
-    fontWeight: '400',
-    color: colors.textSecondary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  routeValue: {
-    fontWeight: '600',
-    color: colors.textPrimary,
+  insetMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  boldMono: {
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  boldRobot: {
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  dotSeparator: {
-    color: colors.textMuted,
+  insetIcon: {
+    flexShrink: 0,
   },
   progressBlock: {
     gap: 6,
